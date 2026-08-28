@@ -1,0 +1,11 @@
+@{ ViewData["Title"] = "Tra cứu hóa đơn"; }
+<div class="card" style="max-width:520px"><div class="card-body text-center py-4">
+    <i class="bi bi-file-earmark-text" style="font-size:34px;color:#4338ca"></i>
+    <h5 class="fw-bold mt-2">Tra cứu hóa đơn điện tử</h5>
+    <p class="text-muted small">Nhập mã tra cứu do cơ quan thuế cấp để kiểm tra hóa đơn hợp lệ.</p>
+    @if (ViewBag.NotFound == true) { <div class="alert alert-warning py-2 small">Không tìm thấy hóa đơn hợp lệ với mã <b>@ViewBag.Code</b>.</div> }
+    <form onsubmit="event.preventDefault(); var c=document.getElementById('c').value.trim(); if(c) location.href='/Lookup/'+encodeURIComponent(c);">
+        <div class="input-group"><input id="c" class="form-control" value="@ViewBag.Code" placeholder="Mã CQT (VD 0026082512345678)" /><button class="btn btn-primary">Tra cứu</button></div>
+    </form>
+    <div class="small text-muted mt-3">Mẫu: <a href="/Lookup/0026082512345678">0026082512345678</a></div>
+</div></div>

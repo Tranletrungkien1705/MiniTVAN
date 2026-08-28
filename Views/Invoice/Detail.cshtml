@@ -1,0 +1,61 @@
+@model Invoice
+@{ ViewData["Title"] = $"HĐ {Model.Symbol}-{Model.No}"; var msgs = (List<TranMessage>)ViewBag.Messages; var (st, css) = Ui.Inv(Model.Status);
+   var lookupUrl = $"{Context.Request.Scheme}://{Context.Request.Host}/Lookup/{Model.TctCode}"; }
+<div class="row g-3">
+    <div class="col-lg-7"><div class="card"><div class="card-body">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+            <div><h5 class="fw-bold mb-1">Hóa đơn @Model.Symbol-@Model.No <span class="badge bg-@css ms-1">@st</span></h5>
+                <div class="text-muted small">Ngày @Model.IssuedDate.ToString("dd/MM/yyyy")@(Model.SentAt != null ? " · gửi " + Model.SentAt.Value.ToLocalTime().ToString("dd/MM HH:mm") : "")</div></div>
+        </div>
+        @if (Model.Status == InvoiceStatus.Accepted) { <div class="alert alert-success py-2 small mb-2"><i class="bi bi-patch-check me-1"></i>Mã tra cứu CQT: <b>@Model.TctCode</b></div> }
+        @if (Model.Status == InvoiceStatus.Rejected) { <div class="alert alert-danger py-2 small mb-2"><i class="bi bi-x-octagon me-1"></i>TCT từ chối: @Model.RejectReason</div> }
+        <div class="row g-2 small">
+            <div class="col-6"><div class="text-muted">Người bán</div><b>@Model.Nnt?.Name</b><div>MST @Model.Nnt?.Mst</div></div>
+            <div class="col-6"><div class="text-muted">Người mua</div><b>@Model.BuyerName</b><div>@(Model.BuyerMst != null ? "MST " + Model.BuyerMst : "")<br />@Model.BuyerAddress</div></div>
+        </div>
+        <table class="table table-sm mt-3 mb-0">
+            <tr><td class="text-muted">Tiền hàng</td><td class="text-end">@Ui.Money(Model.Amount)</td></tr>
+            <tr><td class="text-muted">Thuế GTGT (@Model.VatRate%)</td><td class="text-end">@Ui.Money(Model.VatAmount)</td></tr>
+            <tr class="fw-bold"><td>Tổng thanh toán</td><td class="text-end" style="color:#4338ca">@Ui.Money(Model.Total)</td></tr>
+        </table>
+        <a href="/Invoice" class="btn btn-outline-secondary btn-sm mt-2">← Danh sách</a>
+    </div></div>
+        <div class="card mt-3"><div class="card-body">
+            <h6 class="fw-bold mb-2">Nhật ký thông điệp với TCT</h6>
+            <table class="table table-sm align-middle mb-0">
+                <tbody>
+                @foreach (var m in msgs)
+                {
+                    <tr>
+                        <td class="small text-muted" style="width:110px">@m.CreatedAt.ToLocalTime().ToString("dd/MM HH:mm")</td>
+                        <td class="small"><span class="@Ui.DirCss(m.Dir) fw-semibold">@Ui.Dir(m.Dir)</span> @Ui.Msg(m.Type)</td>
+                        <td class="small">@if (m.Code != null) { <span class="badge bg-light text-dark border">@m.Code</span> } @m.Text</td>
+                    </tr>
+                }
+                @if (msgs.Count == 0) { <tr><td class="text-muted small">Chưa truyền.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+    <div class="col-lg-5"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Thao tác</h6>
+        <div class="d-flex flex-column gap-2">
+            @if (Model.Status is InvoiceStatus.Draft or InvoiceStatus.Rejected)
+            {
+                <form asp-action="Transmit" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><button class="btn btn-primary w-100"><i class="bi bi-send-fill me-1"></i>Truyền tới cơ quan thuế</button></form>
+            }
+            else if (Model.Status == InvoiceStatus.Accepted)
+            {
+                <a href="/Lookup/@Model.TctCode" target="_blank" class="btn btn-outline-primary w-100"><i class="bi bi-search me-1"></i>Xem trang tra cứu</a>
+                <form asp-action="Cancel" method="post" onsubmit="return confirm('Hủy hóa đơn đã phát hành?')">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><button class="btn btn-outline-danger w-100"><i class="bi bi-x-circle me-1"></i>Hủy hóa đơn</button></form>
+            }
+            else if (Model.Status == InvoiceStatus.Sent) { <div class="text-muted small">Đang chờ phản hồi TCT...</div> }
+            else { <div class="text-muted small">Hóa đơn đã hủy.</div> }
+        </div>
+        @if (Model.Status == InvoiceStatus.Accepted)
+        {
+            <hr /><div class="small text-muted mb-1">Link tra cứu công khai</div>
+            <div class="border rounded p-2 small text-break">@lookupUrl</div>
+        }
+    </div></div></div>
+</div>

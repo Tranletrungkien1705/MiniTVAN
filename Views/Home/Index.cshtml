@@ -1,0 +1,37 @@
+@{ ViewData["Title"] = "Bảng điều khiển"; var d = (TvanDash)ViewBag.Dash; }
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">NNT đã đăng ký</div><div class="stat-num text-success">@d.Registered<span class="text-muted" style="font-size:15px">/@d.Nnts</span></div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">CQT chấp nhận</div><div class="stat-num" style="color:#4338ca">@d.Accepted</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Bị từ chối</div><div class="stat-num text-danger">@d.Rejected</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Giá trị HĐ hợp lệ</div><div class="stat-num" style="font-size:17px">@Ui.Money(d.AcceptedValue)</div></div></div></div>
+</div>
+<div class="row g-3">
+    <div class="col-lg-8"><div class="card"><div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3"><h6 class="fw-bold mb-0">Hóa đơn gần đây</h6><a href="/Invoice" class="small">Tất cả →</a></div>
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Ký hiệu-Số</th><th>Người bán</th><th class="text-end">Tổng</th><th>Trạng thái</th></tr></thead>
+            <tbody>
+            @foreach (var i in d.Recent)
+            {
+                var (t, css) = Ui.Inv(i.Status);
+                <tr style="cursor:pointer" onclick="location.href='/Invoice/Detail/@i.Id'">
+                    <td class="fw-semibold small">@i.Symbol-@i.No</td><td class="small">@i.Nnt?.Name</td>
+                    <td class="text-end">@Ui.Money(i.Total)</td><td><span class="badge bg-@css">@t</span></td>
+                </tr>
+            }
+            @if (d.Recent.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-4">Chưa có hóa đơn.</td></tr> }
+            </tbody>
+        </table>
+    </div></div></div>
+    <div class="col-lg-4"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-2">Luồng T-VAN</h6>
+        <ol class="small text-muted ps-3 mb-3">
+            <li>NNT (người bán) <b>đăng ký</b> với cơ quan thuế</li>
+            <li>Lập hóa đơn → <b>truyền</b> tới TCT</li>
+            <li>TCT phản hồi <b>202 (chấp nhận)</b> / 204 (từ chối)</li>
+            <li>HĐ được cấp <b>mã tra cứu</b> công khai</li>
+        </ol>
+        <a href="/Invoice/Create" class="btn btn-primary w-100 mb-2"><i class="bi bi-plus-lg me-1"></i>Lập hóa đơn</a>
+        <a href="/Nnt" class="btn btn-outline-primary w-100">Quản lý NNT</a>
+    </div></div></div>
+</div>

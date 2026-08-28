@@ -1,0 +1,23 @@
+@{ ViewData["Title"] = "Lập hóa đơn"; var nnts = (List<Nnt>)ViewBag.Nnts; }
+<div class="card" style="max-width:720px"><div class="card-body">
+    <form asp-action="Create" method="post">@Html.AntiForgeryToken()
+        <div class="row g-3">
+            <div class="col-md-8"><label class="form-label small text-muted">Người bán (NNT) *</label>
+                <select name="nntId" class="form-select" required>
+                    <option value="">— Chọn —</option>
+                    @foreach (var n in nnts) { <option value="@n.Id">@n.Mst — @n.Name @(n.RegStatus == RegStatus.Registered ? "" : "(chưa đăng ký)")</option> }
+                </select></div>
+            <div class="col-md-2"><label class="form-label small text-muted">Ký hiệu</label><input name="symbol" class="form-control" placeholder="1C26TAA" /></div>
+            <div class="col-md-2"><label class="form-label small text-muted">Số (tự sinh)</label><input name="no" class="form-control" /></div>
+
+            <div class="col-md-5"><label class="form-label small text-muted">Tên người mua *</label><input name="buyerName" class="form-control" required /></div>
+            <div class="col-md-3"><label class="form-label small text-muted">MST người mua</label><input name="buyerMst" class="form-control" /></div>
+            <div class="col-md-4"><label class="form-label small text-muted">Địa chỉ người mua</label><input name="buyerAddress" class="form-control" /></div>
+
+            <div class="col-md-4"><label class="form-label small text-muted">Tiền hàng *</label><input name="amount" type="number" step="1000" class="form-control" required /></div>
+            <div class="col-md-4"><label class="form-label small text-muted">Thuế suất (%)</label><input name="vatRate" type="number" step="1" value="10" class="form-control" /></div>
+            <div class="col-md-4"><label class="form-label small text-muted">Ngày HĐ</label><input name="issuedDate" type="date" value="@DateTime.Today.ToString("yyyy-MM-dd")" class="form-control" /></div>
+        </div>
+        <div class="mt-3"><button class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Tạo hóa đơn nháp</button> <a href="/Invoice" class="btn btn-outline-secondary">Hủy</a></div>
+    </form>
+</div></div>

@@ -1,0 +1,31 @@
+@model List<Invoice>
+@{ ViewData["Title"] = "Hóa đơn"; var st = (InvoiceStatus?)ViewBag.Status; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="/Invoice" class="btn btn-sm @(st==null?"btn-primary":"btn-outline-primary")">Tất cả</a>
+            @foreach (InvoiceStatus s in Enum.GetValues(typeof(InvoiceStatus)))
+            {
+                var (t, _) = Ui.Inv(s);
+                <a href="/Invoice?status=@((int)s)" class="btn btn-sm @(st==s?"btn-primary":"btn-outline-primary")">@t</a>
+            }
+        </div>
+        <a href="/Invoice/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Lập HĐ</a>
+    </div>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Ký hiệu-Số</th><th>Người bán</th><th>Người mua</th><th class="text-end">Tổng</th><th>Mã CQT</th><th>Trạng thái</th></tr></thead>
+        <tbody>
+        @foreach (var i in Model)
+        {
+            var (t, css) = Ui.Inv(i.Status);
+            <tr style="cursor:pointer" onclick="location.href='/Invoice/Detail/@i.Id'">
+                <td class="fw-semibold small">@i.Symbol-@i.No</td><td class="small">@i.Nnt?.Name</td><td class="small">@i.BuyerName</td>
+                <td class="text-end">@Ui.Money(i.Total)</td>
+                <td class="small"><code>@i.TctCode</code></td>
+                <td><span class="badge bg-@css">@t</span></td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Không có hóa đơn.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

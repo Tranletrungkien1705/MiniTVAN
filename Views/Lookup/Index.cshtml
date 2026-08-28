@@ -1,0 +1,42 @@
+@model Invoice
+@{ Layout = null; ViewData["Title"] = "Tra cứu hóa đơn"; }
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hóa đơn @Model.Symbol-@Model.No</title>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;700;800&display=swap" rel="stylesheet" />
+    <style>
+        * { box-sizing:border-box; }
+        body { margin:0; font-family:"Be Vietnam Pro",sans-serif; background:#eef0fb; color:#1f2937; padding:16px; }
+        .wrap { max-width:520px; margin:0 auto; }
+        .head { background:linear-gradient(150deg,#4338ca,#312e81); color:#fff; border-radius:18px 18px 0 0; padding:22px; }
+        .head .v { display:inline-flex; align-items:center; gap:6px; background:rgba(255,255,255,.2); padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700; margin-bottom:8px; }
+        .head h1 { font-size:20px; margin:2px 0; }
+        .head .c { font-family:monospace; font-size:13px; opacity:.9; }
+        .body { background:#fff; border-radius:0 0 18px 18px; padding:20px; box-shadow:0 8px 30px rgba(10,5,40,.12); }
+        .row2 { display:flex; justify-content:space-between; padding:7px 0; font-size:14px; border-bottom:1px solid #f1f2f9; }
+        .row2 .l { color:#6b7280; } .row2 .r { font-weight:600; text-align:right; }
+        .tot { display:flex; justify-content:space-between; padding-top:12px; margin-top:6px; font-weight:800; font-size:18px; color:#4338ca; }
+        .foot { text-align:center; font-size:11px; color:#9ca3af; margin-top:14px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="head">
+        <div class="v">✓ Hóa đơn hợp lệ — CQT đã tiếp nhận</div>
+        <h1>@Model.Symbol-@Model.No</h1>
+        <div class="c">Mã tra cứu: @Model.TctCode</div>
+    </div>
+    <div class="body">
+        <div class="row2"><span class="l">Người bán</span><span class="r">@Model.Nnt?.Name<br /><small style="font-weight:400;color:#6b7280">MST @Model.Nnt?.Mst</small></span></div>
+        <div class="row2"><span class="l">Người mua</span><span class="r">@Model.BuyerName</span></div>
+        <div class="row2"><span class="l">Ngày hóa đơn</span><span class="r">@Model.IssuedDate.ToString("dd/MM/yyyy")</span></div>
+        <div class="row2"><span class="l">Tiền hàng</span><span class="r">@Ui.Money(Model.Amount)</span></div>
+        <div class="row2"><span class="l">Thuế GTGT (@Model.VatRate%)</span><span class="r">@Ui.Money(Model.VatAmount)</span></div>
+        <div class="tot"><span>Tổng thanh toán</span><span>@Ui.Money(Model.Total)</span></div>
+    </div>
+    <div class="foot">MiniTVAN · Cổng tra cứu hóa đơn điện tử (mô phỏng)</div>
+</div>
+</body>
+</html>

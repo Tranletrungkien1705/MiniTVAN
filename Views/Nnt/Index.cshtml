@@ -1,0 +1,38 @@
+@model List<Nnt>
+@{ ViewData["Title"] = "Người nộp thuế"; }
+<div class="row g-3">
+    <div class="col-lg-8"><div class="card"><div class="card-body">
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>MST</th><th>Tên</th><th>Đăng ký TCT</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var n in Model)
+            {
+                var (t, css) = Ui.Reg(n.RegStatus);
+                <tr>
+                    <td class="fw-semibold small">@n.Mst</td>
+                    <td>@n.Name<div class="small text-muted">@n.Address</div></td>
+                    <td><span class="badge bg-@css">@t</span></td>
+                    <td class="text-end">
+                        @if (n.RegStatus != RegStatus.Registered)
+                        {
+                            <form asp-action="Register" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@n.Id" /><button class="btn btn-sm btn-outline-primary"><i class="bi bi-send me-1"></i>Đăng ký TCT</button></form>
+                        }
+                    </td>
+                </tr>
+            }
+            @if (Model.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-4">Chưa có NNT.</td></tr> }
+            </tbody>
+        </table>
+    </div></div></div>
+    <div class="col-lg-4"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Thêm NNT</h6>
+        <form asp-action="Create" method="post">@Html.AntiForgeryToken()
+            <div class="mb-2"><input name="mst" class="form-control" placeholder="Mã số thuế (10/13 số) *" required /></div>
+            <div class="mb-2"><input name="name" class="form-control" placeholder="Tên đơn vị *" required /></div>
+            <div class="mb-2"><input name="address" class="form-control" placeholder="Địa chỉ" /></div>
+            <div class="mb-3"><input name="email" type="email" class="form-control" placeholder="Email" /></div>
+            <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Thêm</button>
+        </form>
+        <div class="small text-muted mt-3">NNT phải <b>đăng ký</b> và được TCT chấp nhận trước khi truyền hóa đơn.</div>
+    </div></div></div>
+</div>
