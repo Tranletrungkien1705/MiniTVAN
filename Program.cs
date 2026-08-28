@@ -63,6 +63,15 @@ app.MapPost("/api/tct/callback", async (TctCallback cb, AppDbContext db) =>
     return Results.Ok(new { received = true });
 });
 
+// Hệ ngoài (MiniService, DMS...) đẩy hóa đơn để phát hành + truyền TCT (cần X-Api-Key).
+app.MapPost("/api/invoices", async (ExtInvoiceDto dto, ITvanService svc) =>
+{
+    var r = await svc.ExternalIssueAsync(dto.SellerMst ?? "", dto.SellerName, dto.BuyerName ?? "", dto.BuyerMst, dto.BuyerAddress, dto.Amount, dto.VatRate, dto.DocRef);
+    return r.ok
+        ? Results.Ok(new { id = r.id, tctCode = r.tctCode, status = r.status })
+        : Results.BadRequest(new { id = r.id, status = r.status, error = r.msg, tctCode = r.tctCode });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -75,4 +84,5 @@ app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Inde
 app.Run();
 
 record TctCallback(string TctCode, string Code, string Text);
+record ExtInvoiceDto(string? SellerMst, string? SellerName, string? BuyerName, string? BuyerMst, string? BuyerAddress, decimal Amount, decimal VatRate, string? DocRef);
 record RegisterOrgDto(string Name);

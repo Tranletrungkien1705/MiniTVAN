@@ -15,6 +15,7 @@ public interface ITvanService
     Task<List<Invoice>> InvoicesAsync(InvoiceStatus? status, int? nntId);
     Task<Invoice?> GetInvoiceAsync(int id);
     Task<(bool ok, string msg, int id)> CreateInvoiceAsync(Invoice inv);
+    Task<(bool ok, string msg, string? tctCode, string status, int id)> ExternalIssueAsync(string sellerMst, string? sellerName, string buyerName, string? buyerMst, string? buyerAddress, decimal amount, decimal vatRate, string? docRef);
     Task<(bool ok, string msg)> TransmitAsync(int invoiceId);
     Task<(bool ok, string msg)> CancelAsync(int invoiceId);
     Task<List<TranMessage>> MessagesAsync(int invoiceId);
@@ -82,6 +83,37 @@ public class TvanService(AppDbContext db) : ITvanService
         inv.Status = InvoiceStatus.Draft;
         db.Invoices.Add(inv); await db.SaveChangesAsync();
         return (true, "Đã tạo hóa đơn nháp.", inv.Id);
+    }
+
+    // API cho hệ ngoài (MiniService, DMS...) đẩy hóa đơn: tự tạo/đăng ký NNT bên bán → tạo HĐ → truyền TCT.
+    public async Task<(bool ok, string msg, string? tctCode, string status, int id)> ExternalIssueAsync(
+        string sellerMst, string? sellerName, string buyerName, string? buyerMst, string? buyerAddress, decimal amount, decimal vatRate, string? docRef)
+    {
+        sellerMst = (sellerMst ?? "").Trim();
+        if (sellerMst.Length == 0) return (false, "Thiếu MST người bán.", null, "", 0);
+        if (amount <= 0) return (false, "Tiền hàng phải > 0.", null, "", 0);
+        var nnt = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == sellerMst);
+        if (nnt == null)
+        {
+            nnt = new Nnt { Mst = sellerMst, Name = sellerName ?? sellerMst };
+            db.Nnts.Add(nnt); await db.SaveChangesAsync();
+        }
+        if (nnt.RegStatus != RegStatus.Registered)
+        {
+            var (rok, rmsg) = await RegisterNntAsync(nnt.Id);
+            if (!rok) return (false, "Đăng ký NNT thất bại: " + rmsg, null, "", 0);
+        }
+        var no = (await db.Invoices.CountAsync(i => i.NntId == nnt.Id) + 1).ToString("D8");
+        var inv = new Invoice
+        {
+            NntId = nnt.Id, Symbol = "1C" + DateTime.Today.ToString("yy") + "TAA", No = no,
+            BuyerName = buyerName ?? "", BuyerMst = buyerMst, BuyerAddress = buyerAddress,
+            Amount = amount, VatRate = vatRate <= 0 ? 10 : vatRate, IssuedDate = DateTime.Today, Status = InvoiceStatus.Draft
+        };
+        db.Invoices.Add(inv); await db.SaveChangesAsync();
+        var (tok, tmsg) = await TransmitAsync(inv.Id);
+        var fresh = await db.Invoices.FirstOrDefaultAsync(i => i.Id == inv.Id);
+        return (tok, tmsg, fresh?.TctCode, (fresh?.Status ?? InvoiceStatus.Draft).ToString(), inv.Id);
     }
 
     // Truyền hóa đơn tới TCT — mô phỏng round-trip: gửi (Out) → TCT kiểm tra → phản hồi (In 202/204).
