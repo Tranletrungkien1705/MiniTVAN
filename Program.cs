@@ -2,10 +2,13 @@ using Microsoft.EntityFrameworkCore;
 using MiniTVAN.Data;
 using MiniTVAN.Models;
 using MiniTVAN.Services;
+using Serilog;
 
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+FleetObs.ConfigureLogger("minitvan");   // Serilog + OpenSearch(Bonsai) + correlation-id
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog();
 builder.WebHost.UseUrls($"http://0.0.0.0:{Environment.GetEnvironmentVariable("PORT") ?? "8080"}");
 
 var conn = Environment.GetEnvironmentVariable("CONNECTION_STRING")
@@ -17,11 +20,14 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 });
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<ITvanService, TvanService>();
+builder.Services.AddFleetObs();   // Redis cache + Swagger + endpoints explorer
 builder.Services.AddControllersWithViews();
 
 var app = builder.Build();
 using (var scope = app.Services.CreateScope())
     await Seeder.SeedAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>());
+
+app.UseFleetObs();   // correlation middleware + request logging + swagger
 
 app.Use(async (ctx, next) =>
 {
