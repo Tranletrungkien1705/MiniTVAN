@@ -6,9 +6,15 @@ using MiniTVAN.Services;
 
 namespace MiniTVAN.Controllers;
 
-public class HomeController(ITvanService svc) : Controller
+public class HomeController : Controller
 {
-    public async Task<IActionResult> Index() { ViewBag.Dash = await svc.DashboardAsync(); return View(); }
+    // SPA React ở "/". Trang tra cứu công khai /Lookup (Razor) giữ nguyên.
+    public IActionResult Index() => Redirect("/index.html");
+}
+
+public class LegacyController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index() { ViewBag.Dash = await svc.DashboardAsync(); return View("~/Views/Home/Index.cshtml"); }
 }
 
 public class NntController(ITvanService svc) : Controller
