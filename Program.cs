@@ -86,9 +86,58 @@ app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
     return Results.Ok(new { orgId = org.Id, apiKey = org.ApiKey });
 });
 
+// Import NNT (người nộp thuế) thật từ danh sách đại lý HTC (dedupe theo Mst)
+app.MapPost("/api/import/nnts", async (List<ImportNntDto> rows, AppDbContext db, ITenantContext tc) =>
+{
+    if (rows == null || rows.Count == 0) return Results.BadRequest(new { error = "Không có dữ liệu." });
+    int added = 0, skipped = 0;
+    var orgId = tc.OrgId;
+    foreach (var row in rows)
+    {
+        if (string.IsNullOrWhiteSpace(row.Mst)) { skipped++; continue; }
+        if (await db.Nnts.AnyAsync(n => n.OrgId == orgId && n.Mst == row.Mst.Trim())) { skipped++; continue; }
+        db.Nnts.Add(new Nnt { OrgId = orgId, Mst = row.Mst.Trim(), Name = row.Name ?? row.Mst.Trim(), Address = row.Address, Email = row.Email, RegStatus = RegStatus.Registered, RegisteredAt = DateTime.UtcNow.AddDays(-30) });
+        added++;
+    }
+    await db.SaveChangesAsync();
+    return Results.Ok(new { added, skipped, total = added + skipped });
+});
+
+// Import hóa đơn thật từ HTC (dedupe theo NntId+Symbol+No)
+app.MapPost("/api/import/invoices", async (List<ImportInvDto> rows, AppDbContext db, ITenantContext tc) =>
+{
+    if (rows == null || rows.Count == 0) return Results.BadRequest(new { error = "Không có dữ liệu." });
+    int added = 0, skipped = 0;
+    var orgId = tc.OrgId;
+    foreach (var row in rows)
+    {
+        if (string.IsNullOrWhiteSpace(row.SellerMst) || string.IsNullOrWhiteSpace(row.No)) { skipped++; continue; }
+        var nnt = await db.Nnts.FirstOrDefaultAsync(n => n.OrgId == orgId && n.Mst == row.SellerMst.Trim());
+        if (nnt == null) { skipped++; continue; }
+        var sym = (row.Symbol ?? "1C26TAA").Trim();
+        var no = row.No.Trim();
+        if (await db.Invoices.AnyAsync(i => i.OrgId == orgId && i.NntId == nnt.Id && i.Symbol == sym && i.No == no)) { skipped++; continue; }
+        db.Invoices.Add(new Invoice
+        {
+            OrgId = orgId, NntId = nnt.Id, Symbol = sym, No = no,
+            BuyerName = row.BuyerName ?? "", BuyerMst = row.BuyerMst, BuyerAddress = row.BuyerAddress,
+            Amount = row.Amount, VatRate = row.VatRate > 0 ? row.VatRate : 10,
+            IssuedDate = row.IssuedDate ?? DateTime.Today,
+            Status = InvoiceStatus.Accepted,
+            TctCode = row.TctCode ?? $"TC{DateTime.UtcNow:yyyyMMdd}{no.PadLeft(8, '0')}",
+            SentAt = DateTime.UtcNow.AddDays(-7)
+        });
+        added++;
+    }
+    await db.SaveChangesAsync();
+    return Results.Ok(new { added, skipped, total = added + skipped });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
 record TctCallback(string TctCode, string Code, string Text);
 record ExtInvoiceDto(string? SellerMst, string? SellerName, string? BuyerName, string? BuyerMst, string? BuyerAddress, decimal Amount, decimal VatRate, string? DocRef);
 record RegisterOrgDto(string Name);
+record ImportNntDto(string? Mst, string? Name, string? Address, string? Email);
+record ImportInvDto(string? SellerMst, string? Symbol, string? No, string? BuyerName, string? BuyerMst, string? BuyerAddress, decimal Amount, decimal VatRate, DateTime? IssuedDate, string? TctCode);
