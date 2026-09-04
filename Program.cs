@@ -27,7 +27,8 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
     await Seeder.SeedAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>());
 
-app.UseFleetObs();   // correlation middleware + request logging + swagger
+app.UseFleetObs();
+FleetObs.ReportLicense(Environment.GetEnvironmentVariable("SSO_AUTHORITY") ?? "https://minisso.onrender.com", "minitvan");   // correlation middleware + request logging + swagger
 
 app.Use(async (ctx, next) =>
 {
