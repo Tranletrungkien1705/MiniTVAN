@@ -78,6 +78,7 @@ public class TvanService(AppDbContext db) : ITvanService
         var nnt = await db.Nnts.FirstOrDefaultAsync(n => n.Id == inv.NntId);
         if (nnt == null) return (false, "Chọn người bán (NNT).", 0);
         if (inv.Amount <= 0) return (false, "Tiền hàng phải > 0.", 0);
+        if (inv.VatRate < 0) return (false, "Thuế suất VAT không được âm.", 0);
         if (string.IsNullOrWhiteSpace(inv.No)) inv.No = (await db.Invoices.CountAsync(i => i.NntId == inv.NntId) + 1).ToString("D8");
         if (string.IsNullOrWhiteSpace(inv.Symbol)) inv.Symbol = "1C" + DateTime.Today.ToString("yy") + "TAA";
         inv.Status = InvoiceStatus.Draft;
