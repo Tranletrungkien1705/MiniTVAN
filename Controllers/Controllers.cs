@@ -68,6 +68,7 @@ public class InvoiceController(ITvanService svc) : Controller
         ViewBag.ConvLogs = await svc.ConversionPrintLogsAsync(id);
         ViewBag.ReSignLogs = await svc.ReSignLogsAsync(id);
         ViewBag.ApproveLogs = await svc.ApproveLogsAsync(id);
+        ViewBag.TctLogs = await svc.TctReceiveLogsAsync(id);
         return View(inv);
     }
 
@@ -200,6 +201,15 @@ public class InvoiceController(ITvanService svc) : Controller
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Detail), new { id });
     }
+
+    // Nhận kết quả phản hồi từ CQT (theo Invoice_Invoice_TCTReceive của TVAN gốc): 202 → Accepted, 204 → Rejected.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> TctReceive(int id, TctMessageType mltDiep, string? maCQT, string? maLoi, string? lyDo)
+    {
+        var (ok, msg) = await svc.ReceiveTctResultAsync(id, mltDiep, maCQT, maLoi, lyDo);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
 }
 
 public class LicenseController(ITvanService svc) : Controller
@@ -321,6 +331,16 @@ public class ApproveLogController(ITvanService svc) : Controller
     {
         ViewBag.InvoiceId = invoiceId;
         return View(await svc.ApproveLogsAsync(invoiceId));
+    }
+}
+
+// Nhật ký nhận kết quả phản hồi từ CQT (theo Invoice_Invoice_TCTReceive của TVAN gốc).
+public class TctReceiveLogController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? invoiceId)
+    {
+        ViewBag.InvoiceId = invoiceId;
+        return View(await svc.TctReceiveLogsAsync(invoiceId));
     }
 }
 

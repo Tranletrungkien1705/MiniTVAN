@@ -55,6 +55,8 @@ public interface ITvanService
     Task<(bool ok, string msg)> InactivateTemplateAsync(int templateId, string? remark);
     Task<(bool ok, string msg, string? invoiceNo)> AllocateInvoiceNoAsync(int invoiceId, DateTime invoiceDate, string? by);
     Task<List<InvoiceNoAllocLog>> AllocLogsAsync(int? invoiceId);
+    Task<(bool ok, string msg)> ReceiveTctResultAsync(int invoiceId, TctMessageType mltDiep, string? maCQT, string? maLoi, string? lyDo);
+    Task<List<TctReceiveLog>> TctReceiveLogsAsync(int? invoiceId);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -895,6 +897,57 @@ public class TvanService(AppDbContext db) : ITvanService
     public Task<List<InvoiceNoAllocLog>> AllocLogsAsync(int? invoiceId)
     {
         var q = db.InvoiceNoAllocLogs.Include(l => l.Invoice).AsQueryable();
+        if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
+        return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
+
+    // Nhận kết quả phản hồi từ CQT cho hóa đơn đã gửi (theo Invoice_Invoice_TCTReceive của TVAN gốc):
+    // CQT trả về mã loại thông điệp 202 (phát hành thành công, có mã CQT) hoặc 204 (phát hành thất bại).
+    // Chỉ nhận kết quả cho hóa đơn đang chờ phản hồi (Sent). 202 → Accepted + ghi mã xác thực CQT;
+    // 204 → Rejected + ghi mã lỗi/lý do. Mọi lần nhận ghi nhật ký (TctReceiveLog) để đối soát.
+    public async Task<(bool ok, string msg)> ReceiveTctResultAsync(int invoiceId, TctMessageType mltDiep, string? maCQT, string? maLoi, string? lyDo)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.");
+        if (inv.Status != InvoiceStatus.Sent) return (false, "Chỉ nhận kết quả CQT cho hóa đơn đang chờ phản hồi (SENT).");
+
+        var accept = mltDiep == TctMessageType.Success202;
+        inv.MltDiep = ((int)mltDiep).ToString();
+        inv.TctChapNhan = accept ? TctAcceptStatus.Accept : TctAcceptStatus.Reject;
+        inv.TctMaLoi = accept ? null : maLoi;
+        inv.TctLyDo = accept ? null : lyDo;
+        inv.TctReceiveDTimeUTC = DateTime.UtcNow;
+
+        string msg;
+        if (accept)
+        {
+            if (string.IsNullOrWhiteSpace(maCQT)) return (false, "CQT chấp nhận nhưng thiếu mã xác thực (MaCQT).");
+            inv.Status = InvoiceStatus.Accepted;
+            inv.TctCode = maCQT.Trim();
+            inv.RejectReason = null;
+            msg = $"CQT chấp nhận phát hành HĐ {inv.Symbol}-{inv.No}. Mã tra cứu: {inv.TctCode}";
+            db.Messages.Add(new TranMessage { InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "202", Text = msg });
+        }
+        else
+        {
+            inv.Status = InvoiceStatus.Rejected;
+            inv.RejectReason = string.IsNullOrWhiteSpace(lyDo) ? (maLoi ?? "CQT từ chối phát hành") : lyDo.Trim();
+            msg = $"CQT từ chối phát hành HĐ {inv.Symbol}-{inv.No}" + (string.IsNullOrWhiteSpace(maLoi) ? "" : $" (mã lỗi {maLoi})");
+            db.Messages.Add(new TranMessage { InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "204", Text = msg });
+        }
+
+        db.TctReceiveLogs.Add(new TctReceiveLog
+        {
+            InvoiceId = inv.Id, MltDiep = mltDiep, ChapNhan = inv.TctChapNhan.Value,
+            MaCQT = accept ? inv.TctCode : null, MaLoi = maLoi, LyDo = lyDo, Message = msg,
+        });
+        await db.SaveChangesAsync();
+        return (accept, msg);
+    }
+
+    public Task<List<TctReceiveLog>> TctReceiveLogsAsync(int? invoiceId)
+    {
+        var q = db.TctReceiveLogs.Include(l => l.Invoice).AsQueryable();
         if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
     }

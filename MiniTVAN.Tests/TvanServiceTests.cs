@@ -1137,4 +1137,93 @@ public class TvanServiceTests
             Assert.Contains("đang sử dụng", msg);
         }
     }
+
+    // Nhận kết quả phản hồi từ CQT (theo Invoice_Invoice_TCTReceive của TVAN gốc).
+    // Đưa HĐ về trạng thái Sent (chờ phản hồi) để mô phỏng luồng bất đồng bộ.
+    private static async Task<int> SetupSent(AppDbContext db, ITvanService svc)
+    {
+        var (_, invId) = await Setup(svc);
+        var inv = await db.Invoices.FirstAsync(i => i.Id == invId);
+        inv.Status = InvoiceStatus.Sent;
+        inv.SentAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return invId;
+    }
+
+    [Fact]
+    public async Task TctReceive_202_AcceptsWithCodeAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var invId = await SetupSent(db, svc);
+            var (ok, msg) = await svc.ReceiveTctResultAsync(invId, TctMessageType.Success202, "0026082512345678", null, null);
+            Assert.True(ok);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(InvoiceStatus.Accepted, inv!.Status);
+            Assert.Equal("0026082512345678", inv.TctCode);
+            Assert.Equal(TctAcceptStatus.Accept, inv.TctChapNhan);
+            Assert.Equal("202", inv.MltDiep);
+            Assert.NotNull(inv.TctReceiveDTimeUTC);
+            var logs = await svc.TctReceiveLogsAsync(invId);
+            Assert.Single(logs);
+            Assert.Equal(TctMessageType.Success202, logs[0].MltDiep);
+            Assert.Equal("0026082512345678", logs[0].MaCQT);
+        }
+    }
+
+    [Fact]
+    public async Task TctReceive_204_RejectsWithReasonAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var invId = await SetupSent(db, svc);
+            var (ok, msg) = await svc.ReceiveTctResultAsync(invId, TctMessageType.Fail204, null, "1001", "Sai định dạng MST người mua");
+            Assert.False(ok);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(InvoiceStatus.Rejected, inv!.Status);
+            Assert.Equal(TctAcceptStatus.Reject, inv.TctChapNhan);
+            Assert.Equal("1001", inv.TctMaLoi);
+            Assert.Equal("Sai định dạng MST người mua", inv.RejectReason);
+            var logs = await svc.TctReceiveLogsAsync(invId);
+            Assert.Single(logs);
+            Assert.Equal(TctMessageType.Fail204, logs[0].MltDiep);
+            Assert.Equal("1001", logs[0].MaLoi);
+        }
+    }
+
+    [Fact]
+    public async Task TctReceive_202_MissingCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var invId = await SetupSent(db, svc);
+            var (ok, msg) = await svc.ReceiveTctResultAsync(invId, TctMessageType.Success202, "  ", null, null);
+            Assert.False(ok);
+            Assert.Contains("thiếu mã xác thực", msg);
+            Assert.Empty(await svc.TctReceiveLogsAsync(invId));
+        }
+    }
+
+    [Fact]
+    public async Task TctReceive_NotSent_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);   // Draft, chưa truyền
+            var (ok, msg) = await svc.ReceiveTctResultAsync(invId, TctMessageType.Success202, "0026082512345678", null, null);
+            Assert.False(ok);
+            Assert.Contains("chờ phản hồi", msg);
+        }
+    }
+
+    [Fact]
+    public async Task TctReceive_UnknownInvoice_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.ReceiveTctResultAsync(9999, TctMessageType.Success202, "x", null, null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
 }

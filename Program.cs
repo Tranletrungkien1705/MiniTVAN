@@ -346,6 +346,21 @@ app.MapGet("/api/invoice-no-alloc-logs", async (int? invoiceId, ITvanService svc
     return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, l.FormNo, l.Sign, l.InvoiceNo, l.InvoiceDate, l.By, l.CreatedAt }));
 });
 
+// Nhận kết quả phản hồi từ CQT cho hóa đơn đã gửi (theo Invoice_Invoice_TCTReceive của TVAN gốc):
+// 202 = phát hành thành công (có mã CQT), 204 = phát hành thất bại.
+app.MapPost("/api/invoices/{id:int}/tct-receive", async (int id, TctReceiveDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.ReceiveTctResultAsync(id, dto.MltDiep, dto.MaCQT, dto.MaLoi, dto.LyDo);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Nhật ký nhận kết quả CQT (lọc theo hóa đơn nếu có).
+app.MapGet("/api/tct-receive-logs", async (int? invoiceId, ITvanService svc) =>
+{
+    var ls = await svc.TctReceiveLogsAsync(invoiceId);
+    return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, mltDiep = (int)l.MltDiep, chapNhan = l.ChapNhan.ToString(), l.MaCQT, l.MaLoi, l.LyDo, l.Message, l.CreatedAt }));
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -371,3 +386,4 @@ record Sign60DayDto(Sign60DayFlag Flag, string? Note);
 record AllocateNoDto(DateTime? InvoiceDate, string? By);
 record IssueTemplateDto(DateTime? EffDateStart, string? Remark);
 record InactivateTemplateDto(string? Remark);
+record TctReceiveDto(TctMessageType MltDiep, string? MaCQT, string? MaLoi, string? LyDo);

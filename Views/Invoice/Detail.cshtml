@@ -4,6 +4,7 @@
    var convLogs = (List<ConversionPrintLog>)ViewBag.ConvLogs;
    var reSignLogs = (List<ReSignLog>)ViewBag.ReSignLogs;
    var approveLogs = (List<ApproveLog>)ViewBag.ApproveLogs;
+   var tctLogs = (List<TctReceiveLog>)ViewBag.TctLogs;
    var (srcText, srcCss) = Ui.Source(Model.SourceCode);
    var (cpText, cpCss) = Ui.ConvPrint(Model.FlagChange);
    var (hfText, hfCss) = Ui.Hotfix(Model.FlagHotfix);
@@ -197,7 +198,21 @@
                     </form>
                 </div></div>
             }
-            else if (Model.Status == InvoiceStatus.Sent) { <div class="text-muted small">Đang chờ phản hồi TCT...</div> }
+            else if (Model.Status == InvoiceStatus.Sent)
+            {
+                <div class="text-muted small mb-2">Đang chờ phản hồi TCT...</div>
+                <button class="btn btn-outline-primary w-100" type="button" data-bs-toggle="collapse" data-bs-target="#tctReceiveForm"><i class="bi bi-inbox me-1"></i>Nhận kết quả từ CQT</button>
+                <div class="collapse" id="tctReceiveForm"><div class="border rounded p-2">
+                    <form asp-action="TctReceive" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                        <div class="mb-2"><label class="form-label small mb-1">Mã loại thông điệp CQT</label>
+                            <select name="mltDiep" class="form-select form-select-sm"><option value="202">202 — Phát hành thành công</option><option value="204">204 — Phát hành thất bại</option></select></div>
+                        <div class="mb-2"><label class="form-label small mb-1">Mã xác thực CQT (MaCQT — khi 202)</label><input name="maCQT" class="form-control form-control-sm" placeholder="VD 0026082512345678" /></div>
+                        <div class="mb-2"><label class="form-label small mb-1">Mã lỗi (khi 204)</label><input name="maLoi" class="form-control form-control-sm" placeholder="VD 1001" /></div>
+                        <div class="mb-2"><label class="form-label small mb-1">Lý do (khi 204)</label><input name="lyDo" class="form-control form-control-sm" placeholder="VD sai định dạng MST người mua" /></div>
+                        <button class="btn btn-primary btn-sm w-100">Nhận kết quả CQT</button>
+                    </form>
+                </div></div>
+            }
             else if (Model.Status == InvoiceStatus.Deleted)
             {
                 <div class="text-muted small mb-2">Hóa đơn đã xóa (DELETED).</div>
@@ -289,6 +304,28 @@
                 </tr>
             }
             @if (approveLogs.Count == 0) { <tr><td colspan="6" class="text-muted small">Chưa duyệt.</td></tr> }
+            </tbody>
+        </table>
+    </div></div>
+
+    <div class="card mt-3"><div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="bi bi-inbox me-1"></i>Nhật ký nhận kết quả CQT</h6>
+        <table class="table table-sm align-middle mb-0">
+            <thead><tr><th>Thời điểm</th><th>Thông điệp</th><th>Kết quả</th><th>Mã CQT</th><th>Mã lỗi</th><th>Lý do</th></tr></thead>
+            <tbody>
+            @foreach (var l in tctLogs)
+            {
+                var (at, acss) = Ui.TctAccept(l.ChapNhan);
+                <tr>
+                    <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM HH:mm")</td>
+                    <td class="small">@Ui.TctMsg(l.MltDiep)</td>
+                    <td><span class="badge bg-@acss">@at</span></td>
+                    <td class="small text-break">@l.MaCQT</td>
+                    <td class="small text-break">@l.MaLoi</td>
+                    <td class="small">@l.LyDo</td>
+                </tr>
+            }
+            @if (tctLogs.Count == 0) { <tr><td colspan="6" class="text-muted small">Chưa nhận kết quả CQT.</td></tr> }
             </tbody>
         </table>
     </div></div>

@@ -46,6 +46,13 @@ public enum HotfixFlag { None = 0, Hotfixed = 1 }
 // Loại thao tác duyệt hóa đơn (theo Invoice_Invoice_Approved của TVAN gốc)
 public enum ApproveAction { Approve = 0, Unapprove = 1 }
 
+// Mã loại thông điệp CQT phản hồi khi nhận kết quả phát hành (theo Invoice_Invoice_TCTReceive của TVAN gốc):
+// 202 = phát hành thành công hóa đơn có mã CQT; 204 = phát hành thất bại.
+public enum TctMessageType { Success202 = 202, Fail204 = 204 }
+
+// Trạng thái CQT chấp nhận/từ chối (theo TConst.TCTStatus của TVAN gốc: ACCEPT/REJECT)
+public enum TctAcceptStatus { Accept = 0, Reject = 1 }
+
 // Trạng thái mẫu hóa đơn (theo Invoice_TempInvoice.TInvoiceStatus của TVAN gốc)
 public enum TemplateStatus { Draft = 0, Issued = 1, Inactive = 2 }
 
@@ -139,6 +146,15 @@ public class Invoice : IOrgOwned
     // InvoiceNoDTimeUTC/InvoiceNoBy = thời điểm & người ấn cấp số hóa đơn.
     public DateTime? InvoiceNoDTimeUTC { get; set; }
     public string? InvoiceNoBy { get; set; }
+
+    // Nhận kết quả phản hồi từ CQT (theo Invoice_Invoice_TCTReceive của TVAN gốc):
+    // MltDiep = mã loại thông điệp CQT trả về (202/204); TctChapNhan = CQT chấp nhận/từ chối;
+    // TctMaLoi = mã lỗi CQT; TctLyDo = lý do CQT; TctReceiveDTimeUTC = thời điểm nhận kết quả.
+    public string? MltDiep { get; set; }
+    public TctAcceptStatus? TctChapNhan { get; set; }
+    public string? TctMaLoi { get; set; }
+    public string? TctLyDo { get; set; }
+    public DateTime? TctReceiveDTimeUTC { get; set; }
 
     public decimal VatAmount => Math.Round(Amount * VatRate / 100m, 0);
     public decimal Total => Amount + VatAmount;
@@ -372,6 +388,23 @@ public class InvoiceNoAllocLog : IOrgOwned
     public string InvoiceNo { get; set; } = "";           // Số hóa đơn được cấp
     public DateTime InvoiceDate { get; set; } = DateTime.Today;   // Ngày hóa đơn
     public string? By { get; set; }                       // Người ấn cấp số
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Nhật ký nhận kết quả phản hồi từ CQT cho hóa đơn đã gửi (theo Invoice_Invoice_TCTReceive của TVAN gốc).
+// Mỗi lần CQT trả kết quả (202 phát hành thành công / 204 phát hành thất bại) ghi lại để đối soát.
+public class TctReceiveLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InvoiceId { get; set; }
+    public Invoice? Invoice { get; set; }
+    public TctMessageType MltDiep { get; set; }        // Mã loại thông điệp CQT trả về (202/204)
+    public TctAcceptStatus ChapNhan { get; set; }      // CQT chấp nhận/từ chối
+    public string? MaCQT { get; set; }                 // Mã xác thực CQT (InvoiceVerifyCQTCode)
+    public string? MaLoi { get; set; }                 // Mã lỗi CQT
+    public string? LyDo { get; set; }                  // Lý do CQT
+    public string? Message { get; set; }               // Thông báo kết quả
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 

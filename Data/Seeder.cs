@@ -73,6 +73,18 @@ public static class Seeder
                 By = "kế toán trưởng", Note = "Duyệt phát hành", CreatedAt = DateTime.UtcNow.AddDays(-5)
             });
             await db.SaveChangesAsync();
+            // Nhận kết quả phản hồi từ CQT (theo Invoice_Invoice_TCTReceive của TVAN gốc):
+            // inv1 đã được CQT chấp nhận phát hành (thông điệp 202) với mã xác thực CQT.
+            inv1.MltDiep = "202";
+            inv1.TctChapNhan = TctAcceptStatus.Accept;
+            inv1.TctReceiveDTimeUTC = DateTime.UtcNow.AddDays(-5);
+            db.TctReceiveLogs.Add(new TctReceiveLog
+            {
+                InvoiceId = inv1.Id, MltDiep = TctMessageType.Success202, ChapNhan = TctAcceptStatus.Accept,
+                MaCQT = inv1.TctCode, Message = $"CQT chấp nhận phát hành HĐ {inv1.Symbol}-{inv1.No}. Mã tra cứu: {inv1.TctCode}",
+                CreatedAt = DateTime.UtcNow.AddDays(-5)
+            });
+            await db.SaveChangesAsync();
             db.Messages.AddRange(
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300", Text = "Gửi HĐ 1C26TAA-00000001", CreatedAt = DateTime.UtcNow.AddDays(-5) },
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "202", Text = "TCT cấp mã: 0026082512345678", CreatedAt = DateTime.UtcNow.AddDays(-5) },

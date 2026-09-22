@@ -151,4 +151,20 @@ public static class Ui
         TemplateStatus.Issued   => ("Ngừng hoạt động", "dark"),
         _ => ("", "secondary")
     };
+
+    // Mã loại thông điệp CQT phản hồi (theo Invoice_Invoice_TCTReceive của TVAN gốc).
+    public static string TctMsg(TctMessageType t) => t switch
+    {
+        TctMessageType.Success202 => "202 — Phát hành thành công",
+        TctMessageType.Fail204    => "204 — Phát hành thất bại",
+        _ => ((int)t).ToString()
+    };
+
+    // Trạng thái CQT chấp nhận/từ chối (theo TConst.TCTStatus của TVAN gốc).
+    public static (string text, string css) TctAccept(TctAcceptStatus s) => s switch
+    {
+        TctAcceptStatus.Accept => ("Chấp nhận", "success"),
+        TctAcceptStatus.Reject => ("Từ chối", "danger"),
+        _ => (s.ToString(), "secondary")
+    };
 }

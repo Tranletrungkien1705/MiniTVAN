@@ -1,0 +1,30 @@
+@model List<TctReceiveLog>
+@{ ViewData["Title"] = "Nhật ký nhận kết quả CQT"; int? filterInv = ViewBag.InvoiceId as int?; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0"><i class="bi bi-inbox me-1"></i>Nhật ký nhận kết quả phản hồi từ CQT</h6>
+        @if (filterInv.HasValue) { <a class="small" href="/TctReceiveLog">Bỏ lọc</a> }
+    </div>
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Thời điểm</th><th>Hóa đơn</th><th>Thông điệp</th><th>Kết quả</th><th>Mã CQT</th><th>Mã lỗi</th><th>Lý do</th></tr></thead>
+        <tbody>
+        @foreach (var l in Model)
+        {
+            var (at, acss) = Ui.TctAccept(l.ChapNhan);
+            <tr>
+                <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                <td class="small">
+                    @if (l.Invoice != null) { <a href="/Invoice/Detail/@l.InvoiceId">@l.Invoice.Symbol-@l.Invoice.No</a> }
+                    else { <span class="text-muted">#@l.InvoiceId</span> }
+                </td>
+                <td class="small">@Ui.TctMsg(l.MltDiep)</td>
+                <td><span class="badge bg-@acss">@at</span></td>
+                <td class="small text-break">@l.MaCQT</td>
+                <td class="small text-break">@l.MaLoi</td>
+                <td class="small text-muted">@l.LyDo</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có lần nhận kết quả CQT nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>
