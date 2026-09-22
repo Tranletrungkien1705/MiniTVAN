@@ -436,6 +436,20 @@ app.MapGet("/api/cancel-logs", async (int? invoiceId, ITvanService svc) =>
     return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, action = l.Action.ToString(), l.Remark, l.By, l.CreatedAt }));
 });
 
+// Tạo biên bản đính kèm hóa đơn (theo luồng TaoBienBan của TVAN gốc): lưu file biên bản (base64) + lý do.
+app.MapPost("/api/invoices/{id:int}/record", async (int id, CreateRecordDto dto, ITvanService svc) =>
+{
+    var (ok, msg, logId) = await svc.CreateRecordAsync(id, dto.Type, dto.FileName ?? "", dto.FileSpec, dto.Reason, dto.By);
+    return ok ? Results.Ok(new { id = logId, msg }) : Results.BadRequest(new { id = logId, error = msg });
+});
+
+// Nhật ký tạo biên bản đính kèm hóa đơn (lọc theo hóa đơn nếu có).
+app.MapGet("/api/record-logs", async (int? invoiceId, ITvanService svc) =>
+{
+    var ls = await svc.RecordLogsAsync(invoiceId);
+    return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, type = l.Type.ToString(), l.FileName, l.FilePath, l.Reason, l.By, l.CreatedAt }));
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -466,3 +480,4 @@ record IncreaseEndNoDto(int NewEndInvoiceNo, string? Remark, string? By);
 record TctReceiveDto(TctMessageType MltDiep, string? MaCQT, string? MaLoi, string? LyDo);
 record UpdateAfterAllocatedDto(string? BuyerName, string? BuyerMst, string? BuyerAddress, PaymentMethod PaymentMethod, decimal Amount, decimal VatRate, DateTime? InvoiceDate, string? Note, string? By);
 record CancelInvoiceDto(string? Remark, string? By);
+record CreateRecordDto(RecordType Type, string? FileName, string? FileSpec, string? Reason, string? By);

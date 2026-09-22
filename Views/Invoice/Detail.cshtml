@@ -8,6 +8,7 @@
    var tctLogs = (List<TctReceiveLog>)ViewBag.TctLogs;
    var updateLogs = (List<InvoiceUpdateLog>)ViewBag.UpdateLogs;
    var cancelLogs = (List<CancelInvoiceLog>)ViewBag.CancelLogs;
+   var recordLogs = (List<InvoiceRecordLog>)ViewBag.RecordLogs;
    var (srcText, srcCss) = Ui.Source(Model.SourceCode);
    var (cpText, cpCss) = Ui.ConvPrint(Model.FlagChange);
    var (hfText, hfCss) = Ui.Hotfix(Model.FlagHotfix);
@@ -30,6 +31,13 @@
         @if (Model.Status == InvoiceStatus.Accepted) { <div class="alert alert-success py-2 small mb-2"><i class="bi bi-patch-check me-1"></i>Mã tra cứu CQT: <b>@Model.TctCode</b></div> }
         @if (!string.IsNullOrWhiteSpace(Model.MCCQTMTT)) { <div class="alert alert-info py-2 small mb-2"><i class="bi bi-upc-scan me-1"></i>Mã CQT trên HĐ máy tính tiền (MCCQTMTT): <b>@Model.MCCQTMTT</b></div> }
         @if (Model.Status == InvoiceStatus.Rejected) { <div class="alert alert-danger py-2 small mb-2"><i class="bi bi-x-octagon me-1"></i>TCT từ chối: @Model.RejectReason</div> }
+        @if (!string.IsNullOrWhiteSpace(Model.AttachedDelFileName))
+        {
+            <div class="alert alert-secondary py-2 small mb-2">
+                <i class="bi bi-paperclip me-1"></i>Biên bản đính kèm: <b>@Model.AttachedDelFileName</b>
+                @if (!string.IsNullOrWhiteSpace(Model.DeleteReason)) { <div class="mt-1">Lý do: @Model.DeleteReason</div> }
+            </div>
+        }
         <div class="row g-2 small">
             <div class="col-6"><div class="text-muted">Người bán</div><b>@Model.Nnt?.Name</b><div>MST @Model.Nnt?.Mst</div></div>
             <div class="col-6"><div class="text-muted">Người mua</div><b>@Model.BuyerName</b><div>@(Model.BuyerMst != null ? "MST " + Model.BuyerMst : "")<br />@Model.BuyerAddress</div></div>
@@ -198,6 +206,23 @@
                     <form asp-action="ToPending" method="post" onsubmit="return confirm('Chuyển hóa đơn về trạng thái chờ (giữ nguyên số)? Mã tra cứu CQT sẽ bị xóa.')">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
                         <div class="mb-2"><label class="form-label small mb-1">Lý do (tùy chọn)</label><input name="reason" class="form-control form-control-sm" placeholder="VD sửa sai sót nội dung" /></div>
                         <button class="btn btn-secondary btn-sm w-100">Chuyển về chờ (PENDING)</button>
+                    </form>
+                </div></div>
+                <button class="btn btn-outline-dark w-100" type="button" data-bs-toggle="collapse" data-bs-target="#recordForm"><i class="bi bi-paperclip me-1"></i>Tạo biên bản đính kèm</button>
+                <div class="collapse" id="recordForm"><div class="border rounded p-2">
+                    <div class="small text-muted mb-2">Đính kèm biên bản (hủy/điều chỉnh/thay thế) cho hóa đơn — lưu tên file, nội dung base64 và lý do.</div>
+                    <form asp-action="CreateRecord" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                        <div class="mb-2"><label class="form-label small mb-1">Loại biên bản</label>
+                            <select name="type" class="form-select form-select-sm">
+                                <option value="0">Biên bản hủy</option>
+                                <option value="1">Biên bản điều chỉnh</option>
+                                <option value="2">Biên bản thay thế</option>
+                            </select></div>
+                        <div class="mb-2"><label class="form-label small mb-1">Tên file biên bản</label><input name="fileName" class="form-control form-control-sm" placeholder="VD MauBienBanHuyHoaDon.docx" required /></div>
+                        <div class="mb-2"><label class="form-label small mb-1">Nội dung file (base64, tùy chọn)</label><textarea name="fileSpec" rows="2" class="form-control form-control-sm" placeholder="Dán nội dung file base64"></textarea></div>
+                        <div class="mb-2"><label class="form-label small mb-1">Lý do (tùy chọn)</label><input name="reason" class="form-control form-control-sm" placeholder="VD lập sai, hủy theo yêu cầu" /></div>
+                        <div class="mb-2"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="VD kế toán" /></div>
+                        <button class="btn btn-dark btn-sm w-100">Tạo biên bản</button>
                     </form>
                 </div></div>
                 <button class="btn btn-outline-success w-100" type="button" data-bs-toggle="collapse" data-bs-target="#emailForm"><i class="bi bi-envelope me-1"></i>Gửi email hóa đơn</button>
@@ -487,6 +512,28 @@
                 </tr>
             }
             @if (reSignLogs.Count == 0) { <tr><td colspan="4" class="text-muted small">Chưa ký lại.</td></tr> }
+            </tbody>
+        </table>
+    </div></div>
+
+    <div class="card mt-3"><div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="bi bi-paperclip me-1"></i>Nhật ký tạo biên bản đính kèm</h6>
+        <table class="table table-sm align-middle mb-0">
+            <thead><tr><th>Thời điểm</th><th>Loại</th><th>Tên file</th><th>Đường dẫn</th><th>Lý do</th><th>Người thực hiện</th></tr></thead>
+            <tbody>
+            @foreach (var l in recordLogs)
+            {
+                var (rt, rcss) = Ui.Record(l.Type);
+                <tr>
+                    <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM HH:mm")</td>
+                    <td><span class="badge bg-@rcss">@rt</span></td>
+                    <td class="small text-break">@l.FileName</td>
+                    <td class="small text-break">@l.FilePath</td>
+                    <td class="small">@l.Reason</td>
+                    <td class="small text-muted">@l.By</td>
+                </tr>
+            }
+            @if (recordLogs.Count == 0) { <tr><td colspan="6" class="text-muted small">Chưa tạo biên bản.</td></tr> }
             </tbody>
         </table>
     </div></div>

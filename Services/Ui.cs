@@ -205,4 +205,13 @@ public static class Ui
         InvoiceTypeM.Machine => ("HĐ máy tính tiền", "info"),
         _ => ("HĐ thông thường", "secondary")
     };
+
+    // Loại biên bản đính kèm hóa đơn (theo luồng TaoBienBan của TVAN gốc).
+    public static (string text, string css) Record(RecordType t) => t switch
+    {
+        RecordType.Huy       => ("Biên bản hủy", "dark"),
+        RecordType.DieuChinh => ("Biên bản điều chỉnh", "info"),
+        RecordType.ThayThe   => ("Biên bản thay thế", "warning"),
+        _ => (t.ToString(), "secondary")
+    };
 }

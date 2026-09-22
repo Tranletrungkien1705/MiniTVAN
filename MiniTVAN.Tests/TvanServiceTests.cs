@@ -1656,4 +1656,46 @@ public class TvanServiceTests
             Assert.Contains("máy tính tiền", msg);
         }
     }
+
+    // Tạo biên bản đính kèm hóa đơn (theo luồng TaoBienBan của TVAN gốc).
+    [Fact]
+    public async Task CreateRecord_OnInvoice_SavesFileAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            var (ok, msg, logId) = await svc.CreateRecordAsync(invId, RecordType.Huy, "MauBienBanHuyHoaDon.docx", "UEsDBBQ=", "Lập sai", "kế toán");
+            Assert.True(ok);
+            Assert.True(logId > 0);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal("MauBienBanHuyHoaDon.docx", inv!.AttachedDelFileName);
+            Assert.Equal("UEsDBBQ=", inv.AttachedDelFileSpec);
+            Assert.Equal("Lập sai", inv.DeleteReason);
+            Assert.False(string.IsNullOrWhiteSpace(inv.AttachedDelFilePath));
+            Assert.Single(await svc.RecordLogsAsync(invId));
+        }
+    }
+
+    [Fact]
+    public async Task CreateRecord_MissingFileName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            var (ok, msg, _) = await svc.CreateRecordAsync(invId, RecordType.DieuChinh, "  ", null, null, null);
+            Assert.False(ok);
+            Assert.Contains("tên file", msg);
+        }
+    }
+
+    [Fact]
+    public async Task CreateRecord_UnknownInvoice_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.CreateRecordAsync(9999, RecordType.ThayThe, "bb.docx", null, null, null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
 }

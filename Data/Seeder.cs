@@ -115,6 +115,19 @@ public static class Seeder
                 CreatedAt = DateTime.UtcNow.AddHours(-6)
             });
             await db.SaveChangesAsync();
+            // Tạo biên bản đính kèm hóa đơn (theo luồng TaoBienBan của TVAN gốc):
+            // inv5 đã hủy → đã tạo biên bản hủy kèm file + lý do.
+            inv5.AttachedDelFileName = "MauBienBanHuyHoaDon.docx";
+            inv5.AttachedDelFileSpec = "UEsDBBQABgAIAAAAIQ==";
+            inv5.AttachedDelFilePath = $"{DateTime.Today:yyyy-MM-dd}/MauBienBanHuyHoaDon.docx";
+            inv5.DeleteReason = "Lập sai thông tin người mua";
+            db.InvoiceRecordLogs.Add(new InvoiceRecordLog
+            {
+                InvoiceId = inv5.Id, Type = RecordType.Huy, FileName = inv5.AttachedDelFileName,
+                FileSpec = inv5.AttachedDelFileSpec, FilePath = inv5.AttachedDelFilePath,
+                Reason = inv5.DeleteReason, By = "kế toán", CreatedAt = DateTime.UtcNow.AddHours(-6)
+            });
+            await db.SaveChangesAsync();
             db.Messages.AddRange(
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300", Text = "Gửi HĐ 1C26TAA-00000001", CreatedAt = DateTime.UtcNow.AddDays(-5) },
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "202", Text = "TCT cấp mã: 0026082512345678", CreatedAt = DateTime.UtcNow.AddDays(-5) },

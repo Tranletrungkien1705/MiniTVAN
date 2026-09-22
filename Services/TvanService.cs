@@ -67,6 +67,8 @@ public interface ITvanService
     Task<List<InvoiceUpdateLog>> UpdateLogsAsync(int? invoiceId);
     Task<(bool ok, string msg)> CancelInvoiceAsync(int invoiceId, string? remark, string? by);
     Task<List<CancelInvoiceLog>> CancelLogsAsync(int? invoiceId);
+    Task<(bool ok, string msg, int id)> CreateRecordAsync(int invoiceId, RecordType type, string fileName, string? fileSpec, string? reason, string? by);
+    Task<List<InvoiceRecordLog>> RecordLogsAsync(int? invoiceId);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -1258,6 +1260,51 @@ public class TvanService(AppDbContext db) : ITvanService
         if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
     }
+
+    // Tạo biên bản đính kèm hóa đơn (theo luồng TaoBienBan của TVAN gốc):
+    // lưu tên file + nội dung base64 + đường dẫn + lý do hủy/điều chỉnh/thay thế vào hóa đơn,
+    // đồng thời ghi nhật ký (InvoiceRecordLog) để đối soát.
+    public async Task<(bool ok, string msg, int id)> CreateRecordAsync(int invoiceId, RecordType type, string fileName, string? fileSpec, string? reason, string? by)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.", 0);
+        if (string.IsNullOrWhiteSpace(fileName)) return (false, "Cần tên file biên bản.", 0);
+
+        var subFolder = DateTime.Now.ToString("yyyy-MM-dd");
+        var path = $"{subFolder}/{fileName.Trim()}";
+        inv.AttachedDelFileName = fileName.Trim();
+        inv.AttachedDelFileSpec = fileSpec;
+        inv.AttachedDelFilePath = path;
+        inv.DeleteReason = reason;
+
+        var log = new InvoiceRecordLog
+        {
+            InvoiceId = inv.Id, Type = type, FileName = fileName.Trim(),
+            FileSpec = fileSpec, FilePath = path, Reason = reason, By = by,
+        };
+        db.InvoiceRecordLogs.Add(log);
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Tạo biên bản {RecordLabel(type)} cho HĐ {inv.Symbol}-{inv.No}: {fileName.Trim()}{(string.IsNullOrWhiteSpace(reason) ? "" : " — " + reason.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã tạo biên bản {RecordLabel(type)} cho HĐ {inv.Symbol}-{inv.No}.", log.Id);
+    }
+
+    public Task<List<InvoiceRecordLog>> RecordLogsAsync(int? invoiceId)
+    {
+        var q = db.InvoiceRecordLogs.Include(l => l.Invoice).AsQueryable();
+        if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
+        return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
+
+    private static string RecordLabel(RecordType t) => t switch
+    {
+        RecordType.DieuChinh => "điều chỉnh",
+        RecordType.ThayThe => "thay thế",
+        _ => "hủy"
+    };
 
     // Khoảng thời gian [from, to) của kỳ dữ liệu theo loại kỳ (LKDLieu).
     private static (DateTime from, DateTime to) PeriodRange(PeriodType t, string kdlieu)

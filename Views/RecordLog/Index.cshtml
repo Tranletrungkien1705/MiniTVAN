@@ -1,0 +1,30 @@
+@model List<InvoiceRecordLog>
+@{ ViewData["Title"] = "Nhật ký biên bản"; int? filterInv = ViewBag.InvoiceId as int?; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0"><i class="bi bi-paperclip me-1"></i>Nhật ký tạo biên bản đính kèm hóa đơn</h6>
+        @if (filterInv.HasValue) { <a class="small" href="/RecordLog">Bỏ lọc</a> }
+    </div>
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Thời điểm</th><th>Hóa đơn</th><th>Loại</th><th>Tên file</th><th>Đường dẫn</th><th>Lý do</th><th>Người thực hiện</th></tr></thead>
+        <tbody>
+        @foreach (var l in Model)
+        {
+            var (rt, rcss) = Ui.Record(l.Type);
+            <tr>
+                <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                <td class="small">
+                    @if (l.Invoice != null) { <a href="/Invoice/Detail/@l.InvoiceId">@l.Invoice.Symbol-@l.Invoice.No</a> }
+                    else { <span class="text-muted">#@l.InvoiceId</span> }
+                </td>
+                <td><span class="badge bg-@rcss">@rt</span></td>
+                <td class="small text-break">@l.FileName</td>
+                <td class="small text-break">@l.FilePath</td>
+                <td class="small text-muted">@l.Reason</td>
+                <td class="small text-muted">@l.By</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có biên bản nào được tạo.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

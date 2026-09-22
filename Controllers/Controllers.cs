@@ -72,6 +72,7 @@ public class InvoiceController(ITvanService svc) : Controller
         ViewBag.TctLogs = await svc.TctReceiveLogsAsync(id);
         ViewBag.UpdateLogs = await svc.UpdateLogsAsync(id);
         ViewBag.CancelLogs = await svc.CancelLogsAsync(id);
+        ViewBag.RecordLogs = await svc.RecordLogsAsync(id);
         return View(inv);
     }
 
@@ -258,6 +259,15 @@ public class InvoiceController(ITvanService svc) : Controller
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Detail), new { id });
     }
+
+    // Tạo biên bản đính kèm hóa đơn (theo luồng TaoBienBan của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateRecord(int id, RecordType type, string fileName, string? fileSpec, string? reason, string? by)
+    {
+        var (ok, msg, _) = await svc.CreateRecordAsync(id, type, fileName, fileSpec, reason, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
 }
 
 public class LicenseController(ITvanService svc) : Controller
@@ -409,6 +419,16 @@ public class CancelLogController(ITvanService svc) : Controller
     {
         ViewBag.InvoiceId = invoiceId;
         return View(await svc.CancelLogsAsync(invoiceId));
+    }
+}
+
+// Nhật ký tạo biên bản đính kèm hóa đơn (theo luồng TaoBienBan của TVAN gốc).
+public class RecordLogController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? invoiceId)
+    {
+        ViewBag.InvoiceId = invoiceId;
+        return View(await svc.RecordLogsAsync(invoiceId));
     }
 }
 

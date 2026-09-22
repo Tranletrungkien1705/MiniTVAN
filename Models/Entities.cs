@@ -50,6 +50,10 @@ public enum ApproveAction { Approve = 0, Unapprove = 1 }
 // Cancel = hủy hóa đơn đang chờ/đã duyệt (PENDING/APPROVED → CANCELED).
 public enum CancelAction { Cancel = 0 }
 
+// Loại biên bản đính kèm hóa đơn (theo Invoice_Invoice.AttachedDelFileName của TVAN gốc):
+// Huy = biên bản hủy hóa đơn, DieuChinh = biên bản điều chỉnh, ThayThe = biên bản thay thế.
+public enum RecordType { Huy = 0, DieuChinh = 1, ThayThe = 2 }
+
 // Loại thao tác phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc):
 // Issue = phát hành HĐ đã duyệt (APPROVED → ISSUED) và gửi cho khách hàng.
 public enum IssueAction { Issue = 0 }
@@ -200,6 +204,15 @@ public class Invoice : IOrgOwned
     // Mã của CQT trên hóa đơn khởi tạo từ máy tính tiền (theo Invoice_Invoice.MCCQTMTT của TVAN gốc):
     // sinh khi cấp số cho hóa đơn loại MTT (FormNo có ký tự thứ 4 = 'M'), định dạng M<C2>-<yy>-<MCCQT>-<MMdd><seq7>.
     public string? MCCQTMTT { get; set; }
+
+    // Biên bản đính kèm hóa đơn (theo Invoice_Invoice.AttachedDelFileName/AttachedDelFileSpec/
+    // AttachedDelFilePath/DeleteReason của TVAN gốc — luồng TaoBienBan):
+    // AttachedDelFileName = tên file biên bản, AttachedDelFileSpec = nội dung file (base64),
+    // AttachedDelFilePath = đường dẫn file đã lưu, DeleteReason = lý do hủy/điều chỉnh/thay thế.
+    public string? AttachedDelFileName { get; set; }
+    public string? AttachedDelFileSpec { get; set; }
+    public string? AttachedDelFilePath { get; set; }
+    public string? DeleteReason { get; set; }
 
     public decimal VatAmount => Math.Round(Amount * VatRate / 100m, 0);
     public decimal Total => Amount + VatAmount;
@@ -530,5 +543,23 @@ public class InvoiceUpdateLog : IOrgOwned
     public DateTime InvoiceDate { get; set; }          // Ngày hóa đơn sau cập nhật
     public string? Note { get; set; }                  // Ghi chú / lý do
     public string? By { get; set; }                    // Người thực hiện
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Nhật ký tạo biên bản đính kèm hóa đơn (theo luồng TaoBienBan của TVAN gốc).
+// Mỗi lần tạo biên bản (hủy/điều chỉnh/thay thế) ghi lại tên file, nội dung base64, đường dẫn,
+// lý do và người thực hiện để đối soát.
+public class InvoiceRecordLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InvoiceId { get; set; }
+    public Invoice? Invoice { get; set; }
+    public RecordType Type { get; set; } = RecordType.Huy;   // Loại biên bản
+    public string FileName { get; set; } = "";               // Tên file biên bản
+    public string? FileSpec { get; set; }                    // Nội dung file (base64)
+    public string? FilePath { get; set; }                    // Đường dẫn file đã lưu
+    public string? Reason { get; set; }                      // Lý do hủy/điều chỉnh/thay thế
+    public string? By { get; set; }                          // Người thực hiện
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
