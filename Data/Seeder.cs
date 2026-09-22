@@ -20,9 +20,14 @@ public static class Seeder
             var inv1 = new Invoice { NntId = seller.Id, Symbol = "1C26TAA", No = "00000001", BuyerName = "Nguyễn Văn A", BuyerMst = "8012345678", BuyerAddress = "Hà Nội", Amount = 500_000_000, VatRate = 10, IssuedDate = DateTime.Today.AddDays(-5), Status = InvoiceStatus.Accepted, TctCode = "0026082512345678", SentAt = DateTime.UtcNow.AddDays(-5) };
             var inv2 = new Invoice { NntId = seller.Id, Symbol = "1C26TAA", No = "00000002", BuyerName = "Trần Thị B", BuyerAddress = "Hải Phòng", Amount = 30_000_000, VatRate = 10, IssuedDate = DateTime.Today.AddDays(-1), Status = InvoiceStatus.Draft };
             db.Invoices.AddRange(inv1, inv2); await db.SaveChangesAsync();
+            // HĐ điều chỉnh giảm cho HĐ gốc inv1 (minh họa xử lý sai sót)
+            var inv3 = new Invoice { NntId = seller.Id, Symbol = "1C26TAA", No = "00000003", BuyerName = "Nguyễn Văn A", BuyerMst = "8012345678", BuyerAddress = "Hà Nội", Amount = 5_000_000, VatRate = 10, IssuedDate = DateTime.Today.AddDays(-2), Status = InvoiceStatus.Accepted, TctCode = "0026082612345679", SentAt = DateTime.UtcNow.AddDays(-2), SourceCode = SourceInvoiceCode.Adjust, AdjType = InvoiceAdjType.Decrease, RefInvoiceId = inv1.Id, RefTctCode = inv1.TctCode, AdjReason = "Giảm giá theo phụ lục hợp đồng" };
+            db.Invoices.Add(inv3); await db.SaveChangesAsync();
             db.Messages.AddRange(
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300", Text = "Gửi HĐ 1C26TAA-00000001", CreatedAt = DateTime.UtcNow.AddDays(-5) },
-                new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "202", Text = "TCT cấp mã: 0026082512345678", CreatedAt = DateTime.UtcNow.AddDays(-5) });
+                new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "202", Text = "TCT cấp mã: 0026082512345678", CreatedAt = DateTime.UtcNow.AddDays(-5) },
+                new TranMessage { InvoiceId = inv3.Id, NntId = seller.Id, Type = MsgType.AdjustInvoice, Dir = MsgDir.Out, Code = "300", Text = "Gửi HĐ điều chỉnh giảm cho 1C26TAA-00000001", CreatedAt = DateTime.UtcNow.AddDays(-2) },
+                new TranMessage { InvoiceId = inv3.Id, NntId = seller.Id, Type = MsgType.AdjustInvoice, Dir = MsgDir.In, Code = "202", Text = "TCT cấp mã: 0026082612345679", CreatedAt = DateTime.UtcNow.AddDays(-2) });
             await db.SaveChangesAsync();
         }
     }

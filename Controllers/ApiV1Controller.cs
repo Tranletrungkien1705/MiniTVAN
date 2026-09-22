@@ -99,7 +99,8 @@ public class ApiV1Controller(ITvanService svc, ICache cache, ITenantContext tena
     private static object ToDto(Invoice i) => new
     {
         i.Id, i.Symbol, i.No, nnt = i.Nnt?.Name, nntMst = i.Nnt?.Mst, i.BuyerName, i.BuyerMst, i.Amount, i.VatRate, vat = i.VatAmount, total = i.Total,
-        status = (int)i.Status, statusText = Ui.Inv(i.Status).text, statusCss = Ui.Inv(i.Status).css, i.TctCode, i.RejectReason, i.IssuedDate, i.SentAt
+        status = (int)i.Status, statusText = Ui.Inv(i.Status).text, statusCss = Ui.Inv(i.Status).css, i.TctCode, i.RejectReason, i.IssuedDate, i.SentAt,
+        sourceCode = i.SourceCode.ToString(), sourceText = Ui.Source(i.SourceCode).text, adjType = i.AdjType.ToString(), adjTypeText = Ui.Adj(i.AdjType), i.RefTctCode, i.AdjReason
     };
 }
 

@@ -29,8 +29,25 @@ public static class Ui
         MsgType.RegisterNnt => "Đăng ký NNT",
         MsgType.SendInvoice => "Gửi hóa đơn",
         MsgType.CancelInvoice => "Hủy hóa đơn",
+        MsgType.AdjustInvoice => "Điều chỉnh hóa đơn",
+        MsgType.ReplaceInvoice => "Thay thế hóa đơn",
         _ => t.ToString()
     };
     public static string Dir(MsgDir d) => d == MsgDir.Out ? "→ TCT" : "← TCT";
     public static string DirCss(MsgDir d) => d == MsgDir.Out ? "text-primary" : "text-success";
+
+    public static (string text, string css) Source(SourceInvoiceCode s) => s switch
+    {
+        SourceInvoiceCode.Root    => ("Hóa đơn gốc", "secondary"),
+        SourceInvoiceCode.Replace => ("Hóa đơn thay thế", "warning"),
+        SourceInvoiceCode.Adjust  => ("Hóa đơn điều chỉnh", "info"),
+        _ => (s.ToString(), "secondary")
+    };
+
+    public static string Adj(InvoiceAdjType t) => t switch
+    {
+        InvoiceAdjType.Increase => "Tăng",
+        InvoiceAdjType.Decrease => "Giảm",
+        _ => "Bình thường"
+    };
 }

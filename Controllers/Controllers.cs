@@ -80,6 +80,22 @@ public class InvoiceController(ITvanService svc) : Controller
         var (ok, msg) = await svc.CancelAsync(id);
         TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
     }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Adjust(int id, InvoiceAdjType adjType, decimal amount, decimal vatRate, string? reason)
+    {
+        var (ok, msg, newId) = await svc.AdjustAsync(id, adjType, amount, vatRate, reason);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Detail), new { id = newId }) : RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Replace(int id, decimal amount, decimal vatRate, string? reason)
+    {
+        var (ok, msg, newId) = await svc.ReplaceAsync(id, amount, vatRate, reason);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Detail), new { id = newId }) : RedirectToAction(nameof(Detail), new { id });
+    }
 }
 
 public class LookupController(ITvanService svc) : Controller

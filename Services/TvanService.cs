@@ -18,6 +18,8 @@ public interface ITvanService
     Task<(bool ok, string msg, string? tctCode, string status, int id)> ExternalIssueAsync(string sellerMst, string? sellerName, string buyerName, string? buyerMst, string? buyerAddress, decimal amount, decimal vatRate, string? docRef);
     Task<(bool ok, string msg)> TransmitAsync(int invoiceId);
     Task<(bool ok, string msg)> CancelAsync(int invoiceId);
+    Task<(bool ok, string msg, int id)> AdjustAsync(int invoiceId, InvoiceAdjType adjType, decimal amount, decimal vatRate, string? reason);
+    Task<(bool ok, string msg, int id)> ReplaceAsync(int invoiceId, decimal amount, decimal vatRate, string? reason);
     Task<List<TranMessage>> MessagesAsync(int invoiceId);
     Task<Invoice?> LookupByCodeAsync(string tctCode);
     Task<TvanDash> DashboardAsync();
@@ -160,6 +162,68 @@ public class TvanService(AppDbContext db) : ITvanService
         db.Messages.Add(new TranMessage { InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.CancelInvoice, Dir = MsgDir.In, Code = "202", Text = "TCT xác nhận hủy" });
         await db.SaveChangesAsync();
         return (true, "Đã hủy hóa đơn (thông báo tới cơ quan thuế).");
+    }
+
+    // Điều chỉnh hóa đơn đã phát hành (INVOICEADJ). HĐ gốc phải Accepted; HĐ đã điều chỉnh không được điều chỉnh tiếp.
+    // Tăng/giảm: HĐ điều chỉnh mang chênh lệch tiền; TCT cấp mã mới, HĐ gốc giữ nguyên.
+    public async Task<(bool ok, string msg, int id)> AdjustAsync(int invoiceId, InvoiceAdjType adjType, decimal amount, decimal vatRate, string? reason)
+    {
+        var root = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (root == null) return (false, "Không tìm thấy hóa đơn gốc.", 0);
+        if (root.Status != InvoiceStatus.Accepted) return (false, "Chỉ điều chỉnh được hóa đơn đã được CQT chấp nhận.", 0);
+        if (root.SourceCode == SourceInvoiceCode.Adjust) return (false, "Hóa đơn đã điều chỉnh không được điều chỉnh tiếp.", 0);
+        if (adjType == InvoiceAdjType.Normal) return (false, "Chọn loại điều chỉnh: Tăng hoặc Giảm.", 0);
+        if (amount <= 0) return (false, "Số tiền điều chỉnh phải > 0.", 0);
+        if (string.IsNullOrWhiteSpace(reason)) return (false, "Cần lý do điều chỉnh.", 0);
+
+        var no = (await db.Invoices.CountAsync(i => i.NntId == root.NntId) + 1).ToString("D8");
+        var adj = new Invoice
+        {
+            NntId = root.NntId, Symbol = root.Symbol, No = no,
+            BuyerName = root.BuyerName, BuyerMst = root.BuyerMst, BuyerAddress = root.BuyerAddress,
+            Amount = amount, VatRate = vatRate <= 0 ? root.VatRate : vatRate, IssuedDate = DateTime.Today,
+            Status = InvoiceStatus.Draft,
+            SourceCode = SourceInvoiceCode.Adjust, AdjType = adjType,
+            RefInvoiceId = root.Id, RefTctCode = root.TctCode, AdjReason = reason.Trim()
+        };
+        db.Invoices.Add(adj); await db.SaveChangesAsync();
+
+        var (tok, tmsg) = await TransmitAsync(adj.Id);
+        var fresh = await db.Invoices.FirstOrDefaultAsync(i => i.Id == adj.Id);
+        return (tok, tok ? $"Đã điều chỉnh {(adjType == InvoiceAdjType.Increase ? "tăng" : "giảm")} HĐ {root.Symbol}-{root.No}. {tmsg}" : tmsg, adj.Id);
+    }
+
+    // Thay thế hóa đơn đã phát hành (INVOICEREPLACE). HĐ gốc phải Accepted; HĐ gốc bị hủy (DELETED) khi thay thế.
+    public async Task<(bool ok, string msg, int id)> ReplaceAsync(int invoiceId, decimal amount, decimal vatRate, string? reason)
+    {
+        var root = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (root == null) return (false, "Không tìm thấy hóa đơn gốc.", 0);
+        if (root.Status != InvoiceStatus.Accepted) return (false, "Chỉ thay thế được hóa đơn đã được CQT chấp nhận.", 0);
+        if (root.SourceCode != SourceInvoiceCode.Root) return (false, "Chỉ thay thế được hóa đơn gốc.", 0);
+        if (amount <= 0) return (false, "Tiền hàng phải > 0.", 0);
+        if (string.IsNullOrWhiteSpace(reason)) return (false, "Cần lý do thay thế.", 0);
+
+        var no = (await db.Invoices.CountAsync(i => i.NntId == root.NntId) + 1).ToString("D8");
+        var rep = new Invoice
+        {
+            NntId = root.NntId, Symbol = root.Symbol, No = no,
+            BuyerName = root.BuyerName, BuyerMst = root.BuyerMst, BuyerAddress = root.BuyerAddress,
+            Amount = amount, VatRate = vatRate <= 0 ? root.VatRate : vatRate, IssuedDate = DateTime.Today,
+            Status = InvoiceStatus.Draft,
+            SourceCode = SourceInvoiceCode.Replace, AdjType = InvoiceAdjType.Normal,
+            RefInvoiceId = root.Id, RefTctCode = root.TctCode, AdjReason = reason.Trim()
+        };
+        db.Invoices.Add(rep); await db.SaveChangesAsync();
+
+        var (tok, tmsg) = await TransmitAsync(rep.Id);
+        if (!tok) return (false, tmsg, rep.Id);
+
+        // HĐ gốc bị thay thế → hủy (DELETED) và ghi nhật ký
+        root.Status = InvoiceStatus.Cancelled;
+        db.Messages.Add(new TranMessage { InvoiceId = root.Id, NntId = root.NntId, Type = MsgType.ReplaceInvoice, Dir = MsgDir.Out, Code = "300", Text = $"HĐ gốc bị thay thế bởi {rep.Symbol}-{rep.No}" });
+        db.Messages.Add(new TranMessage { InvoiceId = root.Id, NntId = root.NntId, Type = MsgType.ReplaceInvoice, Dir = MsgDir.In, Code = "202", Text = "TCT xác nhận thay thế" });
+        await db.SaveChangesAsync();
+        return (true, $"Đã thay thế HĐ {root.Symbol}-{root.No} bằng {rep.Symbol}-{rep.No}. {tmsg}", rep.Id);
     }
 
     public Task<List<TranMessage>> MessagesAsync(int invoiceId) =>

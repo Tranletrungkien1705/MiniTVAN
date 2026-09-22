@@ -116,4 +116,78 @@ public class TvanServiceTests
             Assert.Equal(11_000_000, inv.Total);
         }
     }
+
+    [Fact]
+    public async Task Adjust_OnAccepted_CreatesAdjustInvoice()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);
+            var (ok, _, newId) = await svc.AdjustAsync(invId, InvoiceAdjType.Decrease, 5_000_000, 10, "Giảm giá");
+            Assert.True(ok);
+            var adj = await svc.GetInvoiceAsync(newId);
+            Assert.Equal(SourceInvoiceCode.Adjust, adj!.SourceCode);
+            Assert.Equal(InvoiceAdjType.Decrease, adj.AdjType);
+            Assert.Equal(invId, adj.RefInvoiceId);
+            Assert.Equal(InvoiceStatus.Accepted, adj.Status);
+        }
+    }
+
+    [Fact]
+    public async Task Adjust_OnDraft_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);   // Draft, chưa truyền
+            var (ok, msg, _) = await svc.AdjustAsync(invId, InvoiceAdjType.Increase, 1_000_000, 10, "x");
+            Assert.False(ok);
+            Assert.Contains("chấp nhận", msg);
+        }
+    }
+
+    [Fact]
+    public async Task Adjust_AlreadyAdjusted_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);
+            var (_, _, adjId) = await svc.AdjustAsync(invId, InvoiceAdjType.Decrease, 5_000_000, 10, "lần 1");
+            var (ok, msg, _) = await svc.AdjustAsync(adjId, InvoiceAdjType.Decrease, 1_000_000, 10, "lần 2");
+            Assert.False(ok);
+            Assert.Contains("điều chỉnh tiếp", msg);
+        }
+    }
+
+    [Fact]
+    public async Task Replace_OnAccepted_CancelsRoot()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);
+            var (ok, _, newId) = await svc.ReplaceAsync(invId, 20_000_000, 10, "Sai số tiền");
+            Assert.True(ok);
+            var rep = await svc.GetInvoiceAsync(newId);
+            Assert.Equal(SourceInvoiceCode.Replace, rep!.SourceCode);
+            Assert.Equal(invId, rep.RefInvoiceId);
+            Assert.Equal(InvoiceStatus.Accepted, rep.Status);
+            Assert.Equal(InvoiceStatus.Cancelled, (await svc.GetInvoiceAsync(invId))!.Status);   // gốc bị hủy
+        }
+    }
+
+    [Fact]
+    public async Task Replace_OnReplacedRoot_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);
+            var (_, _, repId) = await svc.ReplaceAsync(invId, 20_000_000, 10, "lần 1");
+            var (ok, msg, _) = await svc.ReplaceAsync(repId, 1_000_000, 10, "lần 2");
+            Assert.False(ok);
+            Assert.Contains("hóa đơn gốc", msg);
+        }
+    }
 }

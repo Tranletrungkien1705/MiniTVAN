@@ -5,8 +5,13 @@ public interface IOrgOwned { Guid OrgId { get; set; } }
 public enum RegStatus { None = 0, Pending = 1, Registered = 2, Rejected = 3 }
 // Vòng đời hóa đơn khi truyền tới cơ quan thuế
 public enum InvoiceStatus { Draft = 0, Sent = 1, Accepted = 2, Rejected = 3, Cancelled = 4 }
-public enum MsgType { RegisterNnt = 0, SendInvoice = 1, CancelInvoice = 2 }
+public enum MsgType { RegisterNnt = 0, SendInvoice = 1, CancelInvoice = 2, AdjustInvoice = 3, ReplaceInvoice = 4 }
 public enum MsgDir { Out = 0, In = 1 }   // Out = gửi tới TCT, In = TCT phản hồi
+
+// Nguồn gốc hóa đơn (theo TConst.SourceInvoiceCode của TVAN gốc)
+public enum SourceInvoiceCode { Root = 0, Replace = 1, Adjust = 2 }
+// Loại điều chỉnh (theo TConst.InvoiceAdjType của TVAN gốc)
+public enum InvoiceAdjType { Normal = 0, Increase = 1, Decrease = 2 }
 
 public class Org
 {
@@ -49,6 +54,14 @@ public class Invoice : IOrgOwned
     public string? RejectReason { get; set; }
     public DateTime? SentAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    // Xử lý hóa đơn sai sót: gốc / thay thế / điều chỉnh
+    public SourceInvoiceCode SourceCode { get; set; } = SourceInvoiceCode.Root;
+    public InvoiceAdjType AdjType { get; set; } = InvoiceAdjType.Normal;
+    public int? RefInvoiceId { get; set; }           // HĐ gốc bị thay thế/điều chỉnh
+    public Invoice? RefInvoice { get; set; }
+    public string? RefTctCode { get; set; }          // Số tra cứu HĐ gốc (RefNo)
+    public string? AdjReason { get; set; }           // Lý do điều chỉnh/thay thế
 
     public decimal VatAmount => Math.Round(Amount * VatRate / 100m, 0);
     public decimal Total => Amount + VatAmount;

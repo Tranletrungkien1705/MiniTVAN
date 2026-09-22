@@ -31,6 +31,7 @@ public class AppDbContext : DbContext
             e.HasIndex(x => x.TctCode).IsUnique();          // mã tra cứu GLOBAL (xuyên tenant)
             e.HasIndex(x => new { x.OrgId, x.NntId });
             e.HasOne(x => x.Nnt).WithMany().HasForeignKey(x => x.NntId);
+            e.HasOne(x => x.RefInvoice).WithMany().HasForeignKey(x => x.RefInvoiceId).OnDelete(DeleteBehavior.Restrict);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<TranMessage>(e =>

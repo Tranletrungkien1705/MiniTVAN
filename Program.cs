@@ -134,6 +134,20 @@ app.MapPost("/api/import/invoices", async (List<ImportInvDto> rows, AppDbContext
     return Results.Ok(new { added, skipped, total = added + skipped });
 });
 
+// Xử lý hóa đơn sai sót: điều chỉnh (tăng/giảm) hóa đơn đã phát hành.
+app.MapPost("/api/invoices/{id:int}/adjust", async (int id, AdjustDto dto, ITvanService svc) =>
+{
+    var (ok, msg, newId) = await svc.AdjustAsync(id, dto.AdjType, dto.Amount, dto.VatRate, dto.Reason);
+    return ok ? Results.Ok(new { id = newId, msg }) : Results.BadRequest(new { id = newId, error = msg });
+});
+
+// Xử lý hóa đơn sai sót: thay thế hóa đơn gốc (HĐ gốc bị hủy).
+app.MapPost("/api/invoices/{id:int}/replace", async (int id, ReplaceDto dto, ITvanService svc) =>
+{
+    var (ok, msg, newId) = await svc.ReplaceAsync(id, dto.Amount, dto.VatRate, dto.Reason);
+    return ok ? Results.Ok(new { id = newId, msg }) : Results.BadRequest(new { id = newId, error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -142,3 +156,5 @@ record ExtInvoiceDto(string? SellerMst, string? SellerName, string? BuyerName, s
 record RegisterOrgDto(string Name);
 record ImportNntDto(string? Mst, string? Name, string? Address, string? Email);
 record ImportInvDto(string? SellerMst, string? Symbol, string? No, string? BuyerName, string? BuyerMst, string? BuyerAddress, decimal Amount, decimal VatRate, DateTime? IssuedDate, string? TctCode);
+record AdjustDto(InvoiceAdjType AdjType, decimal Amount, decimal VatRate, string? Reason);
+record ReplaceDto(decimal Amount, decimal VatRate, string? Reason);
