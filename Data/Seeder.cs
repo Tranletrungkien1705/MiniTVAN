@@ -353,6 +353,27 @@ public static class Seeder
                 new InvoiceDtlCustomField { InvoiceDtlCustomFieldCode = "InvDCF1", InvoiceDtlCustomFieldName = "Mã kho", DBPhysicalType = DBPhysicalType.Text, FlagActive = true, UpdatedBy = "kế toán" });
             await db.SaveChangesAsync();
         }
+
+        // Nhóm mẫu hóa đơn (theo Invoice_TempGroup của TVAN gốc): seller có 1 nhóm mẫu 1VAT
+        // kèm danh sách trường động hiển thị trên hóa đơn.
+        if (!await db.InvoiceTempGroups.AnyAsync())
+        {
+            var seller = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == "0101243150");
+            if (seller != null)
+            {
+                var grp = new InvoiceTempGroup
+                {
+                    InvoiceTGroupCode = "MAU1VAT", MST = seller.Mst, VATType = VATType.OneVat,
+                    InvoiceTGroupName = "Mẫu hóa đơn 1VAT (không có QR code)",
+                    InvoiceTGroupBody = "<div id=\"divTemp\"><h3 id=\"Temp_TInvoiceName\">HÓA ĐƠN GIÁ TRỊ GIA TĂNG</h3></div>",
+                    FilePathThumbnail = "/Images/mau1vat.png", SpecPrdType = SpecPrdType.Spec,
+                    FlagActive = true, UpdatedBy = "kế toán"
+                };
+                grp.Fields.Add(new InvoiceTempGroupField { DBFieldName = "Temp_NameSale", TCFType = "TEXT", FlagActive = true });
+                grp.Fields.Add(new InvoiceTempGroupField { DBFieldName = "Temp_MSTSale", TCFType = "TEXT", FlagActive = true });
+                db.InvoiceTempGroups.Add(grp); await db.SaveChangesAsync();
+            }
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

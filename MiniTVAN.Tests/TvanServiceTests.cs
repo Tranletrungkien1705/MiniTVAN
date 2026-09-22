@@ -2135,4 +2135,85 @@ public class TvanServiceTests
             Assert.Contains("Không tìm thấy", msg);
         }
     }
+
+    // ===== Nhóm mẫu hóa đơn (theo Invoice_TempGroup của TVAN gốc) =====
+
+    [Fact]
+    public async Task TempGroup_Save_CreatesWithFields()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var fields = new List<(string, string)> { ("Temp_NameSale", "TEXT"), ("Temp_MSTSale", "TEXT") };
+            var (ok, msg, id) = await svc.SaveTempGroupAsync(null, "MAU1VAT", "0101243150", VATType.OneVat, "Mẫu 1VAT", "<div/>", "/Images/x.png", SpecPrdType.Spec, true, fields, "kế toán");
+            Assert.True(ok);
+            var g = await svc.GetTempGroupAsync(id);
+            Assert.NotNull(g);
+            Assert.Equal("MAU1VAT", g!.InvoiceTGroupCode);
+            Assert.Equal(VATType.OneVat, g.VATType);
+            Assert.Equal(SpecPrdType.Spec, g.SpecPrdType);
+            Assert.Equal(2, g.Fields.Count);
+        }
+    }
+
+    [Fact]
+    public async Task TempGroup_Save_UpdatesAndReplacesFields()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var (_, _, id) = await svc.SaveTempGroupAsync(null, "MAU1VAT", "0101243150", VATType.OneVat, "Mẫu 1VAT", null, null, SpecPrdType.Spec, true, new List<(string, string)> { ("A", "TEXT") }, null);
+            var (ok, _, id2) = await svc.SaveTempGroupAsync(id, "MAU1VAT", "0101243150", VATType.NVat, "Mẫu NVAT", null, null, SpecPrdType.ProductId, false, new List<(string, string)> { ("B", "NUMBER"), ("C", "TEXT") }, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            Assert.Equal(1, await db.InvoiceTempGroups.CountAsync());
+            var g = await svc.GetTempGroupAsync(id);
+            Assert.Equal("Mẫu NVAT", g!.InvoiceTGroupName);
+            Assert.Equal(VATType.NVat, g.VATType);
+            Assert.False(g.FlagActive);
+            Assert.Equal(2, g.Fields.Count);
+        }
+    }
+
+    [Fact]
+    public async Task TempGroup_Save_MissingCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var (ok, msg, _) = await svc.SaveTempGroupAsync(null, "  ", "0101243150", VATType.OneVat, "Mẫu", null, null, SpecPrdType.Spec, true, new List<(string, string)>(), null);
+            Assert.False(ok);
+            Assert.Contains("mã nhóm mẫu", msg);
+            Assert.Equal(0, await db.InvoiceTempGroups.CountAsync());
+        }
+    }
+
+    [Fact]
+    public async Task TempGroup_Save_UnknownMst_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var (ok, msg, _) = await svc.SaveTempGroupAsync(null, "MAU1VAT", "9999999999", VATType.OneVat, "Mẫu", null, null, SpecPrdType.Spec, true, new List<(string, string)>(), null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy NNT", msg);
+        }
+    }
+
+    [Fact]
+    public async Task TempGroup_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var (_, _, id) = await svc.SaveTempGroupAsync(null, "MAU1VAT", "0101243150", VATType.OneVat, "Mẫu", null, null, SpecPrdType.Spec, true, new List<(string, string)> { ("A", "TEXT") }, null);
+            var (ok, _) = await svc.DeleteTempGroupAsync(id);
+            Assert.True(ok);
+            Assert.Equal(0, await db.InvoiceTempGroups.CountAsync());
+            Assert.Equal(0, await db.InvoiceTempGroupFields.CountAsync());   // cascade
+            var (ok2, msg2) = await svc.DeleteTempGroupAsync(id);
+            Assert.False(ok2);
+            Assert.Contains("Không tìm thấy", msg2);
+        }
+    }
 }

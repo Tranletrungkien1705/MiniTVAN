@@ -85,6 +85,10 @@ public interface ITvanService
     Task<(bool ok, string msg, int id)> SaveInvoiceDtlCustomFieldAsync(string code, string name, DBPhysicalType type, bool active, string? by);
     Task<(bool ok, string msg)> DeleteInvoiceCustomFieldAsync(string code);
     Task<(bool ok, string msg)> DeleteInvoiceDtlCustomFieldAsync(string code);
+    Task<List<InvoiceTempGroup>> TempGroupsAsync(string? mst);
+    Task<InvoiceTempGroup?> GetTempGroupAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveTempGroupAsync(int? id, string code, string mst, VATType vatType, string name, string? body, string? thumbnail, SpecPrdType specPrdType, bool active, List<(string fieldName, string tcfType)> fields, string? by);
+    Task<(bool ok, string msg)> DeleteTempGroupAsync(int id);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -1738,6 +1742,76 @@ public class TvanService(AppDbContext db) : ITvanService
         db.InvoiceDtlCustomFields.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa trường tùy chỉnh hàng hóa {code}.");
+    }
+
+    // Nhóm mẫu hóa đơn (theo Invoice_TempGroup của TVAN gốc): danh sách nhóm mẫu, lọc theo MST nếu có.
+    public Task<List<InvoiceTempGroup>> TempGroupsAsync(string? mst)
+    {
+        var q = db.InvoiceTempGroups.Include(g => g.Fields).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(mst)) q = q.Where(g => g.MST == mst.Trim());
+        return q.OrderBy(g => g.InvoiceTGroupCode).ToListAsync();
+    }
+
+    public Task<InvoiceTempGroup?> GetTempGroupAsync(int id) =>
+        db.InvoiceTempGroups.Include(g => g.Fields).FirstOrDefaultAsync(g => g.Id == id);
+
+    // Lưu (tạo mới/cập nhật) nhóm mẫu hóa đơn theo mã (theo Invoice_TempGroup_Create/Update của TVAN gốc).
+    // Ràng buộc: cần mã nhóm, MST phải là NNT đã đăng ký, cần tên nhóm; loại hàng hóa/serial không được
+    // đồng thời là Spec và ProductId. Danh sách trường động được thay thế toàn bộ khi lưu.
+    public async Task<(bool ok, string msg, int id)> SaveTempGroupAsync(int? id, string code, string mst, VATType vatType, string name, string? body, string? thumbnail, SpecPrdType specPrdType, bool active, List<(string fieldName, string tcfType)> fields, string? by)
+    {
+        code = (code ?? "").Trim();
+        mst = (mst ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã nhóm mẫu hóa đơn.", 0);
+        if (name.Length == 0) return (false, "Cần tên nhóm mẫu hóa đơn.", 0);
+        if (mst.Length == 0) return (false, "Cần MST người nộp thuế.", 0);
+        var nnt = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == mst);
+        if (nnt == null) return (false, "Không tìm thấy NNT với MST này.", 0);
+
+        InvoiceTempGroup? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.InvoiceTempGroups.Include(g => g.Fields).FirstOrDefaultAsync(g => g.Id == id.Value);
+        else e = await db.InvoiceTempGroups.Include(g => g.Fields).FirstOrDefaultAsync(g => g.InvoiceTGroupCode == code);
+
+        if (e == null)
+        {
+            if (await db.InvoiceTempGroups.AnyAsync(g => g.InvoiceTGroupCode == code))
+                return (false, "Mã nhóm mẫu đã tồn tại.", 0);
+            e = new InvoiceTempGroup { InvoiceTGroupCode = code };
+            db.InvoiceTempGroups.Add(e);
+        }
+        e.MST = mst;
+        e.VATType = vatType;
+        e.InvoiceTGroupName = name;
+        e.InvoiceTGroupBody = body;
+        e.FilePathThumbnail = thumbnail;
+        e.SpecPrdType = specPrdType;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+
+        // Thay thế toàn bộ danh sách trường động của nhóm mẫu.
+        db.InvoiceTempGroupFields.RemoveRange(e.Fields);
+        e.Fields.Clear();
+        foreach (var (fieldName, tcfType) in fields ?? new())
+        {
+            var fn = (fieldName ?? "").Trim();
+            if (fn.Length == 0) continue;
+            e.Fields.Add(new InvoiceTempGroupField { DBFieldName = fn, TCFType = (tcfType ?? "").Trim(), FlagActive = true });
+        }
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu nhóm mẫu hóa đơn {code} ({e.Fields.Count} trường động).", e.Id);
+    }
+
+    // Xóa nhóm mẫu hóa đơn theo id (theo Invoice_TempGroup_Delete của TVAN gốc).
+    public async Task<(bool ok, string msg)> DeleteTempGroupAsync(int id)
+    {
+        var e = await db.InvoiceTempGroups.Include(g => g.Fields).FirstOrDefaultAsync(g => g.Id == id);
+        if (e == null) return (false, "Không tìm thấy nhóm mẫu hóa đơn.");
+        var code = e.InvoiceTGroupCode;
+        db.InvoiceTempGroups.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa nhóm mẫu hóa đơn {code}.");
     }
 
     // Khoảng thời gian [from, to) của kỳ dữ liệu theo loại kỳ (LKDLieu).

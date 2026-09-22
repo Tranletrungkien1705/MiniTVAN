@@ -589,6 +589,40 @@ public class CustomFieldController(ITvanService svc) : Controller
     }
 }
 
+// Nhóm mẫu hóa đơn (theo Invoice_TempGroup của TVAN gốc): mỗi nhóm gắn với một NNT,
+// định nghĩa thân mẫu hóa đơn (HTML) + loại thuế suất + loại hàng hóa/serial + danh sách trường động.
+public class TempGroupController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? mst)
+    {
+        ViewBag.Nnts = await svc.NntsAsync();
+        ViewBag.Mst = mst;
+        return View(await svc.TempGroupsAsync(mst));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string mst, VATType vatType, string name, string? body, string? thumbnail, SpecPrdType specPrdType, bool active, string? fieldNames, string? fieldTypes, string? by)
+    {
+        // Trường động nhập theo 2 dòng song song (tên trường / kiểu trường), mỗi dòng một giá trị.
+        var names = (fieldNames ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var types = (fieldTypes ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var fields = new List<(string, string)>();
+        for (int i = 0; i < names.Length; i++) fields.Add((names[i], i < types.Length ? types[i] : "TEXT"));
+
+        var (ok, msg, _) = await svc.SaveTempGroupAsync(id, code, mst, vatType, name, body, thumbnail, specPrdType, active, fields, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteTempGroupAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

@@ -545,6 +545,28 @@ app.MapDelete("/api/custom-fields/dtl/{code}", async (string code, ITvanService 
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Nhóm mẫu hóa đơn (theo Invoice_TempGroup của TVAN gốc): danh sách nhóm mẫu (lọc theo MST nếu có).
+app.MapGet("/api/temp-groups", async (string? mst, ITvanService svc) =>
+{
+    var ls = await svc.TempGroupsAsync(mst);
+    return Results.Ok(ls.Select(g => new { g.Id, g.InvoiceTGroupCode, g.MST, vatType = g.VATType.ToString(), g.InvoiceTGroupName, specPrdType = g.SpecPrdType.ToString(), g.FlagActive, fields = g.Fields.Count }));
+});
+
+// Lưu (tạo mới/cập nhật) nhóm mẫu hóa đơn theo mã (theo Invoice_TempGroup_Create/Update của TVAN gốc).
+app.MapPost("/api/temp-groups", async (TempGroupDto dto, ITvanService svc) =>
+{
+    var fields = (dto.Fields ?? new()).Select(f => (f.FieldName ?? "", f.TcfType ?? "")).ToList();
+    var (ok, msg, id) = await svc.SaveTempGroupAsync(dto.Id, dto.Code ?? "", dto.Mst ?? "", dto.VatType, dto.Name ?? "", dto.Body, dto.Thumbnail, dto.SpecPrdType, dto.Active, fields, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa nhóm mẫu hóa đơn theo id (theo Invoice_TempGroup_Delete của TVAN gốc).
+app.MapDelete("/api/temp-groups/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteTempGroupAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -583,3 +605,5 @@ record CreateRecordDto(RecordType Type, string? FileName, string? FileSpec, stri
 record CustomFieldDto(string? Code, string? Name, DBPhysicalType Type, bool Active, string? By);
 record TemplateContactDto(string? NntName, string? NntAddress, string? NntPhone, string? NntEmail, string? NntWebsite, bool FlagStyleComma, string? By);
 record TemplateBankDto(string? NntAccNo, string? NntBankName, string? By);
+record TempGroupFieldDto(string? FieldName, string? TcfType);
+record TempGroupDto(int? Id, string? Code, string? Mst, VATType VatType, string? Name, string? Body, string? Thumbnail, SpecPrdType SpecPrdType, bool Active, List<TempGroupFieldDto>? Fields, string? By);

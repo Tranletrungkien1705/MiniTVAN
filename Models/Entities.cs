@@ -101,6 +101,14 @@ public enum BulkFixAction { FixByTemplate = 0 }
 // Giao diện gốc luôn gửi "TEXT" (xem invoice_CustomField.js: DBPhysicalType = "TEXT").
 public enum DBPhysicalType { Text = 0, Number = 1, Date = 2 }
 
+// Loại thuế suất của nhóm mẫu hóa đơn (theo TConst.Client_VATType của TVAN gốc):
+// 1VAT = mẫu có 1 thuế suất, NVAT = mẫu nhiều thuế suất.
+public enum VATType { OneVat = 0, NVat = 1 }
+
+// Loại hàng hóa - serial của nhóm mẫu hóa đơn (theo TConst.Spec_Prd_Type của TVAN gốc):
+// Spec = mẫu có cột đặc tính/serial, ProductId = mẫu theo mã sản phẩm.
+public enum SpecPrdType { Spec = 0, ProductId = 1 }
+
 public class Org
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -680,4 +688,42 @@ public class InvoiceDtlCustomField : IOrgOwned
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
+}
+
+// Nhóm mẫu hóa đơn (theo bảng Invoice_TempGroup của TVAN gốc): mỗi nhóm gắn với một NNT (MST),
+// định nghĩa mẫu hóa đơn (thân HTML InvoiceTGroupBody) + loại thuế suất (VATType) + loại hàng hóa/serial
+// (Spec_Prd_Type). Mẫu hóa đơn (Invoice_TempInvoice) tham chiếu tới nhóm này qua InvoiceTGroupCode.
+// Khóa nghiệp vụ: (OrgId, InvoiceTGroupCode).
+public class InvoiceTempGroup : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string InvoiceTGroupCode { get; set; } = "";   // Mã nhóm mẫu (VD MAU1VAT)
+    public string MST { get; set; } = "";                  // MST người nộp thuế sở hữu nhóm mẫu
+    public VATType VATType { get; set; } = VATType.OneVat; // Loại thuế suất (1VAT/NVAT)
+    public string InvoiceTGroupName { get; set; } = "";   // Tên nhóm mẫu
+    public string? InvoiceTGroupBody { get; set; }         // Thân mẫu hóa đơn (HTML)
+    public string? FilePathThumbnail { get; set; }         // Đường dẫn ảnh thumbnail của mẫu
+    public SpecPrdType SpecPrdType { get; set; } = SpecPrdType.Spec;   // Loại hàng hóa - serial
+    public bool FlagActive { get; set; } = true;           // Nhóm mẫu đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+
+    public List<InvoiceTempGroupField> Fields { get; set; } = new();
+}
+
+// Trường động của nhóm mẫu hóa đơn (theo bảng Invoice_TempGroupField của TVAN gốc):
+// mỗi nhóm mẫu khai báo danh sách trường động (DBFieldName) + kiểu trường (TCFType).
+// Khóa nghiệp vụ: (OrgId, InvoiceTGroupCode, DBFieldName).
+public class InvoiceTempGroupField : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InvoiceTempGroupId { get; set; }
+    public InvoiceTempGroup? Group { get; set; }
+    public string DBFieldName { get; set; } = "";   // Tên trường trong DB (VD Temp_NameSale)
+    public string TCFType { get; set; } = "";       // Kiểu trường (VD TEXT)
+    public bool FlagActive { get; set; } = true;     // Trường đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

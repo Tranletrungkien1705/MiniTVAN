@@ -226,4 +226,20 @@ public static class Ui
         RecordType.ThayThe   => ("Biên bản thay thế", "warning"),
         _ => (t.ToString(), "secondary")
     };
+
+    // Loại thuế suất của nhóm mẫu hóa đơn (theo TConst.Client_VATType của TVAN gốc).
+    public static string VatType(VATType t) => t switch
+    {
+        VATType.OneVat => "1VAT (một thuế suất)",
+        VATType.NVat   => "NVAT (nhiều thuế suất)",
+        _ => t.ToString()
+    };
+
+    // Loại hàng hóa - serial của nhóm mẫu hóa đơn (theo TConst.Spec_Prd_Type của TVAN gốc).
+    public static string SpecPrd(SpecPrdType t) => t switch
+    {
+        SpecPrdType.Spec      => "Đặc tính/Serial",
+        SpecPrdType.ProductId => "Mã sản phẩm",
+        _ => t.ToString()
+    };
 }
