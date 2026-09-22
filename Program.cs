@@ -359,7 +359,15 @@ app.MapPost("/api/templates/{id:int}/increase-end-no", async (int id, IncreaseEn
 app.MapGet("/api/template-range-logs", async (int? templateId, ITvanService svc) =>
 {
     var ls = await svc.TemplateRangeLogsAsync(templateId);
-    return Results.Ok(ls.Select(l => new { l.Id, l.TemplateId, form = l.Template != null ? l.Template.FormNo : null, action = l.Action.ToString(), l.OldEndInvoiceNo, l.NewEndInvoiceNo, l.Remark, l.By, l.CreatedAt }));
+    return Results.Ok(ls.Select(l => new { l.Id, l.TemplateId, form = l.Template != null ? l.Template.FormNo : null, action = l.Action.ToString(), l.OldStartInvoiceNo, l.NewStartInvoiceNo, l.OldEndInvoiceNo, l.NewEndInvoiceNo, l.Remark, l.By, l.CreatedAt }));
+});
+
+// Cập nhật lại CẢ dải số (số bắt đầu + số kết thúc) của mẫu hóa đơn đang chờ
+// (theo Invoice_TempInvoice_UpdQtyInvoiceNo của TVAN gốc).
+app.MapPost("/api/templates/{id:int}/update-qty-no", async (int id, UpdateQtyNoDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.UpdateTemplateQtyNoAsync(id, dto.StartInvoiceNo, dto.EndInvoiceNo, dto.Remark, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
 });
 
 // Gửi mẫu hóa đơn tới CQT (theo Invoice_TempInvoice_SentTCT của TVAN gốc): PENDING → SENTTCT, ghi mã V tham chiếu.
@@ -565,6 +573,7 @@ record AllocateApproveIssueDto(DateTime? InvoiceDate, string? FilePath, string? 
 record IssueTemplateDto(DateTime? EffDateStart, string? Remark);
 record InactivateTemplateDto(string? Remark);
 record IncreaseEndNoDto(int NewEndInvoiceNo, string? Remark, string? By);
+record UpdateQtyNoDto(int StartInvoiceNo, int EndInvoiceNo, string? Remark, string? By);
 record SendTemplateTctDto(string? Remark, string? By);
 record ReceiveTemplateTctDto(TctAcceptStatus ChapNhan, string? Message, string? By);
 record TctReceiveDto(TctMessageType MltDiep, string? MaCQT, string? MaLoi, string? LyDo);

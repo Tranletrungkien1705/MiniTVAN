@@ -63,6 +63,8 @@
                                     data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode"><i class="bi bi-send-check me-1"></i>Phát hành</button>
                             <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#sendTctModal"
                                     data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode"><i class="bi bi-cloud-upload me-1"></i>Gửi CQT</button>
+                            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#updateQtyNoModal"
+                                    data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode" data-start="@t.StartInvoiceNo" data-end="@t.EndInvoiceNo"><i class="bi bi-123 me-1"></i>Cập nhật dải số</button>
                         }
                         @if (t.TInvoiceStatus == TemplateStatus.SentTct && t.FlagActive)
                         {
@@ -106,9 +108,9 @@
         </div></div>
 
         <div class="card mt-3"><div class="card-body">
-            <h6 class="fw-bold mb-2">Nhật ký mở rộng dải số mẫu hóa đơn</h6>
+            <h6 class="fw-bold mb-2">Nhật ký mở rộng / cập nhật dải số mẫu hóa đơn</h6>
             <table class="table table-sm align-middle mb-0">
-                <thead><tr><th>Thời điểm</th><th>Mẫu</th><th>Thao tác</th><th class="text-end">Số cuối cũ</th><th class="text-end">Số cuối mới</th><th>Ghi chú</th><th>Người thực hiện</th></tr></thead>
+                <thead><tr><th>Thời điểm</th><th>Mẫu</th><th>Thao tác</th><th class="text-end">Số bắt đầu</th><th class="text-end">Số cuối</th><th>Ghi chú</th><th>Người thực hiện</th></tr></thead>
                 <tbody>
                 @foreach (var l in rangeLogs)
                 {
@@ -116,13 +118,13 @@
                         <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
                         <td class="small">@l.Template?.FormNo</td>
                         <td class="small">@Ui.RangeAction(l.Action)</td>
-                        <td class="small text-end">@l.OldEndInvoiceNo.ToString("N0")</td>
-                        <td class="small text-end fw-semibold">@l.NewEndInvoiceNo.ToString("N0")</td>
+                        <td class="small text-end">@if (l.Action == TemplateRangeAction.UpdateQtyNo) { <span>@l.OldStartInvoiceNo.ToString("N0") → <b>@l.NewStartInvoiceNo.ToString("N0")</b></span> } else { <span class="text-muted">—</span> }</td>
+                        <td class="small text-end">@l.OldEndInvoiceNo.ToString("N0") → <b>@l.NewEndInvoiceNo.ToString("N0")</b></td>
                         <td class="small">@l.Remark</td>
                         <td class="small">@l.By</td>
                     </tr>
                 }
-                @if (rangeLogs.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-3">Chưa có lần tăng dải số nào.</td></tr> }
+                @if (rangeLogs.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-3">Chưa có lần tăng/cập nhật dải số nào.</td></tr> }
                 </tbody>
             </table>
         </div></div>
@@ -211,6 +213,29 @@
                 <input type="text" name="by" class="form-control" placeholder="VD: kế toán" /></div>
         </div>
         <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-primary">Tăng dải số</button></div>
+    </form>
+</div></div></div>
+
+<!-- Cập nhật lại CẢ dải số (số bắt đầu + số kết thúc) của mẫu hóa đơn đang chờ (theo Invoice_TempInvoice_UpdQtyInvoiceNo của TVAN gốc) -->
+<div class="modal fade" id="updateQtyNoModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <form method="post" action="/InvoiceTemplate/UpdateQtyNo">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="id" id="updQtyId" />
+        <div class="modal-header"><h6 class="modal-title">Cập nhật dải số mẫu hóa đơn</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <p class="small text-muted mb-3">Cập nhật lại dải số của mẫu <b id="updQtyLabel"></b> (đang ở trạng thái chờ). Số kết thúc không nhỏ hơn số bắt đầu và dải số không được nhỏ hơn số hóa đơn đã dùng.</p>
+            <div class="row g-2">
+                <div class="col-6 mb-2"><label class="form-label small mb-1">Số hóa đơn bắt đầu</label>
+                    <input type="number" name="startInvoiceNo" id="updQtyStart" class="form-control" min="1" required /></div>
+                <div class="col-6 mb-2"><label class="form-label small mb-1">Số hóa đơn kết thúc</label>
+                    <input type="number" name="endInvoiceNo" id="updQtyEnd" class="form-control" min="1" required /></div>
+            </div>
+            <div class="mb-2"><label class="form-label small mb-1">Ghi chú / lý do</label>
+                <input type="text" name="remark" class="form-control" placeholder="VD: Điều chỉnh dải số theo đề nghị NNT" /></div>
+            <div class="mb-2"><label class="form-label small mb-1">Người thực hiện</label>
+                <input type="text" name="by" class="form-control" placeholder="VD: kế toán" /></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-primary">Cập nhật dải số</button></div>
     </form>
 </div></div></div>
 
@@ -321,6 +346,13 @@
         document.getElementById('incEndLabel').textContent = b.dataset.form + ' (' + b.dataset.code + ')';
         document.getElementById('incEndCurrent').textContent = b.dataset.end;
         document.getElementById('incEndNew').value = parseInt(b.dataset.end) + 1;
+    });
+    document.getElementById('updateQtyNoModal').addEventListener('show.bs.modal', e => {
+        const b = e.relatedTarget;
+        document.getElementById('updQtyId').value = b.dataset.id;
+        document.getElementById('updQtyLabel').textContent = b.dataset.form + ' (' + b.dataset.code + ')';
+        document.getElementById('updQtyStart').value = b.dataset.start;
+        document.getElementById('updQtyEnd').value = b.dataset.end;
     });
     document.getElementById('sendTctModal').addEventListener('show.bs.modal', e => {
         const b = e.relatedTarget;

@@ -160,10 +160,12 @@ public static class Ui
         _ => ("", "secondary")
     };
 
-    // Loại thao tác mở rộng dải số mẫu hóa đơn (theo Invoice_TempInvoice_IncreaseEndInvoiceNo của TVAN gốc).
+    // Loại thao tác mở rộng dải số mẫu hóa đơn (theo Invoice_TempInvoice_IncreaseEndInvoiceNo /
+    // Invoice_TempInvoice_UpdQtyInvoiceNo của TVAN gốc).
     public static string RangeAction(TemplateRangeAction a) => a switch
     {
         TemplateRangeAction.IncreaseEndNo => "Tăng số cuối",
+        TemplateRangeAction.UpdateQtyNo => "Cập nhật dải số",
         _ => a.ToString()
     };
 

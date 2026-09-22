@@ -56,6 +56,7 @@ public interface ITvanService
     Task<(bool ok, string msg)> IssueTemplateAsync(int templateId, DateTime effDateStart, string? remark);
     Task<(bool ok, string msg)> InactivateTemplateAsync(int templateId, string? remark);
     Task<(bool ok, string msg)> IncreaseTemplateEndNoAsync(int templateId, int newEndInvoiceNo, string? remark, string? by);
+    Task<(bool ok, string msg)> UpdateTemplateQtyNoAsync(int templateId, int startInvoiceNo, int endInvoiceNo, string? remark, string? by);
     Task<List<TemplateRangeLog>> TemplateRangeLogsAsync(int? templateId);
     Task<(bool ok, string msg)> UpdateTemplateContactAsync(int templateId, string? nntName, string? nntAddress, string? nntPhone, string? nntEmail, string? nntWebsite, bool flagStyleComma, string? by);
     Task<(bool ok, string msg)> UpdateTemplateBankAsync(int templateId, string? nntAccNo, string? nntBankName, string? by);
@@ -944,6 +945,46 @@ public class TvanService(AppDbContext db) : ITvanService
         });
         await db.SaveChangesAsync();
         return (true, $"Đã tăng số hóa đơn cuối mẫu {tpl.FormNo} từ {oldEnd} lên {newEndInvoiceNo}.");
+    }
+
+    // Cập nhật lại CẢ dải số (số bắt đầu + số kết thúc) của mẫu hóa đơn đang chờ
+    // (theo Invoice_TempInvoice_UpdQtyInvoiceNo của TVAN gốc).
+    // Ràng buộc theo TVAN gốc:
+    //  - Mẫu phải đang ở trạng thái chờ (PENDING) và đang hoạt động (FlagActive);
+    //  - Số bắt đầu / số kết thúc phải > 0 và số kết thúc >= số bắt đầu;
+    //  - (EndInvoiceNo - StartInvoiceNo) >= QtyUsed (dải số không được nhỏ hơn số đã dùng);
+    //  - LastInvoiceNo (số cuối đã cấp) không được vượt quá số kết thúc mới.
+    // Mọi lần cập nhật ghi nhật ký (TemplateRangeLog) để đối soát.
+    public async Task<(bool ok, string msg)> UpdateTemplateQtyNoAsync(int templateId, int startInvoiceNo, int endInvoiceNo, string? remark, string? by)
+    {
+        var tpl = await db.InvoiceTemplates.Include(t => t.Nnt).FirstOrDefaultAsync(t => t.Id == templateId);
+        if (tpl == null) return (false, "Không tìm thấy mẫu hóa đơn.");
+        if (tpl.TInvoiceStatus != TemplateStatus.Draft) return (false, "Chỉ cập nhật dải số được cho mẫu đang ở trạng thái chờ (PENDING).");
+        if (!tpl.FlagActive) return (false, "Mẫu đã ngừng hoạt động, không thể cập nhật dải số.");
+        if (startInvoiceNo <= 0 || endInvoiceNo <= 0 || endInvoiceNo - startInvoiceNo < 0)
+            return (false, "Dải số không hợp lệ: số bắt đầu và số kết thúc phải > 0 và số kết thúc không nhỏ hơn số bắt đầu.");
+        if (endInvoiceNo - startInvoiceNo < tpl.QtyUsed)
+            return (false, $"Dải số mới ({startInvoiceNo}..{endInvoiceNo}) nhỏ hơn số hóa đơn đã dùng ({tpl.QtyUsed}).");
+        if (int.TryParse(tpl.LastInvoiceNo, out var lastNo) && lastNo > endInvoiceNo)
+            return (false, $"Số hóa đơn cuối đã cấp ({tpl.LastInvoiceNo}) vượt quá số kết thúc mới ({endInvoiceNo}).");
+
+        var oldStart = tpl.StartInvoiceNo;
+        var oldEnd = tpl.EndInvoiceNo;
+        tpl.StartInvoiceNo = startInvoiceNo;
+        tpl.EndInvoiceNo = endInvoiceNo;
+        db.TemplateRangeLogs.Add(new TemplateRangeLog
+        {
+            TemplateId = tpl.Id, Action = TemplateRangeAction.UpdateQtyNo,
+            OldStartInvoiceNo = oldStart, NewStartInvoiceNo = startInvoiceNo,
+            OldEndInvoiceNo = oldEnd, NewEndInvoiceNo = endInvoiceNo, Remark = remark, By = by,
+        });
+        db.Messages.Add(new TranMessage
+        {
+            NntId = tpl.NntId, Type = MsgType.RegisterNnt, Dir = MsgDir.Out, Code = "300",
+            Text = $"Cập nhật dải số mẫu {tpl.FormNo} ({tpl.TInvoiceCode}): {oldStart}..{oldEnd} → {startInvoiceNo}..{endInvoiceNo}{(string.IsNullOrWhiteSpace(remark) ? "" : ": " + remark.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật dải số mẫu {tpl.FormNo} thành {startInvoiceNo}..{endInvoiceNo}.");
     }
 
     public Task<List<TemplateRangeLog>> TemplateRangeLogsAsync(int? templateId)

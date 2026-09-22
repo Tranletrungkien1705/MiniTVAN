@@ -250,6 +250,22 @@ public static class Seeder
                     CreatedAt = DateTime.UtcNow.AddDays(-1)
                 });
                 await db.SaveChangesAsync();
+
+                // Cập nhật lại CẢ dải số mẫu hóa đơn đang chờ (theo Invoice_TempInvoice_UpdQtyInvoiceNo của TVAN gốc):
+                // mẫu 1C26TAB (Draft) đã được điều chỉnh dải số từ 1..500 thành 1..800.
+                var draftTpl = await db.InvoiceTemplates.FirstOrDefaultAsync(t => t.TInvoiceCode == "TINV-1C26TAB");
+                if (draftTpl != null)
+                {
+                    db.TemplateRangeLogs.Add(new TemplateRangeLog
+                    {
+                        TemplateId = draftTpl.Id, Action = TemplateRangeAction.UpdateQtyNo,
+                        OldStartInvoiceNo = 1, NewStartInvoiceNo = 1,
+                        OldEndInvoiceNo = 500, NewEndInvoiceNo = 800,
+                        Remark = "Điều chỉnh dải số theo đề nghị NNT", By = "kế toán",
+                        CreatedAt = DateTime.UtcNow.AddHours(-12)
+                    });
+                    await db.SaveChangesAsync();
+                }
             }
         }
 

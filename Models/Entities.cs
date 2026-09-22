@@ -89,7 +89,9 @@ public enum InvoiceTypeM { Normal = 0, Machine = 1 }
 // Loại thao tác mở rộng dải số của mẫu hóa đơn (theo Invoice_TempInvoice_IncreaseEndInvoiceNo /
 // Invoice_TempInvoice_IncreaseQtyInvoiceNo của TVAN gốc):
 // IncreaseEndNo = tăng số hóa đơn cuối (mở rộng dải số được cấp phát).
-public enum TemplateRangeAction { IncreaseEndNo = 0 }
+// UpdateQtyNo = cập nhật lại CẢ dải số (số bắt đầu + số kết thúc) của mẫu đang chờ
+// (theo Invoice_TempInvoice_UpdQtyInvoiceNo của TVAN gốc).
+public enum TemplateRangeAction { IncreaseEndNo = 0, UpdateQtyNo = 1 }
 
 // Loại thao tác sửa lỗi hàng loạt hóa đơn theo mẫu (theo luồng Invoice_Invoice_Fix của TVAN gốc):
 // FixByTemplate = ký lại hàng loạt HĐ đã phát hành (ISSUED) chưa ký lại của một mẫu hóa đơn.
@@ -544,8 +546,8 @@ public class TranMessage : IOrgOwned
 }
 
 // Nhật ký mở rộng dải số của mẫu hóa đơn (theo Invoice_TempInvoice_IncreaseEndInvoiceNo /
-// Invoice_TempInvoice_IncreaseQtyInvoiceNo của TVAN gốc).
-// Mỗi lần tăng số hóa đơn cuối (EndInvoiceNo) ghi lại để đối soát.
+// Invoice_TempInvoice_IncreaseQtyInvoiceNo / Invoice_TempInvoice_UpdQtyInvoiceNo của TVAN gốc).
+// Mỗi lần tăng số hóa đơn cuối (EndInvoiceNo) hoặc cập nhật lại cả dải số ghi lại để đối soát.
 public class TemplateRangeLog : IOrgOwned
 {
     public int Id { get; set; }
@@ -553,8 +555,10 @@ public class TemplateRangeLog : IOrgOwned
     public int TemplateId { get; set; }
     public InvoiceTemplate? Template { get; set; }
     public TemplateRangeAction Action { get; set; } = TemplateRangeAction.IncreaseEndNo;
-    public int OldEndInvoiceNo { get; set; }           // Số hóa đơn cuối trước khi tăng
-    public int NewEndInvoiceNo { get; set; }           // Số hóa đơn cuối sau khi tăng
+    public int OldStartInvoiceNo { get; set; }         // Số hóa đơn bắt đầu trước khi cập nhật (dùng cho UpdateQtyNo)
+    public int NewStartInvoiceNo { get; set; }         // Số hóa đơn bắt đầu sau khi cập nhật (dùng cho UpdateQtyNo)
+    public int OldEndInvoiceNo { get; set; }           // Số hóa đơn cuối trước khi tăng/cập nhật
+    public int NewEndInvoiceNo { get; set; }           // Số hóa đơn cuối sau khi tăng/cập nhật
     public string? Remark { get; set; }                // Ghi chú / lý do
     public string? By { get; set; }                    // Người thực hiện
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

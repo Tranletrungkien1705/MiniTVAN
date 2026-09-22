@@ -1422,6 +1422,100 @@ public class TvanServiceTests
         }
     }
 
+    // Cập nhật lại CẢ dải số (số bắt đầu + số kết thúc) của mẫu hóa đơn đang chờ
+    // (theo Invoice_TempInvoice_UpdQtyInvoiceNo của TVAN gốc).
+    [Fact]
+    public async Task UpdateQtyNo_OnDraft_UpdatesRangeAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddDraftTemplate(db, nntId, startNo: 1, endNo: 500);
+            var (ok, msg) = await svc.UpdateTemplateQtyNoAsync(tplId, 1, 800, "điều chỉnh dải số", "kế toán");
+            Assert.True(ok);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            Assert.Equal(1, tpl.StartInvoiceNo);
+            Assert.Equal(800, tpl.EndInvoiceNo);
+            var logs = await svc.TemplateRangeLogsAsync(tplId);
+            Assert.Single(logs);
+            Assert.Equal(TemplateRangeAction.UpdateQtyNo, logs[0].Action);
+            Assert.Equal(1, logs[0].OldStartInvoiceNo);
+            Assert.Equal(1, logs[0].NewStartInvoiceNo);
+            Assert.Equal(500, logs[0].OldEndInvoiceNo);
+            Assert.Equal(800, logs[0].NewEndInvoiceNo);
+            Assert.Equal("kế toán", logs[0].By);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateQtyNo_InvalidRange_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddDraftTemplate(db, nntId, startNo: 1, endNo: 500);
+            // Số kết thúc nhỏ hơn số bắt đầu → không hợp lệ.
+            var (ok, msg) = await svc.UpdateTemplateQtyNoAsync(tplId, 100, 50, null, null);
+            Assert.False(ok);
+            Assert.Contains("không hợp lệ", msg);
+            Assert.Empty(await svc.TemplateRangeLogsAsync(tplId));
+        }
+    }
+
+    [Fact]
+    public async Task UpdateQtyNo_RangeSmallerThanUsed_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddDraftTemplate(db, nntId, startNo: 1, endNo: 500);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            tpl.QtyUsed = 600; await db.SaveChangesAsync();
+            var (ok, msg) = await svc.UpdateTemplateQtyNoAsync(tplId, 1, 500, null, null);
+            Assert.False(ok);
+            Assert.Contains("nhỏ hơn số hóa đơn đã dùng", msg);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateQtyNo_LastNoExceedsNewEnd_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddDraftTemplate(db, nntId, startNo: 1, endNo: 500);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            tpl.LastInvoiceNo = "00000600"; await db.SaveChangesAsync();
+            var (ok, msg) = await svc.UpdateTemplateQtyNoAsync(tplId, 1, 500, null, null);
+            Assert.False(ok);
+            Assert.Contains("vượt quá số kết thúc mới", msg);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateQtyNo_NotDraft_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddTemplate(db, nntId);   // Issued
+            var (ok, msg) = await svc.UpdateTemplateQtyNoAsync(tplId, 1, 800, null, null);
+            Assert.False(ok);
+            Assert.Contains("trạng thái chờ", msg);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateQtyNo_UnknownTemplate_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.UpdateTemplateQtyNoAsync(9999, 1, 800, null, null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
+
     // ===== Phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc): APPROVED → ISSUED =====
 
     [Fact]

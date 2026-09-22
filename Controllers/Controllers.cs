@@ -482,6 +482,16 @@ public class InvoiceTemplateController(ITvanService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    // Cập nhật lại CẢ dải số (số bắt đầu + số kết thúc) của mẫu hóa đơn đang chờ
+    // (theo Invoice_TempInvoice_UpdQtyInvoiceNo của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateQtyNo(int id, int startInvoiceNo, int endInvoiceNo, string? remark, string? by)
+    {
+        var (ok, msg) = await svc.UpdateTemplateQtyNoAsync(id, startInvoiceNo, endInvoiceNo, remark, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
     // Gửi mẫu hóa đơn tới CQT (theo Invoice_TempInvoice_SentTCT của TVAN gốc): PENDING → SENTTCT.
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> SendTct(int id, string? remark, string? by)
