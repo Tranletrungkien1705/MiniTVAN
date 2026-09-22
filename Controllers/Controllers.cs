@@ -266,6 +266,20 @@ public class ConversionPrintLogController(ITvanService svc) : Controller
     }
 }
 
+// Cấu hình hệ thống: bật/bỏ kiểm tra ký quá 60 ngày (theo Invoice_Invoice_Support_Sign60Day của TVAN gốc).
+public class SettingController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.GetSettingAsync());
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetSign60Day(Sign60DayFlag flag, string? note)
+    {
+        var (ok, msg) = await svc.SetSign60DayAsync(flag, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

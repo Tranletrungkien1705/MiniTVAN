@@ -1,0 +1,33 @@
+@model SystemSetting
+@{ ViewData["Title"] = "Cấu hình hệ thống";
+   var (st, scss) = Ui.Sign60Day(Model.Sign60Day); }
+<div class="row g-3">
+    <div class="col-lg-7"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Kiểm tra ký quá 60 ngày</h6>
+        <div class="d-flex align-items-center gap-2 mb-3">
+            <span class="text-muted small">Trạng thái hiện tại:</span>
+            <span class="badge bg-@scss">@st</span>
+        </div>
+        <p class="small text-muted mb-3">
+            Khi <b>bật kiểm tra</b>, hóa đơn có ngày ký cách thời điểm truyền quá 60 ngày sẽ bị cơ quan thuế từ chối.
+            Bỏ kiểm tra để cho phép truyền các hóa đơn ký quá 60 ngày (theo <code>Invoice_Invoice_Support_Sign60Day</code> của TVAN gốc).
+        </p>
+        <form asp-action="SetSign60Day" method="post">@Html.AntiForgeryToken()
+            <div class="mb-2"><label class="form-label small mb-1">Chế độ *</label>
+                <select name="flag" class="form-select">
+                    <option value="1" selected="@(Model.Sign60Day == Sign60DayFlag.Check)">Bật kiểm tra ký &gt;60 ngày</option>
+                    <option value="0" selected="@(Model.Sign60Day == Sign60DayFlag.Uncheck)">Bỏ kiểm tra ký &gt;60 ngày</option>
+                </select></div>
+            <div class="mb-3"><label class="form-label small mb-1">Ghi chú / người thay đổi</label><input name="note" class="form-control" value="@Model.Note" placeholder="VD bỏ check theo yêu cầu kế toán" /></div>
+            <button class="btn btn-primary w-100"><i class="bi bi-save me-1"></i>Lưu cấu hình</button>
+        </form>
+    </div></div></div>
+    <div class="col-lg-5"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Thông tin</h6>
+        <table class="table table-sm mb-0">
+            <tr><td class="text-muted">Cập nhật lúc</td><td class="text-end">@Model.UpdatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td></tr>
+            <tr><td class="text-muted">Ghi chú</td><td class="text-end">@Model.Note</td></tr>
+        </table>
+        <div class="small text-muted mt-3">Cấu hình áp dụng theo từng tổ chức (tenant).</div>
+    </div></div></div>
+</div>

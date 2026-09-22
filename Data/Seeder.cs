@@ -49,6 +49,9 @@ public static class Seeder
                 Note = "In bản chuyển đổi giao khách", CreatedAt = DateTime.UtcNow.AddDays(-5)
             });
             await db.SaveChangesAsync();
+            // Ngày ký hóa đơn (theo Invoice_Invoice.SignedDate của TVAN gốc): inv1 ký trong hạn 60 ngày.
+            inv1.SignedDate = DateTime.UtcNow.AddDays(-5);
+            await db.SaveChangesAsync();
             db.Messages.AddRange(
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300", Text = "Gửi HĐ 1C26TAA-00000001", CreatedAt = DateTime.UtcNow.AddDays(-5) },
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "202", Text = "TCT cấp mã: 0026082512345678", CreatedAt = DateTime.UtcNow.AddDays(-5) },
@@ -103,6 +106,13 @@ public static class Seeder
                 GovTaxID = "0101", GovTaxName = "Cục Thuế TP Hà Nội",
                 Message = "Tra cứu thành công từ cơ quan thuế.", CreatedAt = DateTime.UtcNow.AddDays(-3)
             });
+            await db.SaveChangesAsync();
+        }
+
+        // Cấu hình hệ thống (theo Invoice_Invoice_Support_Sign60Day của TVAN gốc): mặc định bật kiểm tra ký >60 ngày.
+        if (!await db.SystemSettings.AnyAsync())
+        {
+            db.SystemSettings.Add(new SystemSetting { Sign60Day = Sign60DayFlag.Check, Note = "Mặc định bật kiểm tra ký >60 ngày" });
             await db.SaveChangesAsync();
         }
     }

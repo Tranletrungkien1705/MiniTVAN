@@ -704,4 +704,75 @@ public class TvanServiceTests
             Assert.Contains("Không tìm thấy", msg);
         }
     }
+
+    [Fact]
+    public async Task Sign60Day_Default_IsCheck()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var s = await svc.GetSettingAsync();
+            Assert.Equal(Sign60DayFlag.Check, s.Sign60Day);
+        }
+    }
+
+    [Fact]
+    public async Task Transmit_SignedOver60Days_BlockedWhenCheck()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            var inv = await svc.GetInvoiceAsync(invId);
+            inv!.SignedDate = DateTime.UtcNow.AddDays(-70);   // ký quá 60 ngày
+            await db.SaveChangesAsync();
+            var (ok, msg) = await svc.TransmitAsync(invId);
+            Assert.False(ok);
+            Assert.Contains("60 ngày", msg);
+            Assert.Equal(InvoiceStatus.Rejected, (await svc.GetInvoiceAsync(invId))!.Status);
+        }
+    }
+
+    [Fact]
+    public async Task Transmit_SignedOver60Days_AllowedWhenUncheck()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            var inv = await svc.GetInvoiceAsync(invId);
+            inv!.SignedDate = DateTime.UtcNow.AddDays(-70);
+            await db.SaveChangesAsync();
+            await svc.SetSign60DayAsync(Sign60DayFlag.Uncheck, "bỏ check");
+            var (ok, _) = await svc.TransmitAsync(invId);
+            Assert.True(ok);
+            Assert.Equal(InvoiceStatus.Accepted, (await svc.GetInvoiceAsync(invId))!.Status);
+        }
+    }
+
+    [Fact]
+    public async Task Transmit_SignedWithin60Days_AllowedWhenCheck()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            var inv = await svc.GetInvoiceAsync(invId);
+            inv!.SignedDate = DateTime.UtcNow.AddDays(-10);   // trong hạn
+            await db.SaveChangesAsync();
+            var (ok, _) = await svc.TransmitAsync(invId);
+            Assert.True(ok);
+            Assert.Equal(InvoiceStatus.Accepted, (await svc.GetInvoiceAsync(invId))!.Status);
+        }
+    }
+
+    [Fact]
+    public async Task SetSign60Day_UpdatesSetting()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.SetSign60DayAsync(Sign60DayFlag.Uncheck, "theo yêu cầu");
+            Assert.True(ok);
+            Assert.Contains("bỏ kiểm tra", msg);
+            var s = await svc.GetSettingAsync();
+            Assert.Equal(Sign60DayFlag.Uncheck, s.Sign60Day);
+            Assert.Equal("theo yêu cầu", s.Note);
+        }
+    }
 }

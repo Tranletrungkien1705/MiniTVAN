@@ -20,6 +20,7 @@ public class AppDbContext : DbContext
     public DbSet<NntLookupLog> NntLookupLogs => Set<NntLookupLog>();
     public DbSet<InvoiceEmailLog> InvoiceEmailLogs => Set<InvoiceEmailLog>();
     public DbSet<ConversionPrintLog> ConversionPrintLogs => Set<ConversionPrintLog>();
+    public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -99,6 +100,11 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => new { x.OrgId, x.InvoiceId });
             e.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SystemSetting>(e =>
+        {
+            e.HasIndex(x => x.OrgId).IsUnique();   // mỗi tổ chức một cấu hình
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

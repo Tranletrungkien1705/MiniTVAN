@@ -43,6 +43,8 @@ public interface ITvanService
     Task<(bool ok, string msg)> MarkConversionPrintedAsync(int invoiceId, string? note, string? by);
     Task<(bool ok, string msg)> ResetConversionPrintAsync(int invoiceId, string? note, string? by);
     Task<List<ConversionPrintLog>> ConversionPrintLogsAsync(int? invoiceId);
+    Task<SystemSetting> GetSettingAsync();
+    Task<(bool ok, string msg)> SetSign60DayAsync(Sign60DayFlag flag, string? note);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -150,6 +152,19 @@ public class TvanService(AppDbContext db) : ITvanService
 
         inv.Status = InvoiceStatus.Sent; inv.SentAt = DateTime.UtcNow; inv.RejectReason = null;
         db.Messages.Add(new TranMessage { InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300", Text = $"Gửi HĐ {inv.Symbol}-{inv.No}, tổng {inv.Total:N0}đ" });
+
+        // Kiểm tra ký quá 60 ngày (theo Invoice_Invoice_Support_Sign60Day của TVAN gốc):
+        // nếu cấu hình đang bật Check và HĐ có ngày ký cách hiện tại > 60 ngày thì chặn truyền.
+        var setting = await GetSettingAsync();
+        if (setting.Sign60Day == Sign60DayFlag.Check && inv.SignedDate.HasValue
+            && (DateTime.UtcNow - inv.SignedDate.Value).Days > 60)
+        {
+            inv.Status = InvoiceStatus.Rejected;
+            inv.RejectReason = "Hóa đơn ký quá 60 ngày";
+            db.Messages.Add(new TranMessage { InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "204", Text = $"TCT từ chối: hóa đơn ký quá 60 ngày (ngày ký {inv.SignedDate:dd/MM/yyyy})" });
+            await db.SaveChangesAsync();
+            return (false, "Hóa đơn ký quá 60 ngày — bật 'Bỏ check ký >60 ngày' trong Cấu hình để truyền.");
+        }
 
         // TCT giả lập kiểm tra hợp lệ
         string? reject = null;
@@ -622,6 +637,33 @@ public class TvanService(AppDbContext db) : ITvanService
         var q = db.ConversionPrintLogs.Include(l => l.Invoice).AsQueryable();
         if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
+
+    // Cấu hình hệ thống (theo Invoice_Invoice_Support_Sign60Day của TVAN gốc):
+    // mỗi tổ chức có một bản ghi; mặc định bật kiểm tra ký >60 ngày (Check).
+    public async Task<SystemSetting> GetSettingAsync()
+    {
+        var s = await db.SystemSettings.FirstOrDefaultAsync();
+        if (s == null)
+        {
+            s = new SystemSetting { Sign60Day = Sign60DayFlag.Check };
+            db.SystemSettings.Add(s); await db.SaveChangesAsync();
+        }
+        return s;
+    }
+
+    // Bật/bỏ kiểm tra ký quá 60 ngày (theo Invoice_Invoice_Support_Sign60Day của TVAN gốc:
+    // FlagChange = '0' (Inactive) → bỏ check; ngược lại → check).
+    public async Task<(bool ok, string msg)> SetSign60DayAsync(Sign60DayFlag flag, string? note)
+    {
+        var s = await GetSettingAsync();
+        s.Sign60Day = flag;
+        s.Note = note;
+        s.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return (true, flag == Sign60DayFlag.Uncheck
+            ? "Đã bỏ kiểm tra ký quá 60 ngày."
+            : "Đã bật kiểm tra ký quá 60 ngày.");
     }
 
     // Khoảng thời gian [from, to) của kỳ dữ liệu theo loại kỳ (LKDLieu).

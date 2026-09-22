@@ -34,6 +34,10 @@ public enum ConversionPrintFlag { NotPrinted = 1, Printed = 0 }
 // Loại thao tác trên cờ in chuyển đổi (theo Invoice_Invoice_Support_BackFlagChange của TVAN gốc)
 public enum ConversionPrintAction { Print = 0, Reset = 1 }
 
+// Cờ kiểm tra ký quá 60 ngày (theo Invoice_Invoice_Support_Sign60Day của TVAN gốc):
+// Check = bật kiểm tra (mặc định), Uncheck = bỏ kiểm tra ký >60 ngày.
+public enum Sign60DayFlag { Check = 1, Uncheck = 0 }
+
 public class Org
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -92,6 +96,9 @@ public class Invoice : IOrgOwned
     // Cờ in chuyển đổi (theo Invoice_Invoice.FlagChange của TVAN gốc):
     // NotPrinted = chưa in chuyển đổi (mặc định), Printed = đã in chuyển đổi.
     public ConversionPrintFlag FlagChange { get; set; } = ConversionPrintFlag.NotPrinted;
+
+    // Ngày ký hóa đơn (theo Invoice_Invoice.SignedDate của TVAN gốc) — dùng cho kiểm tra ký quá 60 ngày.
+    public DateTime? SignedDate { get; set; }
 
     // Xóa hóa đơn đã phát hành (theo Invoice_Invoice_Deleted của TVAN gốc):
     // DeleteDTimeUTC/DeleteBy = thời điểm & người xóa; Remark = lý do xóa.
@@ -247,6 +254,17 @@ public class ConversionPrintLog : IOrgOwned
     public string? Note { get; set; }                  // Ghi chú / lý do
     public string? By { get; set; }                    // Người thực hiện
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Cấu hình hệ thống theo tổ chức (theo Invoice_Invoice_Support_Sign60Day của TVAN gốc).
+// Sign60Day = Check: bật kiểm tra ký quá 60 ngày khi truyền HĐ; Uncheck: bỏ kiểm tra.
+public class SystemSetting : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public Sign60DayFlag Sign60Day { get; set; } = Sign60DayFlag.Check;
+    public string? Note { get; set; }                 // Ghi chú / người thay đổi
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 
 // Nhật ký thông điệp trao đổi với TCT

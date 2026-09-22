@@ -106,4 +106,11 @@ public static class Ui
         ConversionPrintAction.Reset => ("Bỏ cờ in chuyển đổi", "secondary"),
         _ => (a.ToString(), "secondary")
     };
+
+    public static (string text, string css) Sign60Day(Sign60DayFlag f) => f switch
+    {
+        Sign60DayFlag.Check   => ("Đang kiểm tra", "success"),
+        Sign60DayFlag.Uncheck => ("Bỏ kiểm tra", "warning"),
+        _ => (f.ToString(), "secondary")
+    };
 }

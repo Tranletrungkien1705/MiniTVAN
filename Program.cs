@@ -262,6 +262,20 @@ app.MapGet("/api/conversion-print-logs", async (int? invoiceId, ITvanService svc
     return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, action = l.Action.ToString(), l.Note, l.By, l.CreatedAt }));
 });
 
+// Cấu hình hệ thống: trạng thái kiểm tra ký quá 60 ngày (theo Invoice_Invoice_Support_Sign60Day của TVAN gốc).
+app.MapGet("/api/settings/sign60day", async (ITvanService svc) =>
+{
+    var s = await svc.GetSettingAsync();
+    return Results.Ok(new { sign60Day = s.Sign60Day.ToString(), check = s.Sign60Day == Sign60DayFlag.Check, s.Note, s.UpdatedAt });
+});
+
+// Bật/bỏ kiểm tra ký quá 60 ngày (theo Invoice_Invoice_Support_Sign60Day của TVAN gốc).
+app.MapPost("/api/settings/sign60day", async (Sign60DayDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.SetSign60DayAsync(dto.Flag, dto.Note);
+    return ok ? Results.Ok(new { ok, msg }) : Results.BadRequest(new { ok, error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -280,3 +294,4 @@ record LicenseIncreaseDto(int NntId, int Qty, string? Note);
 record GuiTongHopDto(int NntId, PeriodType LKDLieu, string? KDLieu, int BSLThu, string? Note);
 record SendEmailDto(string? ToEmail, string? SentBy);
 record ConversionPrintDto(string? Note, string? By);
+record Sign60DayDto(Sign60DayFlag Flag, string? Note);
