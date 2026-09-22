@@ -58,6 +58,7 @@ public interface ITvanService
     Task<(bool ok, string msg)> IncreaseTemplateEndNoAsync(int templateId, int newEndInvoiceNo, string? remark, string? by);
     Task<List<TemplateRangeLog>> TemplateRangeLogsAsync(int? templateId);
     Task<(bool ok, string msg)> UpdateTemplateContactAsync(int templateId, string? nntName, string? nntAddress, string? nntPhone, string? nntEmail, string? nntWebsite, bool flagStyleComma, string? by);
+    Task<(bool ok, string msg)> UpdateTemplateBankAsync(int templateId, string? nntAccNo, string? nntBankName, string? by);
     Task<(bool ok, string msg, string? invoiceNo)> AllocateInvoiceNoAsync(int invoiceId, DateTime invoiceDate, string? by);
     Task<(bool ok, string msg, string? invoiceNo)> AllocateApproveIssueAsync(int invoiceId, DateTime invoiceDate, string? filePath, string? pdfFilePath, string? emailSend, string? note, string? by);
     Task<List<InvoiceNoAllocLog>> AllocLogsAsync(int? invoiceId);
@@ -978,6 +979,32 @@ public class TvanService(AppDbContext db) : ITvanService
         });
         await db.SaveChangesAsync();
         return (true, $"Đã cập nhật thông tin liên hệ mẫu {tpl.FormNo} ({tpl.TInvoiceCode}).");
+    }
+
+    // Cập nhật số tài khoản & tên ngân hàng của NNT in trên mẫu hóa đơn
+    // (theo Invoice_TempInvoice_SupportUpdAccNoAndBankName của TVAN gốc):
+    // sửa số tài khoản (NNTAccNo) và tên ngân hàng (NNTBankName) hiển thị trên hóa đơn phát hành.
+    // Ràng buộc theo TVAN gốc: mẫu phải tồn tại; nếu cập nhật số tài khoản thì không được rỗng
+    // (InvalidNNTAccNo); nếu cập nhật tên ngân hàng thì không được rỗng (InvalidNNTBankName).
+    // Ghi lại thời điểm & người cập nhật để đối soát.
+    public async Task<(bool ok, string msg)> UpdateTemplateBankAsync(int templateId, string? nntAccNo, string? nntBankName, string? by)
+    {
+        var tpl = await db.InvoiceTemplates.Include(t => t.Nnt).FirstOrDefaultAsync(t => t.Id == templateId);
+        if (tpl == null) return (false, "Không tìm thấy mẫu hóa đơn.");
+        if (string.IsNullOrWhiteSpace(nntAccNo)) return (false, "Số tài khoản không được để trống.");
+        if (string.IsNullOrWhiteSpace(nntBankName)) return (false, "Tên ngân hàng không được để trống.");
+
+        tpl.NNTAccNo = nntAccNo.Trim();
+        tpl.NNTBankName = nntBankName.Trim();
+        tpl.ContactUpdatedAt = DateTime.UtcNow;
+        tpl.ContactUpdatedBy = by;
+        db.Messages.Add(new TranMessage
+        {
+            NntId = tpl.NntId, Type = MsgType.RegisterNnt, Dir = MsgDir.Out, Code = "300",
+            Text = $"Cập nhật số tài khoản/ngân hàng mẫu {tpl.FormNo} ({tpl.TInvoiceCode}): {tpl.NNTAccNo} — {tpl.NNTBankName}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật số tài khoản/ngân hàng mẫu {tpl.FormNo} ({tpl.TInvoiceCode}).");
     }
 
     // Cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc):

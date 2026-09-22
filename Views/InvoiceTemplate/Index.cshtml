@@ -35,6 +35,10 @@
                         @if (!string.IsNullOrWhiteSpace(t.NNTName))
                         {
                             <div class="small text-muted"><i class="bi bi-person-lines-fill me-1"></i>@t.NNTName@(string.IsNullOrWhiteSpace(t.NNTPhone) ? "" : " · " + t.NNTPhone)</div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(t.NNTAccNo) || !string.IsNullOrWhiteSpace(t.NNTBankName))
+                        {
+                            <div class="small text-muted"><i class="bi bi-bank me-1"></i>@t.NNTAccNo@(string.IsNullOrWhiteSpace(t.NNTBankName) ? "" : " · " + t.NNTBankName)</div>
                         }</td>
                     <td><b>@t.Nnt?.Name</b><div class="small text-muted">MST @t.Nnt?.Mst</div></td>
                     <td class="small">@Ui.NoRule(t.TTType)</td>
@@ -50,6 +54,9 @@
                                 data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode"
                                 data-name="@t.NNTName" data-address="@t.NNTAddress" data-phone="@t.NNTPhone"
                                 data-email="@t.NNTEmail" data-website="@t.NNTWebsite" data-comma="@(t.FlagStyleComma ? "true" : "false")"><i class="bi bi-person-lines-fill me-1"></i>Liên hệ</button>
+                        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#bankModal"
+                                data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode"
+                                data-accno="@t.NNTAccNo" data-bankname="@t.NNTBankName"><i class="bi bi-bank me-1"></i>Ngân hàng</button>
                         @if (t.TInvoiceStatus == TemplateStatus.Draft && t.FlagActive)
                         {
                             <button class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#issueModal"
@@ -277,6 +284,25 @@
     </form>
 </div></div></div>
 
+<!-- Cập nhật số tài khoản & tên ngân hàng của NNT trên mẫu hóa đơn (theo Invoice_TempInvoice_SupportUpdAccNoAndBankName của TVAN gốc) -->
+<div class="modal fade" id="bankModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <form method="post" action="/InvoiceTemplate/UpdateBank">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="id" id="bankId" />
+        <div class="modal-header"><h6 class="modal-title">Số tài khoản & ngân hàng trên mẫu hóa đơn</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <p class="small text-muted mb-3">Số tài khoản & tên ngân hàng của NNT in trên mẫu <b id="bankLabel"></b>.</p>
+            <div class="mb-2"><label class="form-label small mb-1">Số tài khoản</label>
+                <input type="text" name="nntAccNo" id="bankAccNo" class="form-control" required /></div>
+            <div class="mb-2"><label class="form-label small mb-1">Tên ngân hàng</label>
+                <input type="text" name="nntBankName" id="bankBankName" class="form-control" required /></div>
+            <div class="mb-2"><label class="form-label small mb-1">Người thực hiện</label>
+                <input type="text" name="by" class="form-control" placeholder="VD: kế toán" /></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-primary">Lưu thông tin</button></div>
+    </form>
+</div></div></div>
+
 @section Scripts {
 <script>
     document.getElementById('issueModal').addEventListener('show.bs.modal', e => {
@@ -316,6 +342,13 @@
         document.getElementById('contactEmail').value = b.dataset.email || '';
         document.getElementById('contactWebsite').value = b.dataset.website || '';
         document.getElementById('contactComma').checked = b.dataset.comma === 'true';
+    });
+    document.getElementById('bankModal').addEventListener('show.bs.modal', e => {
+        const b = e.relatedTarget;
+        document.getElementById('bankId').value = b.dataset.id;
+        document.getElementById('bankLabel').textContent = b.dataset.form + ' (' + b.dataset.code + ')';
+        document.getElementById('bankAccNo').value = b.dataset.accno || '';
+        document.getElementById('bankBankName').value = b.dataset.bankname || '';
     });
 </script>
 }

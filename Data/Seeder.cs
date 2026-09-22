@@ -210,6 +210,9 @@ public static class Seeder
                     // (theo Invoice_TempInvoice_SupportUpdEmailAndAddress của TVAN gốc).
                     NNTName = seller.Name, NNTAddress = seller.Address, NNTPhone = "024 3825 0000",
                     NNTEmail = seller.Email, NNTWebsite = "https://dongdo.vn", FlagStyleComma = true,
+                    // Số tài khoản & tên ngân hàng của NNT in trên mẫu hóa đơn
+                    // (theo Invoice_TempInvoice_SupportUpdAccNoAndBankName của TVAN gốc).
+                    NNTAccNo = "1234567890", NNTBankName = "Vietcombank - CN Hà Nội",
                     ContactUpdatedAt = DateTime.UtcNow.AddDays(-2), ContactUpdatedBy = "kế toán"
                 };
                 db.InvoiceTemplates.Add(tpl); await db.SaveChangesAsync();

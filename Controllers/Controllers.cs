@@ -510,6 +510,16 @@ public class InvoiceTemplateController(ITvanService svc) : Controller
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Index));
     }
+
+    // Cập nhật số tài khoản & tên ngân hàng của NNT in trên mẫu hóa đơn
+    // (theo Invoice_TempInvoice_SupportUpdAccNoAndBankName của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateBank(int id, string? nntAccNo, string? nntBankName, string? by)
+    {
+        var (ok, msg) = await svc.UpdateTemplateBankAsync(id, nntAccNo, nntBankName, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
 }
 
 // Cấu hình hệ thống: bật/bỏ kiểm tra ký quá 60 ngày (theo Invoice_Invoice_Support_Sign60Day của TVAN gốc).

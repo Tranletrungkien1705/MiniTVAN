@@ -469,6 +469,11 @@ public class InvoiceTemplate : IOrgOwned
     public DateTime? ContactUpdatedAt { get; set; }
     public string? ContactUpdatedBy { get; set; }
 
+    // Số tài khoản & tên ngân hàng của NNT in trên mẫu hóa đơn
+    // (theo Invoice_TempInvoice.NNTAccNo/NNTBankName của TVAN gốc — luồng Invoice_TempInvoice_SupportUpdAccNoAndBankName).
+    public string? NNTAccNo { get; set; }
+    public string? NNTBankName { get; set; }
+
     public int QtyRemain => EndInvoiceNo - StartInvoiceNo + 1 - QtyUsed;
 }
 

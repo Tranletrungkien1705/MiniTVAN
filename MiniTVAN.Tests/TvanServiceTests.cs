@@ -1980,4 +1980,65 @@ public class TvanServiceTests
             Assert.Contains("Không tìm thấy", msg);
         }
     }
+
+    // ===== Cập nhật số tài khoản & tên ngân hàng của NNT trên mẫu hóa đơn
+    // (theo Invoice_TempInvoice_SupportUpdAccNoAndBankName của TVAN gốc) =====
+
+    [Fact]
+    public async Task UpdateTemplateBank_SavesAccNoAndBankName()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddTemplate(db, nntId);
+            var (ok, msg) = await svc.UpdateTemplateBankAsync(tplId, "1234567890", "Vietcombank - CN Hà Nội", "kế toán");
+            Assert.True(ok);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            Assert.Equal("1234567890", tpl.NNTAccNo);
+            Assert.Equal("Vietcombank - CN Hà Nội", tpl.NNTBankName);
+            Assert.Equal("kế toán", tpl.ContactUpdatedBy);
+            Assert.NotNull(tpl.ContactUpdatedAt);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateTemplateBank_EmptyAccNo_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddTemplate(db, nntId);
+            var (ok, msg) = await svc.UpdateTemplateBankAsync(tplId, "  ", "Vietcombank", null);
+            Assert.False(ok);
+            Assert.Contains("Số tài khoản", msg);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            Assert.Null(tpl.NNTAccNo);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateTemplateBank_EmptyBankName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddTemplate(db, nntId);
+            var (ok, msg) = await svc.UpdateTemplateBankAsync(tplId, "1234567890", "  ", null);
+            Assert.False(ok);
+            Assert.Contains("Tên ngân hàng", msg);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            Assert.Null(tpl.NNTBankName);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateTemplateBank_UnknownTemplate_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.UpdateTemplateBankAsync(9999, "1234567890", "Vietcombank", null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
 }

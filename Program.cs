@@ -391,6 +391,14 @@ app.MapPost("/api/templates/{id:int}/contact", async (int id, TemplateContactDto
     return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
 });
 
+// Cập nhật số tài khoản & tên ngân hàng của NNT in trên mẫu hóa đơn
+// (theo Invoice_TempInvoice_SupportUpdAccNoAndBankName của TVAN gốc).
+app.MapPost("/api/templates/{id:int}/bank", async (int id, TemplateBankDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.UpdateTemplateBankAsync(id, dto.NntAccNo, dto.NntBankName, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 // Cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc): PENDING + chưa có số → cấp số kế tiếp từ mẫu.
 app.MapPost("/api/invoices/{id:int}/allocate-no", async (int id, AllocateNoDto dto, ITvanService svc) =>
 {
@@ -565,3 +573,4 @@ record CancelInvoiceDto(string? Remark, string? By);
 record CreateRecordDto(RecordType Type, string? FileName, string? FileSpec, string? Reason, string? By);
 record CustomFieldDto(string? Code, string? Name, DBPhysicalType Type, bool Active, string? By);
 record TemplateContactDto(string? NntName, string? NntAddress, string? NntPhone, string? NntEmail, string? NntWebsite, bool FlagStyleComma, string? By);
+record TemplateBankDto(string? NntAccNo, string? NntBankName, string? By);
