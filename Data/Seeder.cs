@@ -73,6 +73,16 @@ public static class Seeder
                 By = "kế toán trưởng", Note = "Duyệt phát hành", CreatedAt = DateTime.UtcNow.AddDays(-5)
             });
             await db.SaveChangesAsync();
+            // Phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc): inv1 đã được phát hành (ISSUED) sau khi duyệt.
+            inv1.IssuedDTimeUTC = DateTime.UtcNow.AddDays(-5);
+            inv1.IssuedBy = "kế toán";
+            db.IssueLogs.Add(new IssueLog
+            {
+                InvoiceId = inv1.Id, Action = IssueAction.Issue,
+                EmailSend = inv1.EmailSend, By = "kế toán",
+                Note = "Phát hành gửi khách", CreatedAt = DateTime.UtcNow.AddDays(-5)
+            });
+            await db.SaveChangesAsync();
             // Nhận kết quả phản hồi từ CQT (theo Invoice_Invoice_TCTReceive của TVAN gốc):
             // inv1 đã được CQT chấp nhận phát hành (thông điệp 202) với mã xác thực CQT.
             inv1.MltDiep = "202";

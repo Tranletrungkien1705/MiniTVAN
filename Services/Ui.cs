@@ -129,6 +129,13 @@ public static class Ui
         _ => (a.ToString(), "secondary")
     };
 
+    // Loại thao tác phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc).
+    public static (string text, string css) IssueAction(IssueAction a) => a switch
+    {
+        Models.IssueAction.Issue => ("Phát hành hóa đơn", "success"),
+        _ => (a.ToString(), "secondary")
+    };
+
     public static (string text, string css) Template(TemplateStatus s) => s switch
     {
         TemplateStatus.Draft    => ("Nháp", "secondary"),

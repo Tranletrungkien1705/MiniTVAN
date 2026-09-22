@@ -297,6 +297,21 @@ app.MapGet("/api/approve-logs", async (int? invoiceId, ITvanService svc) =>
     return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, action = l.Action.ToString(), l.FilePath, l.PdfFilePath, l.Note, l.By, l.CreatedAt }));
 });
 
+// Phát hành hóa đơn đã duyệt (theo Invoice_Invoice_Issued của TVAN gốc): APPROVED → ISSUED,
+// ghi thời điểm/người phát hành + email người nhận.
+app.MapPost("/api/invoices/{id:int}/issue", async (int id, IssueDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.IssueAsync(id, dto.EmailSend, dto.Note, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Nhật ký phát hành hóa đơn (lọc theo hóa đơn nếu có).
+app.MapGet("/api/issue-logs", async (int? invoiceId, ITvanService svc) =>
+{
+    var ls = await svc.IssueLogsAsync(invoiceId);
+    return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, action = l.Action.ToString(), l.EmailSend, l.Note, l.By, l.CreatedAt }));
+});
+
 // Cấu hình hệ thống: trạng thái kiểm tra ký quá 60 ngày (theo Invoice_Invoice_Support_Sign60Day của TVAN gốc).
 app.MapGet("/api/settings/sign60day", async (ITvanService svc) =>
 {
@@ -412,6 +427,7 @@ record ConversionPrintDto(string? Note, string? By);
 record ReSignDto(string? FileSpec, string? Note, string? By);
 record ApproveDto(string? FilePath, string? PdfFilePath, string? Note, string? By);
 record UnapproveDto(string? Note, string? By);
+record IssueDto(string? EmailSend, string? Note, string? By);
 record Sign60DayDto(Sign60DayFlag Flag, string? Note);
 record AllocateNoDto(DateTime? InvoiceDate, string? By);
 record IssueTemplateDto(DateTime? EffDateStart, string? Remark);

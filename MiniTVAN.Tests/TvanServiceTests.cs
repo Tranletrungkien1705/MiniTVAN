@@ -1421,4 +1421,67 @@ public class TvanServiceTests
             Assert.Contains("Không tìm thấy", msg);
         }
     }
+
+    // ===== Phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc): APPROVED → ISSUED =====
+
+    [Fact]
+    public async Task Issue_OnApproved_SetsIssuedAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);   // Draft (PENDING)
+            await svc.ApproveAsync(invId, "a.xml", "a.pdf", null, "kế toán trưởng");
+            var (ok, msg) = await svc.IssueAsync(invId, "khachhang@congty.vn", "phát hành gửi khách", "kế toán");
+            Assert.True(ok);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(InvoiceStatus.Accepted, inv!.Status);
+            Assert.NotNull(inv.IssuedDTimeUTC);
+            Assert.Equal("kế toán", inv.IssuedBy);
+            Assert.Equal("khachhang@congty.vn", inv.EmailSend);
+            Assert.NotNull(inv.SendEmailDTimeUTC);
+            var logs = await svc.IssueLogsAsync(invId);
+            Assert.Single(logs);
+            Assert.Equal(IssueAction.Issue, logs[0].Action);
+            Assert.Equal("khachhang@congty.vn", logs[0].EmailSend);
+            Assert.Equal("kế toán", logs[0].By);
+        }
+    }
+
+    [Fact]
+    public async Task Issue_OnDraft_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);   // Draft, chưa duyệt
+            var (ok, msg) = await svc.IssueAsync(invId, null, null, null);
+            Assert.False(ok);
+            Assert.Contains("đã duyệt", msg);
+            Assert.Empty(await svc.IssueLogsAsync(invId));
+        }
+    }
+
+    [Fact]
+    public async Task Issue_InvalidEmail_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.ApproveAsync(invId, null, null, null, "kế toán");
+            var (ok, msg) = await svc.IssueAsync(invId, "khong-phai-email", null, null);
+            Assert.False(ok);
+            Assert.Contains("Email", msg);
+            Assert.Equal(InvoiceStatus.Approved, (await svc.GetInvoiceAsync(invId))!.Status);
+        }
+    }
+
+    [Fact]
+    public async Task Issue_UnknownInvoice_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.IssueAsync(9999, null, null, null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
 }

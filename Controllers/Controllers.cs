@@ -68,6 +68,7 @@ public class InvoiceController(ITvanService svc) : Controller
         ViewBag.ConvLogs = await svc.ConversionPrintLogsAsync(id);
         ViewBag.ReSignLogs = await svc.ReSignLogsAsync(id);
         ViewBag.ApproveLogs = await svc.ApproveLogsAsync(id);
+        ViewBag.IssueLogs = await svc.IssueLogsAsync(id);
         ViewBag.TctLogs = await svc.TctReceiveLogsAsync(id);
         ViewBag.UpdateLogs = await svc.UpdateLogsAsync(id);
         return View(inv);
@@ -190,6 +191,15 @@ public class InvoiceController(ITvanService svc) : Controller
     public async Task<IActionResult> Unapprove(int id, string? note, string? by)
     {
         var (ok, msg) = await svc.UnapproveAsync(id, note, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Phát hành hóa đơn đã duyệt (theo Invoice_Invoice_Issued của TVAN gốc): APPROVED → ISSUED.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Issue(int id, string? emailSend, string? note, string? by)
+    {
+        var (ok, msg) = await svc.IssueAsync(id, emailSend, note, by);
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Detail), new { id });
     }
@@ -341,6 +351,16 @@ public class ApproveLogController(ITvanService svc) : Controller
     {
         ViewBag.InvoiceId = invoiceId;
         return View(await svc.ApproveLogsAsync(invoiceId));
+    }
+}
+
+// Nhật ký phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc).
+public class IssueLogController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? invoiceId)
+    {
+        ViewBag.InvoiceId = invoiceId;
+        return View(await svc.IssueLogsAsync(invoiceId));
     }
 }
 

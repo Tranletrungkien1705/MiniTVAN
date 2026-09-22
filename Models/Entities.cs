@@ -46,6 +46,10 @@ public enum HotfixFlag { None = 0, Hotfixed = 1 }
 // Loại thao tác duyệt hóa đơn (theo Invoice_Invoice_Approved của TVAN gốc)
 public enum ApproveAction { Approve = 0, Unapprove = 1 }
 
+// Loại thao tác phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc):
+// Issue = phát hành HĐ đã duyệt (APPROVED → ISSUED) và gửi cho khách hàng.
+public enum IssueAction { Issue = 0 }
+
 // Mã loại thông điệp CQT phản hồi khi nhận kết quả phát hành (theo Invoice_Invoice_TCTReceive của TVAN gốc):
 // 202 = phát hành thành công hóa đơn có mã CQT; 204 = phát hành thất bại.
 public enum TctMessageType { Success202 = 202, Fail204 = 204 }
@@ -150,6 +154,11 @@ public class Invoice : IOrgOwned
     // InvoiceFilePath/InvoicePDFFilePath = đường dẫn file XML/PDF hóa đơn đã duyệt;
     // ApprDTimeUTC/ApprBy = thời điểm & người duyệt (dùng chung với ký lại).
     public string? InvoicePDFFilePath { get; set; }
+
+    // Phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc):
+    // IssuedDTimeUTC/IssuedBy = thời điểm & người phát hành HĐ (APPROVED → ISSUED).
+    public DateTime? IssuedDTimeUTC { get; set; }
+    public string? IssuedBy { get; set; }
 
     // Cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc):
     // InvoiceNoDTimeUTC/InvoiceNoBy = thời điểm & người ấn cấp số hóa đơn.
@@ -449,6 +458,21 @@ public class TemplateRangeLog : IOrgOwned
     public int NewEndInvoiceNo { get; set; }           // Số hóa đơn cuối sau khi tăng
     public string? Remark { get; set; }                // Ghi chú / lý do
     public string? By { get; set; }                    // Người thực hiện
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Nhật ký phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc).
+// Mỗi lần phát hành HĐ đã duyệt (APPROVED → ISSUED) ghi lại để đối soát.
+public class IssueLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InvoiceId { get; set; }
+    public Invoice? Invoice { get; set; }
+    public IssueAction Action { get; set; } = IssueAction.Issue;   // Phát hành hóa đơn
+    public string? EmailSend { get; set; }             // Email người nhận khi phát hành
+    public string? Note { get; set; }                  // Ghi chú / lý do
+    public string? By { get; set; }                    // Người phát hành
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 

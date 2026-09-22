@@ -48,6 +48,8 @@ public interface ITvanService
     Task<(bool ok, string msg)> ApproveAsync(int invoiceId, string? filePath, string? pdfFilePath, string? note, string? by);
     Task<(bool ok, string msg)> UnapproveAsync(int invoiceId, string? note, string? by);
     Task<List<ApproveLog>> ApproveLogsAsync(int? invoiceId);
+    Task<(bool ok, string msg)> IssueAsync(int invoiceId, string? emailSend, string? note, string? by);
+    Task<List<IssueLog>> IssueLogsAsync(int? invoiceId);
     Task<SystemSetting> GetSettingAsync();
     Task<(bool ok, string msg)> SetSign60DayAsync(Sign60DayFlag flag, string? note);
     Task<List<InvoiceTemplate>> TemplatesAsync(int? nntId);
@@ -752,6 +754,52 @@ public class TvanService(AppDbContext db) : ITvanService
     public Task<List<ApproveLog>> ApproveLogsAsync(int? invoiceId)
     {
         var q = db.ApproveLogs.Include(l => l.Invoice).AsQueryable();
+        if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
+        return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
+
+    // Phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc):
+    // chỉ phát hành được hóa đơn đã duyệt (APPROVED) và đã có số hóa đơn.
+    // Đưa HĐ sang ISSUED (Accepted), ghi thời điểm & người phát hành (IssuedDTimeUTC/IssuedBy),
+    // cập nhật email người nhận (EmailSend) + thời điểm/người gửi email (SendEmailDTimeUTC/SendEmailBy)
+    // và ghi nhật ký (IssueLog) để đối soát.
+    public async Task<(bool ok, string msg)> IssueAsync(int invoiceId, string? emailSend, string? note, string? by)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.");
+        if (inv.Status != InvoiceStatus.Approved) return (false, "Chỉ phát hành được hóa đơn đã duyệt (APPROVED).");
+        if (string.IsNullOrWhiteSpace(inv.No)) return (false, "Hóa đơn chưa có số, không thể phát hành.");
+
+        var to = (emailSend ?? "").Trim();
+        if (to.Length > 0 && to.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Any(r => !r.Contains('@')))
+            return (false, "Email người nhận không hợp lệ.");
+
+        inv.Status = InvoiceStatus.Accepted;
+        inv.IssuedDTimeUTC = DateTime.UtcNow;
+        inv.IssuedBy = by;
+        if (to.Length > 0)
+        {
+            inv.EmailSend = to;
+            inv.SendEmailDTimeUTC = DateTime.UtcNow;
+            inv.SendEmailBy = by;
+        }
+        db.IssueLogs.Add(new IssueLog
+        {
+            InvoiceId = inv.Id, Action = IssueAction.Issue,
+            EmailSend = to.Length > 0 ? to : null, Note = note, By = by,
+        });
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Phát hành HĐ {inv.Symbol}-{inv.No}{(string.IsNullOrWhiteSpace(note) ? "" : ": " + note.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã phát hành HĐ {inv.Symbol}-{inv.No} (ISSUED).");
+    }
+
+    public Task<List<IssueLog>> IssueLogsAsync(int? invoiceId)
+    {
+        var q = db.IssueLogs.Include(l => l.Invoice).AsQueryable();
         if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
     }
