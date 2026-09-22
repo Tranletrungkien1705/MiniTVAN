@@ -148,6 +148,13 @@ app.MapPost("/api/invoices/{id:int}/replace", async (int id, ReplaceDto dto, ITv
     return ok ? Results.Ok(new { id = newId, msg }) : Results.BadRequest(new { id = newId, error = msg });
 });
 
+// Chuyển hóa đơn về trạng thái chờ (PENDING) — giữ nguyên số (theo Invoice_Invoice_Support_InvoiceToPending của TVAN gốc).
+app.MapPost("/api/invoices/{id:int}/to-pending", async (int id, ToPendingDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.ResetToPendingAsync(id, dto.Reason);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 // Hạn mức hóa đơn (theo Invoice_license của TVAN gốc): xem hạn mức + lịch sử cấp/điều chỉnh.
 app.MapGet("/api/licenses", async (ITvanService svc) =>
 {
@@ -222,6 +229,7 @@ record ImportNntDto(string? Mst, string? Name, string? Address, string? Email);
 record ImportInvDto(string? SellerMst, string? Symbol, string? No, string? BuyerName, string? BuyerMst, string? BuyerAddress, decimal Amount, decimal VatRate, DateTime? IssuedDate, string? TctCode);
 record AdjustDto(InvoiceAdjType AdjType, decimal Amount, decimal VatRate, string? Reason);
 record ReplaceDto(decimal Amount, decimal VatRate, string? Reason);
+record ToPendingDto(string? Reason);
 record LicenseIncreaseDto(int NntId, int Qty, string? Note);
 record GuiTongHopDto(int NntId, PeriodType LKDLieu, string? KDLieu, int BSLThu, string? Note);
 record SendEmailDto(string? ToEmail, string? SentBy);

@@ -20,6 +20,7 @@ public interface ITvanService
     Task<(bool ok, string msg)> CancelAsync(int invoiceId);
     Task<(bool ok, string msg, int id)> AdjustAsync(int invoiceId, InvoiceAdjType adjType, decimal amount, decimal vatRate, string? reason);
     Task<(bool ok, string msg, int id)> ReplaceAsync(int invoiceId, decimal amount, decimal vatRate, string? reason);
+    Task<(bool ok, string msg)> ResetToPendingAsync(int invoiceId, string? reason);
     Task<List<TranMessage>> MessagesAsync(int invoiceId);
     Task<Invoice?> LookupByCodeAsync(string tctCode);
     Task<TvanDash> DashboardAsync();
@@ -241,6 +242,31 @@ public class TvanService(AppDbContext db) : ITvanService
 
     public Task<List<TranMessage>> MessagesAsync(int invoiceId) =>
         db.Messages.Where(m => m.InvoiceId == invoiceId).OrderBy(m => m.Id).ToListAsync();
+
+    // Chuyển hóa đơn về trạng thái chờ (PENDING) — giữ nguyên số hóa đơn (theo Invoice_Invoice_Support_InvoiceToPending của TVAN gốc).
+    // Dùng để sửa sai sót: đưa HĐ đã phát hành/bị từ chối về nháp, xóa mã tra cứu CQT, thời điểm gửi và dấu vết gửi email.
+    public async Task<(bool ok, string msg)> ResetToPendingAsync(int invoiceId, string? reason)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.");
+        if (inv.Status == InvoiceStatus.Draft) return (false, "Hóa đơn đang ở trạng thái chờ, không cần chuyển.");
+        if (inv.Status == InvoiceStatus.Sent) return (false, "Hóa đơn đang chờ phản hồi TCT, không thể chuyển về chờ.");
+
+        inv.Status = InvoiceStatus.Draft;
+        inv.TctCode = null;
+        inv.RejectReason = null;
+        inv.SentAt = null;
+        inv.EmailSend = null;
+        inv.SendEmailDTimeUTC = null;
+        inv.SendEmailBy = null;
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Chuyển HĐ {inv.Symbol}-{inv.No} về trạng thái chờ (PENDING){(string.IsNullOrWhiteSpace(reason) ? "" : ": " + reason.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã chuyển HĐ {inv.Symbol}-{inv.No} về trạng thái chờ (giữ nguyên số).");
+    }
 
     public Task<Invoice?> LookupByCodeAsync(string tctCode) =>
         db.Invoices.IgnoreQueryFilters().Include(i => i.Nnt)

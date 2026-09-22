@@ -417,4 +417,62 @@ public class TvanServiceTests
             Assert.Contains("Cần email", msg);
         }
     }
+
+    [Fact]
+    public async Task ResetToPending_OnAccepted_ClearsTctCodeAndKeepsNo()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);   // Accepted, có TctCode
+            var before = await svc.GetInvoiceAsync(invId);
+            var no = before!.No;
+            var (ok, msg) = await svc.ResetToPendingAsync(invId, "sửa sai sót");
+            Assert.True(ok);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(InvoiceStatus.Draft, inv!.Status);
+            Assert.Null(inv.TctCode);
+            Assert.Null(inv.SentAt);
+            Assert.Equal(no, inv.No);   // giữ nguyên số
+        }
+    }
+
+    [Fact]
+    public async Task ResetToPending_OnRejected_ClearsRejectReason()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc, buyer: "");   // thiếu người mua → bị từ chối
+            await svc.TransmitAsync(invId);
+            Assert.Equal(InvoiceStatus.Rejected, (await svc.GetInvoiceAsync(invId))!.Status);
+            var (ok, _) = await svc.ResetToPendingAsync(invId, null);
+            Assert.True(ok);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(InvoiceStatus.Draft, inv!.Status);
+            Assert.Null(inv.RejectReason);
+        }
+    }
+
+    [Fact]
+    public async Task ResetToPending_OnDraft_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);   // Draft
+            var (ok, msg) = await svc.ResetToPendingAsync(invId, null);
+            Assert.False(ok);
+            Assert.Contains("trạng thái chờ", msg);
+        }
+    }
+
+    [Fact]
+    public async Task ResetToPending_UnknownInvoice_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.ResetToPendingAsync(9999, null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
 }
