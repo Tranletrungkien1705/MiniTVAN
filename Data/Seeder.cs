@@ -58,6 +58,27 @@ public static class Seeder
             }
             db.GuiTongHops.Add(gth); await db.SaveChangesAsync();
         }
+
+        // Danh mục cơ quan thuế (theo Mst_GovTaxID của TVAN gốc) + nhật ký tra cứu MST demo.
+        if (!await db.TaxOffices.AnyAsync())
+        {
+            db.TaxOffices.AddRange(
+                new TaxOffice { GovTaxID = "0101", GovTaxName = "Cục Thuế TP Hà Nội", Address = "Hà Nội", ContactEmail = "hanoi@gdt.gov.vn", ContactPhone = "024 3825 0000" },
+                new TaxOffice { GovTaxID = "0301", GovTaxName = "Cục Thuế TP Hồ Chí Minh", Address = "TP.HCM", ContactEmail = "hcm@gdt.gov.vn", ContactPhone = "028 3829 0000" });
+            await db.SaveChangesAsync();
+        }
+        if (!await db.NntLookupLogs.AnyAsync())
+        {
+            var seller = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == "0101243150");
+            db.NntLookupLogs.Add(new NntLookupLog
+            {
+                Mst = "0101243150", Result = LookupResult.Success,
+                FullName = seller?.Name ?? "Công ty CP Ô tô Đông Đô", Address = seller?.Address,
+                GovTaxID = "0101", GovTaxName = "Cục Thuế TP Hà Nội",
+                Message = "Tra cứu thành công từ cơ quan thuế.", CreatedAt = DateTime.UtcNow.AddDays(-3)
+            });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

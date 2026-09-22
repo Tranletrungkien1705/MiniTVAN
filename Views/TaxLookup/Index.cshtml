@@ -1,0 +1,90 @@
+@{
+    ViewData["Title"] = "Tra cứu MST";
+    var offices = (List<TaxOffice>)ViewBag.Offices;
+    var logs = (List<NntLookupLog>)ViewBag.Logs;
+    string? mst = ViewBag.Mst as string;
+    bool? ok = ViewBag.Ok as bool?;
+    string? msg = ViewBag.Msg as string;
+    var result = ViewBag.Result as NntLookupLog;
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Tra cứu thông tin người nộp thuế theo MST</h6>
+            <form method="get" action="/TaxLookup" class="row g-2 align-items-end">
+                <div class="col-sm-8">
+                    <label class="form-label small mb-1">Mã số thuế *</label>
+                    <input name="mst" value="@mst" class="form-control" placeholder="VD 0101243150" required />
+                </div>
+                <div class="col-sm-4">
+                    <button class="btn btn-primary w-100"><i class="bi bi-search me-1"></i>Tra cứu</button>
+                </div>
+            </form>
+            <div class="small text-muted mt-2">Hệ thống gửi yêu cầu tới cơ quan thuế và trả về tên, địa chỉ, cơ quan thuế quản lý của người nộp thuế.</div>
+        </div></div>
+
+        @if (ok.HasValue)
+        {
+            <div class="card mt-3"><div class="card-body">
+                <h6 class="fw-bold mb-3">Kết quả tra cứu</h6>
+                @if (ok == true && result != null)
+                {
+                    <div class="alert alert-success py-2"><i class="bi bi-check-circle me-2"></i>@msg</div>
+                    <table class="table table-sm align-middle mb-0">
+                        <tbody>
+                            <tr><th style="width:180px">Mã số thuế</th><td class="fw-semibold">@result.Mst</td></tr>
+                            <tr><th>Tên người nộp thuế</th><td>@result.FullName</td></tr>
+                            <tr><th>Địa chỉ</th><td>@(string.IsNullOrWhiteSpace(result.Address) ? "—" : result.Address)</td></tr>
+                            <tr><th>Cơ quan thuế quản lý</th><td>@result.GovTaxName <span class="text-muted small">(@result.GovTaxID)</span></td></tr>
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <div class="alert alert-warning py-2 mb-0"><i class="bi bi-exclamation-triangle me-2"></i>@msg</div>
+                }
+            </div></div>
+        }
+
+        <div class="card mt-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0">Lịch sử tra cứu</h6>
+                @if (!string.IsNullOrWhiteSpace(mst)) { <a class="small" href="/TaxLookup">Bỏ lọc</a> }
+            </div>
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Thời điểm</th><th>MST</th><th>Kết quả</th><th>Tên NNT</th><th>CQT quản lý</th></tr></thead>
+                <tbody>
+                @foreach (var l in logs)
+                {
+                    var (t, css) = Ui.Lookup(l.Result);
+                    <tr>
+                        <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                        <td class="fw-semibold">@l.Mst</td>
+                        <td><span class="badge bg-@css">@t</span></td>
+                        <td class="small">@l.FullName</td>
+                        <td class="small">@l.GovTaxName</td>
+                    </tr>
+                }
+                @if (logs.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-3">Chưa có lần tra cứu nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Danh mục cơ quan thuế</h6>
+        <table class="table table-sm align-middle mb-0">
+            <thead><tr><th>Mã CQT</th><th>Tên cơ quan thuế</th></tr></thead>
+            <tbody>
+            @foreach (var o in offices)
+            {
+                <tr>
+                    <td class="fw-semibold">@o.GovTaxID</td>
+                    <td class="small">@o.GovTaxName<div class="text-muted">@o.Address</div></td>
+                </tr>
+            }
+            @if (offices.Count == 0) { <tr><td colspan="2" class="text-center text-muted py-3">Chưa có danh mục.</td></tr> }
+            </tbody>
+        </table>
+    </div></div></div>
+</div>

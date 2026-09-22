@@ -20,6 +20,9 @@ public enum PeriodType { Day = 0, Month = 1, Quarter = 2, Year = 3 }
 // Trạng thái gửi bảng tổng hợp tới CQT (theo Mst_GuiTongHopInfo.MessageStatus của TVAN gốc)
 public enum GthStatus { Draft = 0, Sent = 1, Accepted = 2, Rejected = 3 }
 
+// Kết quả tra cứu thông tin NNT theo MST từ cơ quan thuế (theo RT_EFY.status của TVAN gốc)
+public enum LookupResult { Success = 0, NotFound = 1, Error = 2 }
+
 public class Org
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -157,6 +160,37 @@ public class GuiTongHopDtl : IOrgOwned
     public decimal TgTThue { get; set; }                           // Tổng tiền thuế
     public decimal TgTTToan { get; set; }                          // Tổng tiền thanh toán
     public string? GChu { get; set; }                              // Ghi chú
+}
+
+// Cơ quan thuế quản lý (theo bảng Mst_GovTaxID của TVAN gốc): danh mục CQT theo mã (GovTaxID).
+// Dùng để tra cứu "CQT quản lý" của một MST người nộp thuế.
+public class TaxOffice : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string GovTaxID { get; set; } = "";        // Mã cơ quan thuế
+    public string GovTaxName { get; set; } = "";      // Tên cơ quan thuế
+    public string? Address { get; set; }
+    public string? ContactEmail { get; set; }
+    public string? ContactPhone { get; set; }
+    public bool FlagActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Nhật ký tra cứu thông tin NNT theo MST từ cơ quan thuế (theo TCT_TraTTinMaSoThue của TVAN gốc).
+// Mỗi lần tra cứu ghi lại kết quả (tìm thấy/không tìm thấy/lỗi) để đối soát.
+public class NntLookupLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Mst { get; set; } = "";             // MST tra cứu
+    public LookupResult Result { get; set; } = LookupResult.Success;
+    public string? FullName { get; set; }              // Tên NNT tìm được
+    public string? Address { get; set; }               // Địa chỉ NNT
+    public string? GovTaxID { get; set; }              // CQT quản lý
+    public string? GovTaxName { get; set; }            // Tên CQT quản lý
+    public string? Message { get; set; }               // Thông báo kết quả
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
 // Nhật ký thông điệp trao đổi với TCT

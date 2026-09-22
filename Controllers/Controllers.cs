@@ -163,6 +163,23 @@ public class LookupController(ITvanService svc) : Controller
     }
 }
 
+// Tra cứu thông tin người nộp thuế theo MST từ cơ quan thuế (theo TCT_TraTTinMaSoThue của TVAN gốc).
+public class TaxLookupController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? mst)
+    {
+        ViewBag.Mst = mst;
+        ViewBag.Offices = await svc.TaxOfficesAsync();
+        ViewBag.Logs = await svc.NntLookupLogsAsync(mst);
+        if (!string.IsNullOrWhiteSpace(mst))
+        {
+            var (ok, msg, log) = await svc.LookupNntByMstAsync(mst);
+            ViewBag.Ok = ok; ViewBag.Msg = msg; ViewBag.Result = log;
+        }
+        return View();
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

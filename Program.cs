@@ -183,6 +183,21 @@ app.MapPost("/api/guitonghop/{id:int}/send", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
 });
 
+// Tra cứu thông tin NNT theo MST từ cơ quan thuế (theo TCT_TraTTinMaSoThue của TVAN gốc).
+app.MapGet("/api/tax/lookup/{mst}", async (string mst, ITvanService svc) =>
+{
+    var (ok, msg, log) = await svc.LookupNntByMstAsync(mst);
+    if (!ok) return Results.NotFound(new { error = msg });
+    return Results.Ok(new { mst = log!.Mst, fullName = log.FullName, address = log.Address, govTaxId = log.GovTaxID, govTaxName = log.GovTaxName, result = log.Result.ToString() });
+});
+
+// Danh mục cơ quan thuế (theo Mst_GovTaxID của TVAN gốc).
+app.MapGet("/api/tax/offices", async (ITvanService svc) =>
+{
+    var ls = await svc.TaxOfficesAsync();
+    return Results.Ok(ls.Select(t => new { t.GovTaxID, t.GovTaxName, t.Address, t.ContactEmail, t.ContactPhone, t.FlagActive }));
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 

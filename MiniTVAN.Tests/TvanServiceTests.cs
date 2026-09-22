@@ -312,4 +312,50 @@ public class TvanServiceTests
             Assert.Contains("đã được CQT chấp nhận", msg);
         }
     }
+
+    [Fact]
+    public async Task LookupNnt_ValidMst_ReturnsInfoAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);   // NNT MST 0101243150
+            db.TaxOffices.Add(new TaxOffice { GovTaxID = "0101", GovTaxName = "Cục Thuế TP Hà Nội" });
+            await db.SaveChangesAsync();
+            var (ok, msg, log) = await svc.LookupNntByMstAsync("0101243150");
+            Assert.True(ok);
+            Assert.NotNull(log);
+            Assert.Equal(LookupResult.Success, log!.Result);
+            Assert.Equal("Cty Bán", log.FullName);
+            Assert.Equal("0101", log.GovTaxID);
+            Assert.Equal("Cục Thuế TP Hà Nội", log.GovTaxName);
+            var logs = await svc.NntLookupLogsAsync("0101243150");
+            Assert.Single(logs);
+        }
+    }
+
+    [Fact]
+    public async Task LookupNnt_InvalidMst_NotFoundAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, log) = await svc.LookupNntByMstAsync("123");
+            Assert.False(ok);
+            Assert.NotNull(log);
+            Assert.Equal(LookupResult.NotFound, log!.Result);
+            Assert.Contains("Không tìm thấy", msg);
+            Assert.Single(await svc.NntLookupLogsAsync("123"));
+        }
+    }
+
+    [Fact]
+    public async Task LookupNnt_EmptyMst_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, log) = await svc.LookupNntByMstAsync("  ");
+            Assert.False(ok);
+            Assert.Null(log);
+            Assert.Contains("Cần nhập", msg);
+        }
+    }
 }

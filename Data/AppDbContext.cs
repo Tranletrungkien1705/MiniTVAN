@@ -16,6 +16,8 @@ public class AppDbContext : DbContext
     public DbSet<LicenseHist> LicenseHists => Set<LicenseHist>();
     public DbSet<GuiTongHop> GuiTongHops => Set<GuiTongHop>();
     public DbSet<GuiTongHopDtl> GuiTongHopDtls => Set<GuiTongHopDtl>();
+    public DbSet<TaxOffice> TaxOffices => Set<TaxOffice>();
+    public DbSet<NntLookupLog> NntLookupLogs => Set<NntLookupLog>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -73,6 +75,16 @@ public class AppDbContext : DbContext
             e.Property(x => x.SLuong).HasPrecision(18, 2);
             e.Property(x => x.TSuat).HasPrecision(9, 2);
             e.HasIndex(x => new { x.OrgId, x.GuiTongHopId });
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<TaxOffice>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.GovTaxID }).IsUnique();   // mỗi CQT một mã
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<NntLookupLog>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.Mst });
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

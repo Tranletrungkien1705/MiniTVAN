@@ -31,6 +31,9 @@ public interface ITvanService
     Task<GuiTongHop?> GetGuiTongHopAsync(int id);
     Task<(bool ok, string msg, int id)> CreateGuiTongHopAsync(int nntId, PeriodType lkdlieu, string kdlieu, int bslthu, string? note);
     Task<(bool ok, string msg)> SendGuiTongHopAsync(int id);
+    Task<List<TaxOffice>> TaxOfficesAsync();
+    Task<List<NntLookupLog>> NntLookupLogsAsync(string? mst);
+    Task<(bool ok, string msg, NntLookupLog? log)> LookupNntByMstAsync(string mst);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -382,6 +385,49 @@ public class TvanService(AppDbContext db) : ITvanService
         db.Messages.Add(new TranMessage { NntId = gth.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "204", Text = $"CQT từ chối bảng tổng hợp: {reject}" });
         await db.SaveChangesAsync();
         return (false, $"CQT từ chối: {reject}");
+    }
+
+    // Danh mục cơ quan thuế (theo Mst_GovTaxID của TVAN gốc).
+    public Task<List<TaxOffice>> TaxOfficesAsync() =>
+        db.TaxOffices.OrderBy(t => t.GovTaxID).ToListAsync();
+
+    public Task<List<NntLookupLog>> NntLookupLogsAsync(string? mst)
+    {
+        var q = db.NntLookupLogs.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(mst)) q = q.Where(l => l.Mst == mst.Trim());
+        return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
+
+    // Tra cứu thông tin NNT theo MST từ cơ quan thuế (theo TCT_TraTTinMaSoThue của TVAN gốc).
+    // TCT giả lập: MST 10/13/14 số → trả về tên + địa chỉ + CQT quản lý; ngược lại báo không tìm thấy.
+    // Mọi lần tra cứu đều ghi nhật ký (NntLookupLog) để đối soát.
+    public async Task<(bool ok, string msg, NntLookupLog? log)> LookupNntByMstAsync(string mst)
+    {
+        mst = (mst ?? "").Trim();
+        if (mst.Length == 0) return (false, "Cần nhập mã số thuế.", null);
+
+        var log = new NntLookupLog { Mst = mst };
+        var digits = new string(mst.Where(char.IsDigit).ToArray());
+        if (digits.Length is not (10 or 13 or 14))
+        {
+            log.Result = LookupResult.NotFound;
+            log.Message = "Không tìm thấy người nộp thuế với MST này (cần 10/13/14 số).";
+            db.NntLookupLogs.Add(log); await db.SaveChangesAsync();
+            return (false, log.Message, log);
+        }
+
+        // Ưu tiên NNT đã có trong hệ thống; nếu chưa có thì TCT trả về thông tin tối thiểu.
+        var nnt = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == mst);
+        var office = await db.TaxOffices.FirstOrDefaultAsync(t => t.FlagActive);
+
+        log.Result = LookupResult.Success;
+        log.FullName = nnt?.Name ?? $"Người nộp thuế MST {mst}";
+        log.Address = nnt?.Address;
+        log.GovTaxID = office?.GovTaxID;
+        log.GovTaxName = office?.GovTaxName;
+        log.Message = "Tra cứu thành công từ cơ quan thuế.";
+        db.NntLookupLogs.Add(log); await db.SaveChangesAsync();
+        return (true, log.Message, log);
     }
 
     // Khoảng thời gian [from, to) của kỳ dữ liệu theo loại kỳ (LKDLieu).

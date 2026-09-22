@@ -76,4 +76,12 @@ public static class Ui
         GthStatus.Rejected => ("CQT từ chối", "danger"),
         _ => (s.ToString(), "secondary")
     };
+
+    public static (string text, string css) Lookup(LookupResult r) => r switch
+    {
+        LookupResult.Success  => ("Tìm thấy", "success"),
+        LookupResult.NotFound => ("Không tìm thấy", "warning"),
+        LookupResult.Error    => ("Lỗi", "danger"),
+        _ => (r.ToString(), "secondary")
+    };
 }
