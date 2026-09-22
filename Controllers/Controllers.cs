@@ -215,6 +215,15 @@ public class InvoiceController(ITvanService svc) : Controller
         return RedirectToAction(nameof(Detail), new { id });
     }
 
+    // Cấp số + Duyệt + Phát hành trong MỘT bước (theo Invoice_Invoice_AllocatedAndApprovedAndIssued của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AllocateApproveIssue(int id, DateTime invoiceDate, string? filePath, string? pdfFilePath, string? emailSend, string? note, string? by)
+    {
+        var (ok, msg, _) = await svc.AllocateApproveIssueAsync(id, invoiceDate, filePath, pdfFilePath, emailSend, note, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
     // Cấp số hóa đơn khởi tạo từ MÁY TÍNH TIỀN (theo Invoice_Invoice_AllocatedInvoiceTypeM của TVAN gốc).
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> AllocateNoTypeM(int id, DateTime invoiceDate, string? by)

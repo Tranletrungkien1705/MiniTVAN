@@ -1698,4 +1698,82 @@ public class TvanServiceTests
             Assert.Contains("Không tìm thấy", msg);
         }
     }
+
+    // Cấp số + Duyệt + Phát hành trong MỘT bước (theo Invoice_Invoice_AllocatedAndApprovedAndIssued của TVAN gốc).
+    [Fact]
+    public async Task AllocateApproveIssue_OnDraft_AssignsApprovesIssuesAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, invId) = await SetupNoNo(db, svc);
+            await AddTemplate(db, nntId, InvoiceNoRule.TT78, lastNo: "00000003", qtyUsed: 3);
+            var (ok, msg, no) = await svc.AllocateApproveIssueAsync(invId, DateTime.Today, "2026-06-12/HD0004.xml", "2026-06-12/HD0004.pdf", "khach@congty.vn", "phát hành gửi khách", "kế toán");
+            Assert.True(ok);
+            Assert.Equal("00000004", no);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(InvoiceStatus.Accepted, inv!.Status);
+            Assert.Equal("00000004", inv.No);
+            Assert.Equal("2026-06-12/HD0004.xml", inv.InvoiceFilePath);
+            Assert.Equal("2026-06-12/HD0004.pdf", inv.InvoicePDFFilePath);
+            Assert.Equal("khach@congty.vn", inv.EmailSend);
+            Assert.NotNull(inv.InvoiceNoDTimeUTC);
+            Assert.NotNull(inv.ApprDTimeUTC);
+            Assert.NotNull(inv.IssuedDTimeUTC);
+            Assert.Equal("kế toán", inv.IssuedBy);
+            Assert.Single(await svc.AllocLogsAsync(invId));
+            Assert.Single(await svc.ApproveLogsAsync(invId));
+            Assert.Single(await svc.IssueLogsAsync(invId));
+        }
+    }
+
+    [Fact]
+    public async Task AllocateApproveIssue_AlreadyHasNo_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, invId) = await SetupNoNo(db, svc);
+            await AddTemplate(db, nntId);
+            await svc.AllocateInvoiceNoAsync(invId, DateTime.Today, null);   // đã có số
+            var (ok, msg, _) = await svc.AllocateApproveIssueAsync(invId, DateTime.Today, null, null, null, null, null);
+            Assert.False(ok);
+            Assert.Contains("đã có số", msg);
+        }
+    }
+
+    [Fact]
+    public async Task AllocateApproveIssue_NoTemplate_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await SetupNoNo(db, svc);   // không có mẫu
+            var (ok, msg, _) = await svc.AllocateApproveIssueAsync(invId, DateTime.Today, null, null, null, null, null);
+            Assert.False(ok);
+            Assert.Contains("mẫu hóa đơn", msg);
+        }
+    }
+
+    [Fact]
+    public async Task AllocateApproveIssue_InvalidEmail_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, invId) = await SetupNoNo(db, svc);
+            await AddTemplate(db, nntId);
+            var (ok, msg, _) = await svc.AllocateApproveIssueAsync(invId, DateTime.Today, null, null, "khong-phai-email", null, null);
+            Assert.False(ok);
+            Assert.Contains("Email", msg);
+            Assert.Equal(InvoiceStatus.Draft, (await svc.GetInvoiceAsync(invId))!.Status);
+        }
+    }
+
+    [Fact]
+    public async Task AllocateApproveIssue_UnknownInvoice_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.AllocateApproveIssueAsync(9999, DateTime.Today, null, null, null, null, null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
 }

@@ -93,6 +93,19 @@
                                 <button class="btn btn-dark btn-sm w-100">Cấp số kế tiếp từ mẫu</button>
                             </form>
                         </div></div>
+                        <button class="btn btn-outline-success w-100" type="button" data-bs-toggle="collapse" data-bs-target="#allocApproveIssueForm"><i class="bi bi-lightning-charge me-1"></i>Cấp số + Duyệt + Phát hành</button>
+                        <div class="collapse" id="allocApproveIssueForm"><div class="border rounded p-2">
+                            <div class="small text-muted mb-2">Gộp 3 bước trong một thao tác: cấp số kế tiếp từ mẫu → duyệt (APPROVED) → phát hành (ISSUED).</div>
+                            <form asp-action="AllocateApproveIssue" method="post" onsubmit="return confirm('Cấp số, duyệt và phát hành hóa đơn trong một bước?')">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                                <div class="mb-2"><label class="form-label small mb-1">Ngày hóa đơn</label><input name="invoiceDate" type="date" value="@Model.IssuedDate.ToString("yyyy-MM-dd")" class="form-control form-control-sm" required /></div>
+                                <div class="mb-2"><label class="form-label small mb-1">Đường dẫn file XML (tùy chọn)</label><input name="filePath" class="form-control form-control-sm" placeholder="VD 2026-06-12/HD0001.xml" /></div>
+                                <div class="mb-2"><label class="form-label small mb-1">Đường dẫn file PDF (tùy chọn)</label><input name="pdfFilePath" class="form-control form-control-sm" placeholder="VD 2026-06-12/HD0001.pdf" /></div>
+                                <div class="mb-2"><label class="form-label small mb-1">Email người nhận (nhiều địa chỉ cách nhau bởi ';', tùy chọn)</label><input name="emailSend" class="form-control form-control-sm" value="@Model.EmailSend" placeholder="VD khachhang@congty.vn" /></div>
+                                <div class="mb-2"><label class="form-label small mb-1">Ghi chú (tùy chọn)</label><input name="note" class="form-control form-control-sm" placeholder="VD phát hành gửi khách" /></div>
+                                <div class="mb-2"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="VD kế toán" /></div>
+                                <button class="btn btn-success btn-sm w-100">Cấp số + Duyệt + Phát hành</button>
+                            </form>
+                        </div></div>
                         @if (isTypeM)
                         {
                             <button class="btn btn-outline-info w-100" type="button" data-bs-toggle="collapse" data-bs-target="#allocNoTypeMForm"><i class="bi bi-cash-register me-1"></i>Cấp số HĐ máy tính tiền</button>

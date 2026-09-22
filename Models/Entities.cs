@@ -86,6 +86,10 @@ public enum InvoiceTypeM { Normal = 0, Machine = 1 }
 // IncreaseEndNo = tăng số hóa đơn cuối (mở rộng dải số được cấp phát).
 public enum TemplateRangeAction { IncreaseEndNo = 0 }
 
+// Loại thao tác sửa lỗi hàng loạt hóa đơn theo mẫu (theo luồng Invoice_Invoice_Fix của TVAN gốc):
+// FixByTemplate = ký lại hàng loạt HĐ đã phát hành (ISSUED) chưa ký lại của một mẫu hóa đơn.
+public enum BulkFixAction { FixByTemplate = 0 }
+
 public class Org
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -560,6 +564,25 @@ public class InvoiceRecordLog : IOrgOwned
     public string? FileSpec { get; set; }                    // Nội dung file (base64)
     public string? FilePath { get; set; }                    // Đường dẫn file đã lưu
     public string? Reason { get; set; }                      // Lý do hủy/điều chỉnh/thay thế
+    public string? By { get; set; }                          // Người thực hiện
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Nhật ký sửa lỗi hàng loạt hóa đơn theo mẫu (theo luồng Invoice_Invoice_Fix của TVAN gốc).
+// Mỗi lần ký lại hàng loạt HĐ đã phát hành (ISSUED) chưa ký lại của một mẫu hóa đơn ghi lại để đối soát:
+// mẫu hóa đơn, số lượng HĐ đã sửa, danh sách số hóa đơn, lý do và người thực hiện.
+public class BulkFixLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int TemplateId { get; set; }
+    public InvoiceTemplate? Template { get; set; }
+    public BulkFixAction Action { get; set; } = BulkFixAction.FixByTemplate;   // Loại thao tác sửa lỗi
+    public string? TInvoiceCode { get; set; }                // Mã mẫu hóa đơn được sửa lỗi
+    public string? FormNo { get; set; }                      // Mẫu số tại thời điểm sửa
+    public int FixedCount { get; set; }                      // Số hóa đơn đã ký lại
+    public string? InvoiceNos { get; set; }                  // Danh sách số hóa đơn đã sửa (cách nhau bởi dấu phẩy)
+    public string? Reason { get; set; }                      // Lý do sửa lỗi
     public string? By { get; set; }                          // Người thực hiện
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

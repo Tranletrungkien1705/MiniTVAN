@@ -376,6 +376,14 @@ app.MapGet("/api/invoice-no-alloc-logs", async (int? invoiceId, ITvanService svc
     return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, l.FormNo, l.Sign, l.InvoiceNo, l.InvoiceDate, l.By, l.CreatedAt }));
 });
 
+// Cấp số + Duyệt + Phát hành trong MỘT bước (theo Invoice_Invoice_AllocatedAndApprovedAndIssued của TVAN gốc):
+// gộp 3 thao tác tuần tự trên HĐ đang chờ chưa có số → cấp số từ mẫu, duyệt (APPROVED), phát hành (ISSUED).
+app.MapPost("/api/invoices/{id:int}/allocate-approve-issue", async (int id, AllocateApproveIssueDto dto, ITvanService svc) =>
+{
+    var (ok, msg, invoiceNo) = await svc.AllocateApproveIssueAsync(id, dto.InvoiceDate ?? DateTime.Today, dto.FilePath, dto.PdfFilePath, dto.EmailSend, dto.Note, dto.By);
+    return ok ? Results.Ok(new { id, invoiceNo, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 // Cấp số hóa đơn khởi tạo từ MÁY TÍNH TIỀN (theo Invoice_Invoice_AllocatedInvoiceTypeM của TVAN gốc):
 // PENDING + chưa có số + mẫu loại MTT (FormNo ký tự thứ 4 = 'M') + NNT có MCCQT 5 ký tự → cấp số kế tiếp từ mẫu.
 app.MapPost("/api/invoices/{id:int}/allocate-no-type-m", async (int id, AllocateNoDto dto, ITvanService svc) =>
@@ -474,6 +482,7 @@ record UnapproveDto(string? Note, string? By);
 record IssueDto(string? EmailSend, string? Note, string? By);
 record Sign60DayDto(Sign60DayFlag Flag, string? Note);
 record AllocateNoDto(DateTime? InvoiceDate, string? By);
+record AllocateApproveIssueDto(DateTime? InvoiceDate, string? FilePath, string? PdfFilePath, string? EmailSend, string? Note, string? By);
 record IssueTemplateDto(DateTime? EffDateStart, string? Remark);
 record InactivateTemplateDto(string? Remark);
 record IncreaseEndNoDto(int NewEndInvoiceNo, string? Remark, string? By);

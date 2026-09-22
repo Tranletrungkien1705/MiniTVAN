@@ -58,6 +58,7 @@ public interface ITvanService
     Task<(bool ok, string msg)> IncreaseTemplateEndNoAsync(int templateId, int newEndInvoiceNo, string? remark, string? by);
     Task<List<TemplateRangeLog>> TemplateRangeLogsAsync(int? templateId);
     Task<(bool ok, string msg, string? invoiceNo)> AllocateInvoiceNoAsync(int invoiceId, DateTime invoiceDate, string? by);
+    Task<(bool ok, string msg, string? invoiceNo)> AllocateApproveIssueAsync(int invoiceId, DateTime invoiceDate, string? filePath, string? pdfFilePath, string? emailSend, string? note, string? by);
     Task<List<InvoiceNoAllocLog>> AllocLogsAsync(int? invoiceId);
     Task<(bool ok, string msg, string? mccqtmtt)> AllocateInvoiceNoTypeMAsync(int invoiceId, DateTime invoiceDate, string? by);
     Task<(bool ok, string msg, string? mccqtmtt)> GenMccqtMttAsync(int invoiceId);
@@ -69,6 +70,9 @@ public interface ITvanService
     Task<List<CancelInvoiceLog>> CancelLogsAsync(int? invoiceId);
     Task<(bool ok, string msg, int id)> CreateRecordAsync(int invoiceId, RecordType type, string fileName, string? fileSpec, string? reason, string? by);
     Task<List<InvoiceRecordLog>> RecordLogsAsync(int? invoiceId);
+    Task<List<Invoice>> BulkFixCandidatesAsync(string tinvoiceCode);
+    Task<(bool ok, string msg, int fixedCount)> BulkFixByTemplateAsync(string tinvoiceCode, string? reason, string? by);
+    Task<List<BulkFixLog>> BulkFixLogsAsync(int? templateId);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -996,6 +1000,106 @@ public class TvanService(AppDbContext db) : ITvanService
         return (true, $"Đã cấp số hóa đơn {tpl.FormNo}-{invoiceNo}.", invoiceNo);
     }
 
+    // Cấp số + Duyệt + Phát hành trong MỘT bước (theo Invoice_Invoice_AllocatedAndApprovedAndIssued của TVAN gốc):
+    // gộp 3 thao tác tuần tự trên cùng một hóa đơn đang chờ (PENDING) chưa có số:
+    //   1) Cấp số kế tiếp từ mẫu (Invoice_Invoice_AllocatedInvX);
+    //   2) Duyệt hóa đơn (Invoice_Invoice_ApprovedX): PENDING → APPROVED, ghi file XML/PDF + người duyệt;
+    //   3) Phát hành hóa đơn (Invoice_Invoice_IssuedX): APPROVED → ISSUED, ghi email người nhận + người phát hành.
+    // Mọi bước ghi nhật ký riêng (InvoiceNoAllocLog/ApproveLog/IssueLog) để đối soát.
+    public async Task<(bool ok, string msg, string? invoiceNo)> AllocateApproveIssueAsync(
+        int invoiceId, DateTime invoiceDate, string? filePath, string? pdfFilePath, string? emailSend, string? note, string? by)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.", null);
+        if (inv.Status != InvoiceStatus.Draft) return (false, "Chỉ cấp số + duyệt + phát hành được hóa đơn đang ở trạng thái chờ (PENDING).", null);
+        if (!string.IsNullOrWhiteSpace(inv.No)) return (false, "Hóa đơn đã có số, không thể cấp số lại.", null);
+
+        var date = invoiceDate == default ? DateTime.Today : invoiceDate.Date;
+        if (date > DateTime.Today) return (false, "Ngày hóa đơn không được là ngày tương lai.", null);
+
+        var tpl = await db.InvoiceTemplates.FirstOrDefaultAsync(t => t.NntId == inv.NntId && t.FlagActive);
+        if (tpl == null) return (false, "NNT chưa có mẫu hóa đơn đang hoạt động để cấp số.", null);
+        if (date < tpl.EffDateStart.Date) return (false, $"Ngày hóa đơn phải sau ngày bắt đầu sử dụng mẫu ({tpl.EffDateStart:dd/MM/yyyy}).", null);
+        if (tpl.LastInvoiceDateUTC.HasValue && date < tpl.LastInvoiceDateUTC.Value.Date)
+            return (false, $"Ngày hóa đơn không được trước ngày cấp số gần nhất ({tpl.LastInvoiceDateUTC.Value:dd/MM/yyyy}).", null);
+        if (tpl.QtyUsed >= tpl.EndInvoiceNo - tpl.StartInvoiceNo + 1)
+            return (false, "Mẫu hóa đơn đã dùng hết dải số được cấp.", null);
+
+        var to = (emailSend ?? "").Trim();
+        if (to.Length > 0 && to.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Any(r => !r.Contains('@')))
+            return (false, "Email người nhận không hợp lệ.", null);
+
+        // 1) Cấp số kế tiếp từ mẫu (theo Invoice_Invoice_AllocatedInvX).
+        int nextNo;
+        if (tpl.TTType == InvoiceNoRule.TT78)
+            nextNo = (int.TryParse(tpl.LastInvoiceNo, out var last) ? last : tpl.StartInvoiceNo - 1) + 1;
+        else
+            nextNo = tpl.StartInvoiceNo + tpl.QtyUsed;
+        var invoiceNo = nextNo.ToString("D8");
+
+        inv.No = invoiceNo;
+        inv.Symbol = string.IsNullOrWhiteSpace(tpl.FormNo) ? inv.Symbol : tpl.FormNo;
+        inv.IssuedDate = date;
+        inv.InvoiceNoDTimeUTC = DateTime.UtcNow;
+        inv.InvoiceNoBy = by;
+
+        tpl.LastInvoiceNo = invoiceNo;
+        tpl.LastInvoiceDateUTC = date;
+        tpl.QtyUsed += 1;
+
+        db.InvoiceNoAllocLogs.Add(new InvoiceNoAllocLog
+        {
+            InvoiceId = inv.Id, TemplateId = tpl.Id, FormNo = tpl.FormNo, Sign = tpl.Sign,
+            InvoiceNo = invoiceNo, InvoiceDate = date, By = by,
+        });
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Cấp số hóa đơn {tpl.FormNo}-{invoiceNo} cho HĐ ngày {date:dd/MM/yyyy}{(string.IsNullOrWhiteSpace(by) ? "" : " bởi " + by.Trim())}"
+        });
+
+        // 2) Duyệt hóa đơn (theo Invoice_Invoice_ApprovedX): PENDING → APPROVED.
+        inv.Status = InvoiceStatus.Approved;
+        inv.InvoiceFilePath = filePath;
+        inv.InvoicePDFFilePath = pdfFilePath;
+        inv.ApprDTimeUTC = DateTime.UtcNow;
+        inv.ApprBy = by;
+        db.ApproveLogs.Add(new ApproveLog
+        {
+            InvoiceId = inv.Id, Action = ApproveAction.Approve,
+            FilePath = filePath, PdfFilePath = pdfFilePath, Note = note, By = by,
+        });
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Duyệt HĐ {inv.Symbol}-{inv.No}{(string.IsNullOrWhiteSpace(note) ? "" : ": " + note.Trim())}"
+        });
+
+        // 3) Phát hành hóa đơn (theo Invoice_Invoice_IssuedX): APPROVED → ISSUED.
+        inv.Status = InvoiceStatus.Accepted;
+        inv.IssuedDTimeUTC = DateTime.UtcNow;
+        inv.IssuedBy = by;
+        if (to.Length > 0)
+        {
+            inv.EmailSend = to;
+            inv.SendEmailDTimeUTC = DateTime.UtcNow;
+            inv.SendEmailBy = by;
+        }
+        db.IssueLogs.Add(new IssueLog
+        {
+            InvoiceId = inv.Id, Action = IssueAction.Issue,
+            EmailSend = to.Length > 0 ? to : null, Note = note, By = by,
+        });
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Phát hành HĐ {inv.Symbol}-{inv.No}{(string.IsNullOrWhiteSpace(note) ? "" : ": " + note.Trim())}"
+        });
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cấp số {tpl.FormNo}-{invoiceNo}, duyệt và phát hành HĐ {inv.Symbol}-{inv.No} (ISSUED).", invoiceNo);
+    }
+
     public Task<List<InvoiceNoAllocLog>> AllocLogsAsync(int? invoiceId)
     {
         var q = db.InvoiceNoAllocLogs.Include(l => l.Invoice).AsQueryable();
@@ -1305,6 +1409,73 @@ public class TvanService(AppDbContext db) : ITvanService
         RecordType.ThayThe => "thay thế",
         _ => "hủy"
     };
+
+    // Sửa lỗi hàng loạt hóa đơn theo mẫu (theo luồng Invoice_Invoice_Fix của TVAN gốc):
+    // liệt kê các HĐ đã phát hành (ISSUED/Accepted) và CHƯA ký lại (FlagHotfix is null) của một mẫu hóa đơn
+    // (theo TInvoiceCode) — đây là các HĐ cần ký lại hàng loạt khi mẫu/nội dung có sai sót.
+    public Task<List<Invoice>> BulkFixCandidatesAsync(string tinvoiceCode)
+    {
+        var code = (tinvoiceCode ?? "").Trim();
+        if (code.Length == 0) return Task.FromResult(new List<Invoice>());
+        return db.Invoices.Include(i => i.Nnt)
+            .Where(i => i.Status == InvoiceStatus.Accepted && i.FlagHotfix == HotfixFlag.None)
+            .Where(i => db.InvoiceTemplates.Any(t => t.TInvoiceCode == code && t.FormNo == i.Symbol))
+            .OrderBy(i => i.Id).ToListAsync();
+    }
+
+    // Ký lại hàng loạt HĐ đã phát hành chưa ký lại của một mẫu hóa đơn (theo luồng Invoice_Invoice_Fix của TVAN gốc):
+    // mỗi HĐ được cập nhật nội dung đã ký (InvoiceFileSpec), đánh dấu FlagHotfix = Hotfixed,
+    // ghi thời điểm & người ký lại (ApprDTimeUTC/ApprBy), ghi nhật ký ký lại (ReSignLog) và nhật ký sửa lỗi (BulkFixLog).
+    public async Task<(bool ok, string msg, int fixedCount)> BulkFixByTemplateAsync(string tinvoiceCode, string? reason, string? by)
+    {
+        var code = (tinvoiceCode ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần nhập mã mẫu hóa đơn.", 0);
+
+        var tpl = await db.InvoiceTemplates.FirstOrDefaultAsync(t => t.TInvoiceCode == code);
+        if (tpl == null) return (false, "Không tìm thấy mẫu hóa đơn với mã này.", 0);
+
+        var invs = await db.Invoices.Include(i => i.Nnt)
+            .Where(i => i.Status == InvoiceStatus.Accepted && i.FlagHotfix == HotfixFlag.None && i.Symbol == tpl.FormNo)
+            .OrderBy(i => i.Id).ToListAsync();
+        if (invs.Count == 0) return (false, "Không có hóa đơn đã phát hành nào cần sửa lỗi cho mẫu này.", 0);
+
+        var subFolder = DateTime.Now.ToString("yyyy-MM-dd");
+        foreach (var inv in invs)
+        {
+            var fileName = $"{DateTime.Now:yyyyMMdd.HHmmss}.{inv.Id}.SuaLoiHoaDon.xml";
+            inv.InvoiceFileSpec = $"PD94bWwgdmVyc2lvbj0iMS4wIj8+PEhEPklOVk9JQ0U9XF{inv.Id}8Pg==";
+            inv.InvoiceFilePath = $"{subFolder}/{fileName}";
+            inv.FlagHotfix = HotfixFlag.Hotfixed;
+            inv.ApprDTimeUTC = DateTime.UtcNow;
+            inv.ApprBy = by;
+            db.ReSignLogs.Add(new ReSignLog
+            {
+                InvoiceId = inv.Id, FilePath = inv.InvoiceFilePath, By = by,
+                Note = $"Sửa lỗi hàng loạt theo mẫu {tpl.FormNo}{(string.IsNullOrWhiteSpace(reason) ? "" : ": " + reason.Trim())}"
+            });
+        }
+
+        db.BulkFixLogs.Add(new BulkFixLog
+        {
+            TemplateId = tpl.Id, Action = BulkFixAction.FixByTemplate, TInvoiceCode = tpl.TInvoiceCode,
+            FormNo = tpl.FormNo, FixedCount = invs.Count,
+            InvoiceNos = string.Join(", ", invs.Select(i => i.No)), Reason = reason, By = by
+        });
+        db.Messages.Add(new TranMessage
+        {
+            NntId = tpl.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Sửa lỗi hàng loạt {invs.Count} HĐ của mẫu {tpl.FormNo}{(string.IsNullOrWhiteSpace(reason) ? "" : ": " + reason.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã ký lại {invs.Count} hóa đơn của mẫu {tpl.FormNo}.", invs.Count);
+    }
+
+    public Task<List<BulkFixLog>> BulkFixLogsAsync(int? templateId)
+    {
+        var q = db.BulkFixLogs.Include(l => l.Template).AsQueryable();
+        if (templateId.HasValue) q = q.Where(l => l.TemplateId == templateId.Value);
+        return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
 
     // Khoảng thời gian [from, to) của kỳ dữ liệu theo loại kỳ (LKDLieu).
     private static (DateTime from, DateTime to) PeriodRange(PeriodType t, string kdlieu)
