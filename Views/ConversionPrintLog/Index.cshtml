@@ -1,0 +1,28 @@
+@model List<ConversionPrintLog>
+@{ ViewData["Title"] = "Nhật ký in chuyển đổi"; int? filterInv = ViewBag.InvoiceId as int?; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0"><i class="bi bi-printer me-1"></i>Nhật ký in chuyển đổi hóa đơn</h6>
+        @if (filterInv.HasValue) { <a class="small" href="/ConversionPrintLog">Bỏ lọc</a> }
+    </div>
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Thời điểm</th><th>Hóa đơn</th><th>Thao tác</th><th>Ghi chú</th><th>Người thực hiện</th></tr></thead>
+        <tbody>
+        @foreach (var l in Model)
+        {
+            var (t, css) = Ui.ConvAction(l.Action);
+            <tr>
+                <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                <td class="small">
+                    @if (l.Invoice != null) { <a href="/Invoice/Detail/@l.InvoiceId">@l.Invoice.Symbol-@l.Invoice.No</a> }
+                    else { <span class="text-muted">#@l.InvoiceId</span> }
+                </td>
+                <td><span class="badge bg-@css">@t</span></td>
+                <td class="small text-muted">@l.Note</td>
+                <td class="small text-muted">@l.By</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-4">Chưa có lần in chuyển đổi nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

@@ -234,6 +234,27 @@ app.MapGet("/api/email-logs", async (int? invoiceId, ITvanService svc) =>
     return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, l.ToEmail, l.Subject, result = l.Result.ToString(), l.Message, l.SentBy, l.CreatedAt }));
 });
 
+// In chuyển đổi hóa đơn (theo Invoice_Invoice.FlagChange của TVAN gốc): đánh dấu HĐ đã in ở dạng chuyển đổi.
+app.MapPost("/api/invoices/{id:int}/conversion-print", async (int id, ConversionPrintDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.MarkConversionPrintedAsync(id, dto.Note, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Bỏ cờ in chuyển đổi (theo Invoice_Invoice_Support_BackFlagChange của TVAN gốc): đưa HĐ về in thường.
+app.MapPost("/api/invoices/{id:int}/conversion-print/reset", async (int id, ConversionPrintDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.ResetConversionPrintAsync(id, dto.Note, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Nhật ký in chuyển đổi hóa đơn (lọc theo hóa đơn nếu có).
+app.MapGet("/api/conversion-print-logs", async (int? invoiceId, ITvanService svc) =>
+{
+    var ls = await svc.ConversionPrintLogsAsync(invoiceId);
+    return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, action = l.Action.ToString(), l.Note, l.By, l.CreatedAt }));
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -250,3 +271,4 @@ record DeleteAdjReplaceDto(string? Reason);
 record LicenseIncreaseDto(int NntId, int Qty, string? Note);
 record GuiTongHopDto(int NntId, PeriodType LKDLieu, string? KDLieu, int BSLThu, string? Note);
 record SendEmailDto(string? ToEmail, string? SentBy);
+record ConversionPrintDto(string? Note, string? By);

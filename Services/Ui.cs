@@ -91,4 +91,18 @@ public static class Ui
         EmailSendResult.Failed  => ("Gửi lỗi", "danger"),
         _ => (r.ToString(), "secondary")
     };
+
+    public static (string text, string css) ConvPrint(ConversionPrintFlag f) => f switch
+    {
+        ConversionPrintFlag.Printed    => ("Đã in chuyển đổi", "warning"),
+        ConversionPrintFlag.NotPrinted => ("Chưa in chuyển đổi", "secondary"),
+        _ => (f.ToString(), "secondary")
+    };
+
+    public static (string text, string css) ConvAction(ConversionPrintAction a) => a switch
+    {
+        ConversionPrintAction.Print => ("In chuyển đổi", "warning"),
+        ConversionPrintAction.Reset => ("Bỏ cờ in chuyển đổi", "secondary"),
+        _ => (a.ToString(), "secondary")
+    };
 }

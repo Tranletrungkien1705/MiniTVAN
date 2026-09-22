@@ -577,4 +577,91 @@ public class TvanServiceTests
             Assert.Contains("Không tìm thấy", msg);
         }
     }
+
+    [Fact]
+    public async Task ConversionPrint_OnAccepted_MarksPrintedAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);   // Accepted
+            var (ok, msg) = await svc.MarkConversionPrintedAsync(invId, "in bản chuyển đổi", "kế toán");
+            Assert.True(ok);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(ConversionPrintFlag.Printed, inv!.FlagChange);
+            var logs = await svc.ConversionPrintLogsAsync(invId);
+            Assert.Single(logs);
+            Assert.Equal(ConversionPrintAction.Print, logs[0].Action);
+            Assert.Equal("kế toán", logs[0].By);
+        }
+    }
+
+    [Fact]
+    public async Task ConversionPrint_OnDraft_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);   // Draft, chưa truyền
+            var (ok, msg) = await svc.MarkConversionPrintedAsync(invId, null, null);
+            Assert.False(ok);
+            Assert.Contains("chấp nhận", msg);
+            Assert.Empty(await svc.ConversionPrintLogsAsync(invId));
+        }
+    }
+
+    [Fact]
+    public async Task ConversionPrint_AlreadyPrinted_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);
+            await svc.MarkConversionPrintedAsync(invId, null, null);
+            var (ok, msg) = await svc.MarkConversionPrintedAsync(invId, null, null);
+            Assert.False(ok);
+            Assert.Contains("đã được in chuyển đổi", msg);
+        }
+    }
+
+    [Fact]
+    public async Task ResetConversionPrint_AfterPrinted_BackToNotPrinted()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);
+            await svc.MarkConversionPrintedAsync(invId, null, null);
+            var (ok, msg) = await svc.ResetConversionPrintAsync(invId, "in nhầm", "kế toán");
+            Assert.True(ok);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(ConversionPrintFlag.NotPrinted, inv!.FlagChange);
+            var logs = await svc.ConversionPrintLogsAsync(invId);
+            Assert.Equal(2, logs.Count);
+            Assert.Equal(ConversionPrintAction.Reset, logs[0].Action);   // mới nhất trước
+        }
+    }
+
+    [Fact]
+    public async Task ResetConversionPrint_WhenNotPrinted_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);   // Accepted nhưng chưa in chuyển đổi
+            var (ok, msg) = await svc.ResetConversionPrintAsync(invId, null, null);
+            Assert.False(ok);
+            Assert.Contains("chưa in chuyển đổi", msg);
+        }
+    }
+
+    [Fact]
+    public async Task ConversionPrint_UnknownInvoice_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.MarkConversionPrintedAsync(9999, null, null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
 }

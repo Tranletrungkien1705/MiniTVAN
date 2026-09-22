@@ -65,6 +65,7 @@ public class InvoiceController(ITvanService svc) : Controller
         if (inv == null) return NotFound();
         ViewBag.Messages = await svc.MessagesAsync(id);
         ViewBag.EmailLogs = await svc.EmailLogsAsync(id);
+        ViewBag.ConvLogs = await svc.ConversionPrintLogsAsync(id);
         return View(inv);
     }
 
@@ -131,6 +132,24 @@ public class InvoiceController(ITvanService svc) : Controller
     public async Task<IActionResult> SendEmail(int id, string? toEmail, string? sentBy)
     {
         var (ok, msg, _) = await svc.SendInvoiceEmailAsync(id, toEmail, sentBy);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // In chuyển đổi hóa đơn (theo Invoice_Invoice.FlagChange của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ConversionPrint(int id, string? note, string? by)
+    {
+        var (ok, msg) = await svc.MarkConversionPrintedAsync(id, note, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Bỏ cờ in chuyển đổi (theo Invoice_Invoice_Support_BackFlagChange của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResetConversionPrint(int id, string? note, string? by)
+    {
+        var (ok, msg) = await svc.ResetConversionPrintAsync(id, note, by);
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Detail), new { id });
     }
@@ -225,6 +244,16 @@ public class EmailLogController(ITvanService svc) : Controller
     {
         ViewBag.InvoiceId = invoiceId;
         return View(await svc.EmailLogsAsync(invoiceId));
+    }
+}
+
+// Nhật ký in chuyển đổi hóa đơn (theo Invoice_Invoice_Support_BackFlagChange của TVAN gốc).
+public class ConversionPrintLogController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? invoiceId)
+    {
+        ViewBag.InvoiceId = invoiceId;
+        return View(await svc.ConversionPrintLogsAsync(invoiceId));
     }
 }
 

@@ -19,6 +19,7 @@ public class AppDbContext : DbContext
     public DbSet<TaxOffice> TaxOffices => Set<TaxOffice>();
     public DbSet<NntLookupLog> NntLookupLogs => Set<NntLookupLog>();
     public DbSet<InvoiceEmailLog> InvoiceEmailLogs => Set<InvoiceEmailLog>();
+    public DbSet<ConversionPrintLog> ConversionPrintLogs => Set<ConversionPrintLog>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -89,6 +90,12 @@ public class AppDbContext : DbContext
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<InvoiceEmailLog>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.InvoiceId });
+            e.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ConversionPrintLog>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.InvoiceId });
             e.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);

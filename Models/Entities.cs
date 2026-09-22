@@ -26,6 +26,13 @@ public enum LookupResult { Success = 0, NotFound = 1, Error = 2 }
 // Kết quả gửi email hóa đơn cho người mua (theo Invoice_Invoice_Support_SendMail của TVAN gốc)
 public enum EmailSendResult { Success = 0, Failed = 1 }
 
+// Cờ in chuyển đổi của hóa đơn (theo Invoice_Invoice.FlagChange của TVAN gốc):
+// NotPrinted = '1' (chưa in chuyển đổi), Printed = '0' (đã in chuyển đổi).
+public enum ConversionPrintFlag { NotPrinted = 1, Printed = 0 }
+
+// Loại thao tác trên cờ in chuyển đổi (theo Invoice_Invoice_Support_BackFlagChange của TVAN gốc)
+public enum ConversionPrintAction { Print = 0, Reset = 1 }
+
 public class Org
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -80,6 +87,10 @@ public class Invoice : IOrgOwned
     public string? EmailSend { get; set; }           // Email người nhận (nhiều địa chỉ cách nhau bởi ';')
     public DateTime? SendEmailDTimeUTC { get; set; } // Thời điểm gửi email gần nhất
     public string? SendEmailBy { get; set; }         // Người gửi email
+
+    // Cờ in chuyển đổi (theo Invoice_Invoice.FlagChange của TVAN gốc):
+    // NotPrinted = chưa in chuyển đổi (mặc định), Printed = đã in chuyển đổi.
+    public ConversionPrintFlag FlagChange { get; set; } = ConversionPrintFlag.NotPrinted;
 
     public decimal VatAmount => Math.Round(Amount * VatRate / 100m, 0);
     public decimal Total => Amount + VatAmount;
@@ -214,6 +225,20 @@ public class InvoiceEmailLog : IOrgOwned
     public EmailSendResult Result { get; set; } = EmailSendResult.Success;
     public string? Message { get; set; }              // Thông báo kết quả
     public string? SentBy { get; set; }               // Người gửi
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Nhật ký in chuyển đổi hóa đơn (theo Invoice_Invoice_Support_BackFlagChange của TVAN gốc).
+// Mỗi lần in chuyển đổi hoặc bỏ cờ in chuyển đổi ghi lại để đối soát.
+public class ConversionPrintLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InvoiceId { get; set; }
+    public Invoice? Invoice { get; set; }
+    public ConversionPrintAction Action { get; set; }   // Print = in chuyển đổi, Reset = bỏ cờ in chuyển đổi
+    public string? Note { get; set; }                  // Ghi chú / lý do
+    public string? By { get; set; }                    // Người thực hiện
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 

@@ -36,6 +36,15 @@ public static class Seeder
                 Message = "Đã gửi email hóa đơn tới nguyenvana@congty.vn.", CreatedAt = DateTime.UtcNow.AddDays(-5)
             });
             await db.SaveChangesAsync();
+            // In chuyển đổi hóa đơn (theo Invoice_Invoice.FlagChange của TVAN gốc):
+            // inv1 đã được in ở dạng chuyển đổi cho người mua.
+            inv1.FlagChange = ConversionPrintFlag.Printed;
+            db.ConversionPrintLogs.Add(new ConversionPrintLog
+            {
+                InvoiceId = inv1.Id, Action = ConversionPrintAction.Print, By = "kế toán",
+                Note = "In bản chuyển đổi giao khách", CreatedAt = DateTime.UtcNow.AddDays(-5)
+            });
+            await db.SaveChangesAsync();
             db.Messages.AddRange(
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300", Text = "Gửi HĐ 1C26TAA-00000001", CreatedAt = DateTime.UtcNow.AddDays(-5) },
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "202", Text = "TCT cấp mã: 0026082512345678", CreatedAt = DateTime.UtcNow.AddDays(-5) },

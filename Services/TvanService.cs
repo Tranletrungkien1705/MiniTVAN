@@ -39,6 +39,9 @@ public interface ITvanService
     Task<(bool ok, string msg, NntLookupLog? log)> LookupNntByMstAsync(string mst);
     Task<List<InvoiceEmailLog>> EmailLogsAsync(int? invoiceId);
     Task<(bool ok, string msg, int id)> SendInvoiceEmailAsync(int invoiceId, string? toEmail, string? sentBy);
+    Task<(bool ok, string msg)> MarkConversionPrintedAsync(int invoiceId, string? note, string? by);
+    Task<(bool ok, string msg)> ResetConversionPrintAsync(int invoiceId, string? note, string? by);
+    Task<List<ConversionPrintLog>> ConversionPrintLogsAsync(int? invoiceId);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -541,6 +544,59 @@ public class TvanService(AppDbContext db) : ITvanService
     public Task<List<InvoiceEmailLog>> EmailLogsAsync(int? invoiceId)
     {
         var q = db.InvoiceEmailLogs.Include(l => l.Invoice).AsQueryable();
+        if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
+        return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
+
+    // In chuyển đổi hóa đơn (theo Invoice_Invoice.FlagChange của TVAN gốc):
+    // đánh dấu hóa đơn đã được in ở dạng chuyển đổi (FlagChange = Printed).
+    // Chỉ thực hiện được với hóa đơn đã phát hành (Accepted).
+    public async Task<(bool ok, string msg)> MarkConversionPrintedAsync(int invoiceId, string? note, string? by)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.");
+        if (inv.Status != InvoiceStatus.Accepted) return (false, "Chỉ in chuyển đổi được hóa đơn đã được CQT chấp nhận.");
+        if (inv.FlagChange == ConversionPrintFlag.Printed) return (false, "Hóa đơn đã được in chuyển đổi.");
+
+        inv.FlagChange = ConversionPrintFlag.Printed;
+        db.ConversionPrintLogs.Add(new ConversionPrintLog
+        {
+            InvoiceId = inv.Id, Action = ConversionPrintAction.Print, Note = note, By = by,
+        });
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"In chuyển đổi HĐ {inv.Symbol}-{inv.No}{(string.IsNullOrWhiteSpace(note) ? "" : ": " + note.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã đánh dấu in chuyển đổi HĐ {inv.Symbol}-{inv.No}.");
+    }
+
+    // Bỏ cờ in chuyển đổi (theo Invoice_Invoice_Support_BackFlagChange của TVAN gốc):
+    // đưa FlagChange về NotPrinted ('1' = chưa in chuyển đổi) để in lại hóa đơn thường.
+    public async Task<(bool ok, string msg)> ResetConversionPrintAsync(int invoiceId, string? note, string? by)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.");
+        if (inv.FlagChange == ConversionPrintFlag.NotPrinted) return (false, "Hóa đơn chưa in chuyển đổi, không cần bỏ cờ.");
+
+        inv.FlagChange = ConversionPrintFlag.NotPrinted;
+        db.ConversionPrintLogs.Add(new ConversionPrintLog
+        {
+            InvoiceId = inv.Id, Action = ConversionPrintAction.Reset, Note = note, By = by,
+        });
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Bỏ cờ in chuyển đổi HĐ {inv.Symbol}-{inv.No}{(string.IsNullOrWhiteSpace(note) ? "" : ": " + note.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã bỏ cờ in chuyển đổi HĐ {inv.Symbol}-{inv.No}.");
+    }
+
+    public Task<List<ConversionPrintLog>> ConversionPrintLogsAsync(int? invoiceId)
+    {
+        var q = db.ConversionPrintLogs.Include(l => l.Invoice).AsQueryable();
         if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
     }
