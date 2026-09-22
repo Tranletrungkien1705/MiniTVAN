@@ -13,19 +13,45 @@
         <a href="/Invoice/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Lập HĐ</a>
     </div>
     <table class="table table-hover align-middle">
-        <thead><tr><th>Ký hiệu-Số</th><th>Người bán</th><th>Người mua</th><th class="text-end">Tổng</th><th>Mã CQT</th><th>Trạng thái</th></tr></thead>
+        <thead><tr><th style="width:32px"></th><th>Ký hiệu-Số</th><th>Người bán</th><th>Người mua</th><th class="text-end">Tổng</th><th>Mã CQT</th><th>Trạng thái</th></tr></thead>
         <tbody>
         @foreach (var i in Model)
         {
             var (t, css) = Ui.Inv(i.Status);
             <tr style="cursor:pointer" onclick="location.href='/Invoice/Detail/@i.Id'">
+                <td onclick="event.stopPropagation()">
+                    @if (i.Status == InvoiceStatus.Draft && !string.IsNullOrWhiteSpace(i.No))
+                    { <input type="checkbox" class="form-check-input bulk-approve-cb" value="@i.Id" /> }
+                </td>
                 <td class="fw-semibold small">@i.Symbol-@i.No</td><td class="small">@i.Nnt?.Name</td><td class="small">@i.BuyerName</td>
                 <td class="text-end">@Ui.Money(i.Total)</td>
                 <td class="small"><code>@i.TctCode</code></td>
                 <td><span class="badge bg-@css">@t</span></td>
             </tr>
         }
-        @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Không có hóa đơn.</td></tr> }
+        @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Không có hóa đơn.</td></tr> }
         </tbody>
     </table>
+
+    @* Duyệt NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_ApprovedMulti của TVAN gốc). *@
+    <form asp-action="BulkApprove" method="post" class="border rounded p-3 mt-2" onsubmit="return confirm('Duyệt các hóa đơn đã chọn (PENDING → APPROVED)?')">
+        @Html.AntiForgeryToken()
+        <div class="fw-bold small mb-2"><i class="bi bi-check2-all me-1"></i>Duyệt nhiều hóa đơn cùng lúc</div>
+        <div id="bulkApproveIds"></div>
+        <div class="row g-2 align-items-end">
+            <div class="col-md-4"><label class="form-label small mb-1">Ghi chú (tùy chọn)</label><input name="note" class="form-control form-control-sm" placeholder="VD duyệt lô phát hành tháng" /></div>
+            <div class="col-md-3"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="VD kế toán trưởng" /></div>
+            <div class="col-md-3"><button class="btn btn-primary btn-sm w-100"><i class="bi bi-check2-all me-1"></i>Duyệt HĐ đã chọn</button></div>
+        </div>
+        <div class="small text-muted mt-1">Chỉ duyệt được HĐ đang chờ (PENDING) và đã có số. Nếu có HĐ không hợp lệ, không HĐ nào được duyệt.</div>
+    </form>
+    <script>
+        document.querySelector('form[action$="BulkApprove"]')?.addEventListener('submit', function () {
+            var box = document.getElementById('bulkApproveIds');
+            box.innerHTML = '';
+            document.querySelectorAll('.bulk-approve-cb:checked').forEach(function (cb) {
+                var h = document.createElement('input'); h.type = 'hidden'; h.name = 'ids'; h.value = cb.value; box.appendChild(h);
+            });
+        });
+    </script>
 </div></div>

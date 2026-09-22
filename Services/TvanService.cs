@@ -48,6 +48,8 @@ public interface ITvanService
     Task<(bool ok, string msg)> ApproveAsync(int invoiceId, string? filePath, string? pdfFilePath, string? note, string? by);
     Task<(bool ok, string msg)> UnapproveAsync(int invoiceId, string? note, string? by);
     Task<List<ApproveLog>> ApproveLogsAsync(int? invoiceId);
+    Task<(bool ok, string msg, int approvedCount)> BulkApproveAsync(List<int> invoiceIds, string? note, string? by);
+    Task<List<BulkApproveLog>> BulkApproveLogsAsync();
     Task<(bool ok, string msg)> IssueAsync(int invoiceId, string? emailSend, string? note, string? by);
     Task<List<IssueLog>> IssueLogsAsync(int? invoiceId);
     Task<SystemSetting> GetSettingAsync();
@@ -783,6 +785,56 @@ public class TvanService(AppDbContext db) : ITvanService
         if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
     }
+
+    // Duyệt NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_ApprovedMulti của TVAN gốc):
+    // duyệt hàng loạt danh sách HĐ đang ở trạng thái chờ (Draft/PENDING) và đã có số hóa đơn.
+    // Mỗi HĐ đưa sang APPROVED, ghi thời điểm & người duyệt (ApprDTimeUTC/ApprBy), ghi nhật ký duyệt
+    // cho từng HĐ và 1 nhật ký duyệt hàng loạt để đối soát. Nếu có HĐ không hợp lệ thì KHÔNG duyệt HĐ nào.
+    public async Task<(bool ok, string msg, int approvedCount)> BulkApproveAsync(List<int> invoiceIds, string? note, string? by)
+    {
+        if (invoiceIds == null || invoiceIds.Count == 0) return (false, "Cần chọn ít nhất một hóa đơn để duyệt.", 0);
+        var ids = invoiceIds.Distinct().ToList();
+        var invs = await db.Invoices.Include(i => i.Nnt).Where(i => ids.Contains(i.Id)).ToListAsync();
+        if (invs.Count != ids.Count) return (false, "Có hóa đơn không tồn tại.", 0);
+
+        // Kiểm tra toàn bộ trước khi ghi (all-or-nothing).
+        foreach (var inv in invs)
+        {
+            if (inv.Status != InvoiceStatus.Draft)
+                return (false, $"HĐ {inv.Symbol}-{inv.No} không ở trạng thái chờ (PENDING), không thể duyệt.", 0);
+            if (string.IsNullOrWhiteSpace(inv.No))
+                return (false, $"HĐ {inv.Symbol} chưa có số, không thể duyệt.", 0);
+        }
+
+        var now = DateTime.UtcNow;
+        var nos = new List<string>();
+        foreach (var inv in invs)
+        {
+            inv.Status = InvoiceStatus.Approved;
+            inv.ApprDTimeUTC = now;
+            inv.ApprBy = by;
+            db.ApproveLogs.Add(new ApproveLog
+            {
+                InvoiceId = inv.Id, Action = ApproveAction.Approve, Note = note, By = by, CreatedAt = now,
+            });
+            db.Messages.Add(new TranMessage
+            {
+                InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+                Text = $"Duyệt HĐ {inv.Symbol}-{inv.No}{(string.IsNullOrWhiteSpace(note) ? "" : ": " + note.Trim())}", CreatedAt = now
+            });
+            nos.Add($"{inv.Symbol}-{inv.No}");
+        }
+        db.BulkApproveLogs.Add(new BulkApproveLog
+        {
+            Action = BulkApproveAction.BulkApprove, ApprovedCount = invs.Count,
+            InvoiceNos = string.Join(", ", nos), Note = note, By = by, CreatedAt = now
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã duyệt {invs.Count} hóa đơn (APPROVED).", invs.Count);
+    }
+
+    public Task<List<BulkApproveLog>> BulkApproveLogsAsync()
+        => db.BulkApproveLogs.OrderByDescending(l => l.Id).Take(50).ToListAsync();
 
     // Phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc):
     // chỉ phát hành được hóa đơn đã duyệt (APPROVED) và đã có số hóa đơn.

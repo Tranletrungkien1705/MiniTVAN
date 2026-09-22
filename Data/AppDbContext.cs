@@ -22,6 +22,7 @@ public class AppDbContext : DbContext
     public DbSet<ConversionPrintLog> ConversionPrintLogs => Set<ConversionPrintLog>();
     public DbSet<ReSignLog> ReSignLogs => Set<ReSignLog>();
     public DbSet<ApproveLog> ApproveLogs => Set<ApproveLog>();
+    public DbSet<BulkApproveLog> BulkApproveLogs => Set<BulkApproveLog>();
     public DbSet<IssueLog> IssueLogs => Set<IssueLog>();
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
     public DbSet<InvoiceTemplate> InvoiceTemplates => Set<InvoiceTemplate>();
@@ -129,6 +130,11 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => new { x.OrgId, x.InvoiceId });
             e.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<BulkApproveLog>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.CreatedAt });
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<IssueLog>(e =>

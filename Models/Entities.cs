@@ -46,6 +46,10 @@ public enum HotfixFlag { None = 0, Hotfixed = 1 }
 // Loại thao tác duyệt hóa đơn (theo Invoice_Invoice_Approved của TVAN gốc)
 public enum ApproveAction { Approve = 0, Unapprove = 1 }
 
+// Loại thao tác duyệt NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_ApprovedMulti của TVAN gốc):
+// BulkApprove = duyệt hàng loạt danh sách HĐ đang chờ (PENDING) đã có số → APPROVED.
+public enum BulkApproveAction { BulkApprove = 0 }
+
 // Loại thao tác hủy hóa đơn (theo Invoice_Invoice_Cancel của TVAN gốc):
 // Cancel = hủy hóa đơn đang chờ/đã duyệt (PENDING/APPROVED → CANCELED).
 public enum CancelAction { Cancel = 0 }
@@ -403,7 +407,20 @@ public class ApproveLog : IOrgOwned
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
-// Nhật ký ký lại hóa đơn (theo Invoice_Invoice_ReSign của TVAN gốc).
+// Nhật ký duyệt NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_ApprovedMulti của TVAN gốc).
+// Mỗi lần duyệt hàng loạt danh sách HĐ đang chờ (PENDING) đã có số ghi lại để đối soát:
+// số lượng HĐ đã duyệt, danh sách số hóa đơn, ghi chú và người thực hiện.
+public class BulkApproveLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public BulkApproveAction Action { get; set; } = BulkApproveAction.BulkApprove;   // Loại thao tác duyệt hàng loạt
+    public int ApprovedCount { get; set; }             // Số hóa đơn đã duyệt
+    public string? InvoiceNos { get; set; }            // Danh sách số hóa đơn đã duyệt (cách nhau bởi dấu phẩy)
+    public string? Note { get; set; }                  // Ghi chú / lý do
+    public string? By { get; set; }                    // Người thực hiện
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
 // Mỗi lần ký lại hóa đơn đã phát hành ghi lại để đối soát.
 public class ReSignLog : IOrgOwned
 {

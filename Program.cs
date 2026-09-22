@@ -297,6 +297,21 @@ app.MapGet("/api/approve-logs", async (int? invoiceId, ITvanService svc) =>
     return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, action = l.Action.ToString(), l.FilePath, l.PdfFilePath, l.Note, l.By, l.CreatedAt }));
 });
 
+// Duyệt NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_ApprovedMulti của TVAN gốc):
+// duyệt hàng loạt danh sách HĐ đang chờ (PENDING) đã có số → APPROVED.
+app.MapPost("/api/invoices/bulk-approve", async (BulkApproveDto dto, ITvanService svc) =>
+{
+    var (ok, msg, count) = await svc.BulkApproveAsync(dto.Ids ?? new(), dto.Note, dto.By);
+    return ok ? Results.Ok(new { approvedCount = count, msg }) : Results.BadRequest(new { error = msg });
+});
+
+// Nhật ký duyệt nhiều hóa đơn cùng lúc.
+app.MapGet("/api/bulk-approve-logs", async (ITvanService svc) =>
+{
+    var ls = await svc.BulkApproveLogsAsync();
+    return Results.Ok(ls.Select(l => new { l.Id, action = l.Action.ToString(), l.ApprovedCount, l.InvoiceNos, l.Note, l.By, l.CreatedAt }));
+});
+
 // Phát hành hóa đơn đã duyệt (theo Invoice_Invoice_Issued của TVAN gốc): APPROVED → ISSUED,
 // ghi thời điểm/người phát hành + email người nhận.
 app.MapPost("/api/invoices/{id:int}/issue", async (int id, IssueDto dto, ITvanService svc) =>
@@ -588,6 +603,7 @@ record ConversionPrintDto(string? Note, string? By);
 record ReSignDto(string? FileSpec, string? Note, string? By);
 record ApproveDto(string? FilePath, string? PdfFilePath, string? Note, string? By);
 record UnapproveDto(string? Note, string? By);
+record BulkApproveDto(List<int>? Ids, string? Note, string? By);
 record IssueDto(string? EmailSend, string? Note, string? By);
 record Sign60DayDto(Sign60DayFlag Flag, string? Note);
 record AllocateNoDto(DateTime? InvoiceDate, string? By);

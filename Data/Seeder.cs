@@ -73,6 +73,15 @@ public static class Seeder
                 By = "kế toán trưởng", Note = "Duyệt phát hành", CreatedAt = DateTime.UtcNow.AddDays(-5)
             });
             await db.SaveChangesAsync();
+            // Duyệt NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_ApprovedMulti của TVAN gốc):
+            // minh họa 1 lần duyệt hàng loạt 2 HĐ đang chờ đã có số.
+            db.BulkApproveLogs.Add(new BulkApproveLog
+            {
+                Action = BulkApproveAction.BulkApprove, ApprovedCount = 2,
+                InvoiceNos = $"{inv1.Symbol}-{inv1.No}, {inv3.Symbol}-{inv3.No}",
+                Note = "Duyệt lô phát hành đầu kỳ", By = "kế toán trưởng", CreatedAt = DateTime.UtcNow.AddDays(-5)
+            });
+            await db.SaveChangesAsync();
             // Phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc): inv1 đã được phát hành (ISSUED) sau khi duyệt.
             inv1.IssuedDTimeUTC = DateTime.UtcNow.AddDays(-5);
             inv1.IssuedBy = "kế toán";

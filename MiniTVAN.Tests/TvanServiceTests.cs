@@ -927,6 +927,74 @@ public class TvanServiceTests
         }
     }
 
+    // Duyệt NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_ApprovedMulti của TVAN gốc).
+    [Fact]
+    public async Task BulkApprove_MultipleDrafts_AllApprovedAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            await svc.RegisterNntAsync(nntId);
+            var (_, _, inv1) = await svc.CreateInvoiceAsync(new Invoice { NntId = nntId, Symbol = "1C26TAA", BuyerName = "Cty Mua", Amount = 10_000_000 });
+            var (_, _, inv2) = await svc.CreateInvoiceAsync(new Invoice { NntId = nntId, Symbol = "1C26TAA", BuyerName = "Cty Mua", Amount = 20_000_000 });
+            var (ok, msg, count) = await svc.BulkApproveAsync(new List<int> { inv1, inv2 }, "duyệt lô", "kế toán trưởng");
+            Assert.True(ok);
+            Assert.Equal(2, count);
+            Assert.Equal(InvoiceStatus.Approved, (await svc.GetInvoiceAsync(inv1))!.Status);
+            Assert.Equal(InvoiceStatus.Approved, (await svc.GetInvoiceAsync(inv2))!.Status);
+            Assert.Single(await svc.ApproveLogsAsync(inv1));
+            Assert.Single(await svc.ApproveLogsAsync(inv2));
+            var logs = await svc.BulkApproveLogsAsync();
+            Assert.Single(logs);
+            Assert.Equal(2, logs[0].ApprovedCount);
+            Assert.Equal("kế toán trưởng", logs[0].By);
+        }
+    }
+
+    [Fact]
+    public async Task BulkApprove_EmptyList_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, count) = await svc.BulkApproveAsync(new List<int>(), null, null);
+            Assert.False(ok);
+            Assert.Equal(0, count);
+            Assert.Contains("ít nhất một", msg);
+        }
+    }
+
+    [Fact]
+    public async Task BulkApprove_OneNotDraft_NoneApproved()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            await svc.RegisterNntAsync(nntId);
+            var (_, _, inv1) = await svc.CreateInvoiceAsync(new Invoice { NntId = nntId, Symbol = "1C26TAA", BuyerName = "Cty Mua", Amount = 10_000_000 });
+            var (_, _, inv2) = await svc.CreateInvoiceAsync(new Invoice { NntId = nntId, Symbol = "1C26TAA", BuyerName = "Cty Mua", Amount = 20_000_000 });
+            await svc.TransmitAsync(inv2);   // inv2 → Accepted, không còn ở trạng thái chờ
+            var (ok, msg, count) = await svc.BulkApproveAsync(new List<int> { inv1, inv2 }, null, null);
+            Assert.False(ok);
+            Assert.Equal(0, count);
+            Assert.Equal(InvoiceStatus.Draft, (await svc.GetInvoiceAsync(inv1))!.Status);   // all-or-nothing
+            Assert.Empty(await svc.ApproveLogsAsync(inv1));
+            Assert.Empty(await svc.BulkApproveLogsAsync());
+        }
+    }
+
+    [Fact]
+    public async Task BulkApprove_UnknownInvoice_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, inv1) = await Setup(svc);
+            var (ok, msg, count) = await svc.BulkApproveAsync(new List<int> { inv1, 9999 }, null, null);
+            Assert.False(ok);
+            Assert.Equal(0, count);
+            Assert.Contains("không tồn tại", msg);
+        }
+    }
+
     // Cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc).
     // Tạo HĐ nháp CHƯA có số (CreateInvoiceAsync tự cấp số nên tạo trực tiếp qua DbContext).
     private static async Task<(int nntId, int invId)> SetupNoNo(AppDbContext db, ITvanService svc)

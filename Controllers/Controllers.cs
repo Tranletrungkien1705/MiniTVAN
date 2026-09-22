@@ -197,6 +197,16 @@ public class InvoiceController(ITvanService svc) : Controller
         return RedirectToAction(nameof(Detail), new { id });
     }
 
+    // Duyệt NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_ApprovedMulti của TVAN gốc):
+    // duyệt hàng loạt danh sách HĐ đang chờ (PENDING) đã có số → APPROVED.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> BulkApprove(int[] ids, string? note, string? by)
+    {
+        var (ok, msg, _) = await svc.BulkApproveAsync((ids ?? Array.Empty<int>()).ToList(), note, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
     // Phát hành hóa đơn đã duyệt (theo Invoice_Invoice_Issued của TVAN gốc): APPROVED → ISSUED.
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Issue(int id, string? emailSend, string? note, string? by)
@@ -399,6 +409,12 @@ public class ApproveLogController(ITvanService svc) : Controller
         ViewBag.InvoiceId = invoiceId;
         return View(await svc.ApproveLogsAsync(invoiceId));
     }
+}
+
+// Nhật ký duyệt NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_ApprovedMulti của TVAN gốc).
+public class BulkApproveLogController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.BulkApproveLogsAsync());
 }
 
 // Nhật ký phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc).
