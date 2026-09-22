@@ -29,6 +29,14 @@ public static class Seeder
                 new TranMessage { InvoiceId = inv3.Id, NntId = seller.Id, Type = MsgType.AdjustInvoice, Dir = MsgDir.Out, Code = "300", Text = "Gửi HĐ điều chỉnh giảm cho 1C26TAA-00000001", CreatedAt = DateTime.UtcNow.AddDays(-2) },
                 new TranMessage { InvoiceId = inv3.Id, NntId = seller.Id, Type = MsgType.AdjustInvoice, Dir = MsgDir.In, Code = "202", Text = "TCT cấp mã: 0026082612345679", CreatedAt = DateTime.UtcNow.AddDays(-2) });
             await db.SaveChangesAsync();
+
+            // Hạn mức hóa đơn (theo Invoice_license của TVAN gốc): seller đã được cấp 1000 HĐ, đã phát hành 3.
+            var lic = new InvoiceLicense { NntId = seller.Id, TotalQty = 1000, TotalQtyIssued = 3, TotalQtyUsed = 2, UpdatedAt = DateTime.UtcNow.AddDays(-2) };
+            db.Licenses.Add(lic); await db.SaveChangesAsync();
+            db.LicenseHists.AddRange(
+                new LicenseHist { NntId = seller.Id, Type = LicenseHistType.Create, Qty = 1000, TotalQtyAfter = 1000, Note = "Cấp hạn mức ban đầu", CreatedAt = DateTime.UtcNow.AddDays(-10) },
+                new LicenseHist { NntId = seller.Id, Type = LicenseHistType.Increase, Qty = 0, TotalQtyAfter = 1000, Note = "Khởi tạo demo", CreatedAt = DateTime.UtcNow.AddDays(-2) });
+            await db.SaveChangesAsync();
         }
     }
 

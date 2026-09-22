@@ -1,0 +1,71 @@
+@model List<InvoiceLicense>
+@{ ViewData["Title"] = "Hạn mức hóa đơn";
+   var nnts = (List<Nnt>)ViewBag.Nnts;
+   var hists = (List<LicenseHist>)ViewBag.Hists;
+   int? filterNnt = ViewBag.NntId as int?; }
+<div class="row g-3">
+    <div class="col-lg-8"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Hạn mức phát hành theo người nộp thuế</h6>
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>NNT</th><th class="text-end">Hạn mức</th><th class="text-end">Đã phát hành</th><th class="text-end">Đã dùng</th><th class="text-end">Còn lại</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var l in Model)
+            {
+                var pct = l.TotalQty > 0 ? (int)Math.Round(100.0 * l.TotalQtyIssued / l.TotalQty) : 0;
+                var barCss = pct >= 90 ? "bg-danger" : pct >= 70 ? "bg-warning" : "bg-success";
+                <tr>
+                    <td><b>@l.Nnt?.Name</b><div class="small text-muted">MST @l.Nnt?.Mst</div></td>
+                    <td class="text-end fw-semibold">@l.TotalQty.ToString("N0")</td>
+                    <td class="text-end">@l.TotalQtyIssued.ToString("N0")</td>
+                    <td class="text-end">@l.TotalQtyUsed.ToString("N0")</td>
+                    <td class="text-end">
+                        <span class="badge bg-@(l.Remaining > 0 ? "success" : "secondary")">@l.Remaining.ToString("N0")</span>
+                        <div class="progress mt-1" style="height:5px"><div class="progress-bar @barCss" style="width:@(pct)%"></div></div>
+                    </td>
+                    <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/License?nntId=@l.NntId"><i class="bi bi-clock-history me-1"></i>Lịch sử</a></td>
+                </tr>
+            }
+            @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa cấp hạn mức cho NNT nào.</td></tr> }
+            </tbody>
+        </table>
+    </div></div>
+
+        <div class="card mt-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0">Lịch sử cấp/điều chỉnh hạn mức</h6>
+                @if (filterNnt.HasValue) { <a class="small" href="/License">Bỏ lọc</a> }
+            </div>
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Thời điểm</th><th>Loại</th><th class="text-end">Số lượng</th><th class="text-end">Hạn mức sau</th><th>Ghi chú</th></tr></thead>
+                <tbody>
+                @foreach (var h in hists)
+                {
+                    var (t, css) = Ui.LicHist(h.Type);
+                    <tr>
+                        <td class="small text-muted">@h.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                        <td><span class="badge bg-@css">@t</span></td>
+                        <td class="text-end">+@h.Qty.ToString("N0")</td>
+                        <td class="text-end fw-semibold">@h.TotalQtyAfter.ToString("N0")</td>
+                        <td class="small">@h.Note</td>
+                    </tr>
+                }
+                @if (hists.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-3">Chưa có lịch sử.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+    <div class="col-lg-4"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Cấp / tăng hạn mức</h6>
+        <form asp-action="Increase" method="post">@Html.AntiForgeryToken()
+            <div class="mb-2"><label class="form-label small mb-1">Người nộp thuế *</label>
+                <select name="nntId" class="form-select" required>
+                    <option value="">— Chọn NNT —</option>
+                    @foreach (var n in nnts) { <option value="@n.Id">@n.Name (@n.Mst)</option> }
+                </select></div>
+            <div class="mb-2"><label class="form-label small mb-1">Số lượng hạn mức *</label><input name="qty" type="number" min="1" step="1" class="form-control" placeholder="VD 1000" required /></div>
+            <div class="mb-3"><label class="form-label small mb-1">Ghi chú</label><input name="note" class="form-control" placeholder="VD cấp theo công văn 123" /></div>
+            <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Cấp hạn mức</button>
+        </form>
+        <div class="small text-muted mt-3">Nếu NNT chưa có hạn mức, hệ thống tạo mới rồi cộng thêm số lượng. Mọi thay đổi được ghi vào lịch sử.</div>
+    </div></div></div>
+</div>

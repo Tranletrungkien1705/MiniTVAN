@@ -12,6 +12,8 @@ public enum MsgDir { Out = 0, In = 1 }   // Out = gửi tới TCT, In = TCT ph�
 public enum SourceInvoiceCode { Root = 0, Replace = 1, Adjust = 2 }
 // Loại điều chỉnh (theo TConst.InvoiceAdjType của TVAN gốc)
 public enum InvoiceAdjType { Normal = 0, Increase = 1, Decrease = 2 }
+// Loại thao tác trên hạn mức hóa đơn (theo Invoice_licenseCreHist của TVAN gốc)
+public enum LicenseHistType { Create = 0, Increase = 1, Decrease = 2 }
 
 public class Org
 {
@@ -65,6 +67,36 @@ public class Invoice : IOrgOwned
 
     public decimal VatAmount => Math.Round(Amount * VatRate / 100m, 0);
     public decimal Total => Amount + VatAmount;
+}
+
+// Hạn mức hóa đơn (theo bảng Invoice_license của TVAN gốc): số lượng HĐ tối đa NNT được phát hành.
+// TotalQty = hạn mức được cấp; TotalQtyIssued = đã phát hành (ISSUED/CANCEL); TotalQtyUsed = đã sử dụng.
+public class InvoiceLicense : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int NntId { get; set; }
+    public Nnt? Nnt { get; set; }
+    public int TotalQty { get; set; }                // Hạn mức tổng được cấp
+    public int TotalQtyIssued { get; set; }          // Đã phát hành (tính cả HĐ đã hủy)
+    public int TotalQtyUsed { get; set; }            // Đã sử dụng (HĐ còn hiệu lực)
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+
+    public int Remaining => TotalQty - TotalQtyIssued;
+}
+
+// Lịch sử cấp/điều chỉnh hạn mức (theo bảng Invoice_licenseCreHist của TVAN gốc)
+public class LicenseHist : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int NntId { get; set; }
+    public LicenseHistType Type { get; set; }
+    public int Qty { get; set; }                     // Số lượng thay đổi (dương)
+    public int TotalQtyAfter { get; set; }           // Hạn mức tổng sau thay đổi
+    public string? Note { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
 // Nhật ký thông điệp trao đổi với TCT

@@ -98,6 +98,25 @@ public class InvoiceController(ITvanService svc) : Controller
     }
 }
 
+public class LicenseController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? nntId)
+    {
+        ViewBag.Nnts = await svc.NntsAsync();
+        ViewBag.NntId = nntId;
+        ViewBag.Hists = await svc.LicenseHistsAsync(nntId);
+        return View(await svc.LicensesAsync());
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Increase(int nntId, int qty, string? note)
+    {
+        var (ok, msg, _) = await svc.IncreaseLicenseAsync(nntId, qty, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class LookupController(ITvanService svc) : Controller
 {
     [Route("Lookup/{code?}")]

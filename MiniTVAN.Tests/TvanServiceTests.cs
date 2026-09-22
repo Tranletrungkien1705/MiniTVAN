@@ -190,4 +190,65 @@ public class TvanServiceTests
             Assert.Contains("hóa đơn gốc", msg);
         }
     }
+
+    [Fact]
+    public async Task License_Increase_FirstTime_CreatesWithQty()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var (ok, _, _) = await svc.IncreaseLicenseAsync(nntId, 1000, "cấp ban đầu");
+            Assert.True(ok);
+            var lic = await svc.GetLicenseAsync(nntId);
+            Assert.NotNull(lic);
+            Assert.Equal(1000, lic!.TotalQty);
+            Assert.Equal(1000, lic.Remaining);
+            var hists = await svc.LicenseHistsAsync(nntId);
+            Assert.Single(hists);
+            Assert.Equal(LicenseHistType.Create, hists[0].Type);
+            Assert.Equal(1000, hists[0].TotalQtyAfter);
+        }
+    }
+
+    [Fact]
+    public async Task License_Increase_SecondTime_Accumulates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            await svc.IncreaseLicenseAsync(nntId, 1000, "lần 1");
+            var (ok, _, _) = await svc.IncreaseLicenseAsync(nntId, 500, "lần 2");
+            Assert.True(ok);
+            var lic = await svc.GetLicenseAsync(nntId);
+            Assert.Equal(1500, lic!.TotalQty);
+            var hists = await svc.LicenseHistsAsync(nntId);
+            Assert.Equal(2, hists.Count);
+            Assert.Equal(LicenseHistType.Increase, hists[0].Type);   // mới nhất trước
+            Assert.Equal(1500, hists[0].TotalQtyAfter);
+        }
+    }
+
+    [Fact]
+    public async Task License_Increase_NonPositiveQty_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var (ok, msg, _) = await svc.IncreaseLicenseAsync(nntId, 0, "x");
+            Assert.False(ok);
+            Assert.Contains("phải > 0", msg);
+            Assert.Null(await svc.GetLicenseAsync(nntId));
+        }
+    }
+
+    [Fact]
+    public async Task License_Increase_UnknownNnt_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.IncreaseLicenseAsync(9999, 100, "x");
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
 }

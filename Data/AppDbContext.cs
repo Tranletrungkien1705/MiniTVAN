@@ -12,6 +12,8 @@ public class AppDbContext : DbContext
     public DbSet<Nnt> Nnts => Set<Nnt>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<TranMessage> Messages => Set<TranMessage>();
+    public DbSet<InvoiceLicense> Licenses => Set<InvoiceLicense>();
+    public DbSet<LicenseHist> LicenseHists => Set<LicenseHist>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -37,6 +39,18 @@ public class AppDbContext : DbContext
         b.Entity<TranMessage>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.InvoiceId });
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InvoiceLicense>(e =>
+        {
+            e.Ignore(x => x.Remaining);
+            e.HasIndex(x => new { x.OrgId, x.NntId }).IsUnique();   // mỗi NNT một hạn mức
+            e.HasOne(x => x.Nnt).WithMany().HasForeignKey(x => x.NntId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<LicenseHist>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.NntId });
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

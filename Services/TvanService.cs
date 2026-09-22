@@ -23,6 +23,10 @@ public interface ITvanService
     Task<List<TranMessage>> MessagesAsync(int invoiceId);
     Task<Invoice?> LookupByCodeAsync(string tctCode);
     Task<TvanDash> DashboardAsync();
+    Task<List<InvoiceLicense>> LicensesAsync();
+    Task<InvoiceLicense?> GetLicenseAsync(int nntId);
+    Task<(bool ok, string msg, int id)> IncreaseLicenseAsync(int nntId, int qty, string? note);
+    Task<List<LicenseHist>> LicenseHistsAsync(int? nntId);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -255,5 +259,44 @@ public class TvanService(AppDbContext db) : ITvanService
             invs.Count(i => i.Status == InvoiceStatus.Rejected),
             invs.Where(i => i.Status == InvoiceStatus.Accepted).Sum(i => i.Total),
             await db.Invoices.Include(i => i.Nnt).OrderByDescending(i => i.Id).Take(8).ToListAsync());
+    }
+
+    // Hạn mức hóa đơn (theo bảng Invoice_license của TVAN gốc): mỗi NNT có một hạn mức tổng.
+    public Task<List<InvoiceLicense>> LicensesAsync() =>
+        db.Licenses.Include(l => l.Nnt).OrderBy(l => l.Nnt!.Name).ToListAsync();
+
+    public Task<InvoiceLicense?> GetLicenseAsync(int nntId) =>
+        db.Licenses.Include(l => l.Nnt).FirstOrDefaultAsync(l => l.NntId == nntId);
+
+    // Cấp/điều chỉnh hạn mức (theo Invoice_license_IncreaseQty của TVAN gốc):
+    // nếu NNT chưa có hạn mức thì tạo mới (TotalQty=0) rồi cộng thêm Qty; luôn ghi lịch sử vào Invoice_licenseCreHist.
+    public async Task<(bool ok, string msg, int id)> IncreaseLicenseAsync(int nntId, int qty, string? note)
+    {
+        var nnt = await db.Nnts.FirstOrDefaultAsync(n => n.Id == nntId);
+        if (nnt == null) return (false, "Không tìm thấy NNT.", 0);
+        if (qty <= 0) return (false, "Số lượng hạn mức phải > 0.", 0);
+
+        var lic = await db.Licenses.FirstOrDefaultAsync(l => l.NntId == nntId);
+        var type = LicenseHistType.Increase;
+        if (lic == null)
+        {
+            lic = new InvoiceLicense { NntId = nntId, TotalQty = 0 };
+            db.Licenses.Add(lic);
+            type = LicenseHistType.Create;
+        }
+        lic.TotalQty += qty;
+        lic.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        db.LicenseHists.Add(new LicenseHist { NntId = nntId, Type = type, Qty = qty, TotalQtyAfter = lic.TotalQty, Note = note });
+        await db.SaveChangesAsync();
+        return (true, $"Đã {(type == LicenseHistType.Create ? "cấp" : "tăng")} hạn mức {qty:N0} cho {nnt.Name}. Hạn mức tổng: {lic.TotalQty:N0}.", lic.Id);
+    }
+
+    public Task<List<LicenseHist>> LicenseHistsAsync(int? nntId)
+    {
+        var q = db.LicenseHists.AsQueryable();
+        if (nntId.HasValue) q = q.Where(h => h.NntId == nntId.Value);
+        return q.OrderByDescending(h => h.Id).ToListAsync();
     }
 }

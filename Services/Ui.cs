@@ -50,4 +50,12 @@ public static class Ui
         InvoiceAdjType.Decrease => "Giảm",
         _ => "Bình thường"
     };
+
+    public static (string text, string css) LicHist(LicenseHistType t) => t switch
+    {
+        LicenseHistType.Create   => ("Cấp mới", "primary"),
+        LicenseHistType.Increase => ("Tăng", "success"),
+        LicenseHistType.Decrease => ("Giảm", "warning"),
+        _ => (t.ToString(), "secondary")
+    };
 }

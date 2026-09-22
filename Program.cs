@@ -148,6 +148,20 @@ app.MapPost("/api/invoices/{id:int}/replace", async (int id, ReplaceDto dto, ITv
     return ok ? Results.Ok(new { id = newId, msg }) : Results.BadRequest(new { id = newId, error = msg });
 });
 
+// Hạn mức hóa đơn (theo Invoice_license của TVAN gốc): xem hạn mức + lịch sử cấp/điều chỉnh.
+app.MapGet("/api/licenses", async (ITvanService svc) =>
+{
+    var ls = await svc.LicensesAsync();
+    return Results.Ok(ls.Select(l => new { nntId = l.NntId, nnt = l.Nnt?.Name, mst = l.Nnt?.Mst, totalQty = l.TotalQty, issued = l.TotalQtyIssued, used = l.TotalQtyUsed, remaining = l.Remaining }));
+});
+
+// Cấp/tăng hạn mức cho NNT (theo Invoice_license_IncreaseQty của TVAN gốc).
+app.MapPost("/api/licenses/increase", async (LicenseIncreaseDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.IncreaseLicenseAsync(dto.NntId, dto.Qty, dto.Note);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -158,3 +172,4 @@ record ImportNntDto(string? Mst, string? Name, string? Address, string? Email);
 record ImportInvDto(string? SellerMst, string? Symbol, string? No, string? BuyerName, string? BuyerMst, string? BuyerAddress, decimal Amount, decimal VatRate, DateTime? IssuedDate, string? TctCode);
 record AdjustDto(InvoiceAdjType AdjType, decimal Amount, decimal VatRate, string? Reason);
 record ReplaceDto(decimal Amount, decimal VatRate, string? Reason);
+record LicenseIncreaseDto(int NntId, int Qty, string? Note);
