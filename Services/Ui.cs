@@ -8,6 +8,7 @@ public static class Ui
     public static (string text, string css) Inv(InvoiceStatus s) => s switch
     {
         InvoiceStatus.Draft     => ("Nháp", "secondary"),
+        InvoiceStatus.Approved  => ("Đã duyệt", "primary"),
         InvoiceStatus.Sent      => ("Đang gửi TCT", "info"),
         InvoiceStatus.Accepted  => ("CQT chấp nhận", "success"),
         InvoiceStatus.Rejected  => ("CQT từ chối", "danger"),
@@ -119,5 +120,12 @@ public static class Ui
         HotfixFlag.Hotfixed => ("Đã ký lại", "primary"),
         HotfixFlag.None     => ("Chưa ký lại", "secondary"),
         _ => (f.ToString(), "secondary")
+    };
+
+    public static (string text, string css) ApproveAction(ApproveAction a) => a switch
+    {
+        Models.ApproveAction.Approve   => ("Duyệt hóa đơn", "primary"),
+        Models.ApproveAction.Unapprove => ("Bỏ duyệt", "secondary"),
+        _ => (a.ToString(), "secondary")
     };
 }

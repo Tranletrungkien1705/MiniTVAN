@@ -21,6 +21,7 @@ public class AppDbContext : DbContext
     public DbSet<InvoiceEmailLog> InvoiceEmailLogs => Set<InvoiceEmailLog>();
     public DbSet<ConversionPrintLog> ConversionPrintLogs => Set<ConversionPrintLog>();
     public DbSet<ReSignLog> ReSignLogs => Set<ReSignLog>();
+    public DbSet<ApproveLog> ApproveLogs => Set<ApproveLog>();
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
 
     protected override void OnModelCreating(ModelBuilder b)
@@ -104,6 +105,12 @@ public class AppDbContext : DbContext
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<ReSignLog>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.InvoiceId });
+            e.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ApproveLog>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.InvoiceId });
             e.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);

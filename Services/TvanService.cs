@@ -45,6 +45,9 @@ public interface ITvanService
     Task<List<ConversionPrintLog>> ConversionPrintLogsAsync(int? invoiceId);
     Task<(bool ok, string msg)> ReSignAsync(int invoiceId, string? fileSpec, string? note, string? by);
     Task<List<ReSignLog>> ReSignLogsAsync(int? invoiceId);
+    Task<(bool ok, string msg)> ApproveAsync(int invoiceId, string? filePath, string? pdfFilePath, string? note, string? by);
+    Task<(bool ok, string msg)> UnapproveAsync(int invoiceId, string? note, string? by);
+    Task<List<ApproveLog>> ApproveLogsAsync(int? invoiceId);
     Task<SystemSetting> GetSettingAsync();
     Task<(bool ok, string msg)> SetSign60DayAsync(Sign60DayFlag flag, string? note);
 }
@@ -676,6 +679,68 @@ public class TvanService(AppDbContext db) : ITvanService
     public Task<List<ReSignLog>> ReSignLogsAsync(int? invoiceId)
     {
         var q = db.ReSignLogs.Include(l => l.Invoice).AsQueryable();
+        if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
+        return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
+
+    // Duyệt hóa đơn (theo Invoice_Invoice_Approved của TVAN gốc):
+    // chỉ duyệt được hóa đơn đang ở trạng thái chờ (Draft/PENDING) và đã có số hóa đơn.
+    // Đưa HĐ sang APPROVED, ghi đường dẫn file XML/PDF, thời điểm & người duyệt (ApprDTimeUTC/ApprBy) và ghi nhật ký.
+    public async Task<(bool ok, string msg)> ApproveAsync(int invoiceId, string? filePath, string? pdfFilePath, string? note, string? by)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.");
+        if (inv.Status != InvoiceStatus.Draft) return (false, "Chỉ duyệt được hóa đơn đang ở trạng thái chờ (PENDING).");
+        if (string.IsNullOrWhiteSpace(inv.No)) return (false, "Hóa đơn chưa có số, không thể duyệt.");
+
+        inv.Status = InvoiceStatus.Approved;
+        inv.InvoiceFilePath = filePath;
+        inv.InvoicePDFFilePath = pdfFilePath;
+        inv.ApprDTimeUTC = DateTime.UtcNow;
+        inv.ApprBy = by;
+        db.ApproveLogs.Add(new ApproveLog
+        {
+            InvoiceId = inv.Id, Action = ApproveAction.Approve,
+            FilePath = filePath, PdfFilePath = pdfFilePath, Note = note, By = by,
+        });
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Duyệt HĐ {inv.Symbol}-{inv.No}{(string.IsNullOrWhiteSpace(note) ? "" : ": " + note.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã duyệt HĐ {inv.Symbol}-{inv.No} (APPROVED).");
+    }
+
+    // Bỏ duyệt hóa đơn (theo Invoice_Invoice_Approved của TVAN gốc):
+    // đưa HĐ đã duyệt (APPROVED) về lại trạng thái chờ (PENDING), xóa dấu vết duyệt và ghi nhật ký.
+    public async Task<(bool ok, string msg)> UnapproveAsync(int invoiceId, string? note, string? by)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.");
+        if (inv.Status != InvoiceStatus.Approved) return (false, "Chỉ bỏ duyệt được hóa đơn đã duyệt (APPROVED).");
+
+        inv.Status = InvoiceStatus.Draft;
+        inv.InvoiceFilePath = null;
+        inv.InvoicePDFFilePath = null;
+        inv.ApprDTimeUTC = null;
+        inv.ApprBy = null;
+        db.ApproveLogs.Add(new ApproveLog
+        {
+            InvoiceId = inv.Id, Action = ApproveAction.Unapprove, Note = note, By = by,
+        });
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Bỏ duyệt HĐ {inv.Symbol}-{inv.No}{(string.IsNullOrWhiteSpace(note) ? "" : ": " + note.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã bỏ duyệt HĐ {inv.Symbol}-{inv.No} (về PENDING).");
+    }
+
+    public Task<List<ApproveLog>> ApproveLogsAsync(int? invoiceId)
+    {
+        var q = db.ApproveLogs.Include(l => l.Invoice).AsQueryable();
         if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
     }

@@ -276,6 +276,27 @@ app.MapGet("/api/re-sign-logs", async (int? invoiceId, ITvanService svc) =>
     return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, l.FilePath, l.Note, l.By, l.CreatedAt }));
 });
 
+// Duyệt hóa đơn (theo Invoice_Invoice_Approved của TVAN gốc): PENDING → APPROVED, ghi đường dẫn file XML/PDF + người duyệt.
+app.MapPost("/api/invoices/{id:int}/approve", async (int id, ApproveDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.ApproveAsync(id, dto.FilePath, dto.PdfFilePath, dto.Note, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Bỏ duyệt hóa đơn (theo Invoice_Invoice_Approved của TVAN gốc): APPROVED → PENDING.
+app.MapPost("/api/invoices/{id:int}/unapprove", async (int id, UnapproveDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.UnapproveAsync(id, dto.Note, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Nhật ký duyệt hóa đơn (lọc theo hóa đơn nếu có).
+app.MapGet("/api/approve-logs", async (int? invoiceId, ITvanService svc) =>
+{
+    var ls = await svc.ApproveLogsAsync(invoiceId);
+    return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, action = l.Action.ToString(), l.FilePath, l.PdfFilePath, l.Note, l.By, l.CreatedAt }));
+});
+
 // Cấu hình hệ thống: trạng thái kiểm tra ký quá 60 ngày (theo Invoice_Invoice_Support_Sign60Day của TVAN gốc).
 app.MapGet("/api/settings/sign60day", async (ITvanService svc) =>
 {
@@ -309,4 +330,6 @@ record GuiTongHopDto(int NntId, PeriodType LKDLieu, string? KDLieu, int BSLThu, 
 record SendEmailDto(string? ToEmail, string? SentBy);
 record ConversionPrintDto(string? Note, string? By);
 record ReSignDto(string? FileSpec, string? Note, string? By);
+record ApproveDto(string? FilePath, string? PdfFilePath, string? Note, string? By);
+record UnapproveDto(string? Note, string? By);
 record Sign60DayDto(Sign60DayFlag Flag, string? Note);

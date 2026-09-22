@@ -67,6 +67,7 @@ public class InvoiceController(ITvanService svc) : Controller
         ViewBag.EmailLogs = await svc.EmailLogsAsync(id);
         ViewBag.ConvLogs = await svc.ConversionPrintLogsAsync(id);
         ViewBag.ReSignLogs = await svc.ReSignLogsAsync(id);
+        ViewBag.ApproveLogs = await svc.ApproveLogsAsync(id);
         return View(inv);
     }
 
@@ -169,6 +170,24 @@ public class InvoiceController(ITvanService svc) : Controller
     public async Task<IActionResult> ReSign(int id, string? fileSpec, string? note, string? by)
     {
         var (ok, msg) = await svc.ReSignAsync(id, fileSpec, note, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Duyệt hóa đơn (theo Invoice_Invoice_Approved của TVAN gốc): PENDING → APPROVED.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Approve(int id, string? filePath, string? pdfFilePath, string? note, string? by)
+    {
+        var (ok, msg) = await svc.ApproveAsync(id, filePath, pdfFilePath, note, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Bỏ duyệt hóa đơn (theo Invoice_Invoice_Approved của TVAN gốc): APPROVED → PENDING.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Unapprove(int id, string? note, string? by)
+    {
+        var (ok, msg) = await svc.UnapproveAsync(id, note, by);
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Detail), new { id });
     }
@@ -283,6 +302,16 @@ public class ReSignLogController(ITvanService svc) : Controller
     {
         ViewBag.InvoiceId = invoiceId;
         return View(await svc.ReSignLogsAsync(invoiceId));
+    }
+}
+
+// Nhật ký duyệt hóa đơn (theo Invoice_Invoice_Approved của TVAN gốc).
+public class ApproveLogController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? invoiceId)
+    {
+        ViewBag.InvoiceId = invoiceId;
+        return View(await svc.ApproveLogsAsync(invoiceId));
     }
 }
 

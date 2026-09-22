@@ -847,4 +847,83 @@ public class TvanServiceTests
             Assert.Contains("Không tìm thấy", msg);
         }
     }
+
+    [Fact]
+    public async Task Approve_OnDraft_SetsApprovedAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);   // Draft (PENDING)
+            var (ok, msg) = await svc.ApproveAsync(invId, "2026-06-12/HD0001.xml", "2026-06-12/HD0001.pdf", "duyệt phát hành", "kế toán trưởng");
+            Assert.True(ok);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(InvoiceStatus.Approved, inv!.Status);
+            Assert.Equal("2026-06-12/HD0001.xml", inv.InvoiceFilePath);
+            Assert.Equal("2026-06-12/HD0001.pdf", inv.InvoicePDFFilePath);
+            Assert.NotNull(inv.ApprDTimeUTC);
+            Assert.Equal("kế toán trưởng", inv.ApprBy);
+            var logs = await svc.ApproveLogsAsync(invId);
+            Assert.Single(logs);
+            Assert.Equal(ApproveAction.Approve, logs[0].Action);
+            Assert.Equal("kế toán trưởng", logs[0].By);
+        }
+    }
+
+    [Fact]
+    public async Task Approve_OnAccepted_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);   // Accepted, không còn ở trạng thái chờ
+            var (ok, msg) = await svc.ApproveAsync(invId, null, null, null, null);
+            Assert.False(ok);
+            Assert.Contains("trạng thái chờ", msg);
+            Assert.Empty(await svc.ApproveLogsAsync(invId));
+        }
+    }
+
+    [Fact]
+    public async Task Approve_UnknownInvoice_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.ApproveAsync(9999, null, null, null, null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
+
+    [Fact]
+    public async Task Unapprove_AfterApproved_BackToDraftAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.ApproveAsync(invId, "a.xml", "a.pdf", null, "kế toán");
+            var (ok, msg) = await svc.UnapproveAsync(invId, "cần sửa lại", "kế toán");
+            Assert.True(ok);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(InvoiceStatus.Draft, inv!.Status);
+            Assert.Null(inv.InvoiceFilePath);
+            Assert.Null(inv.InvoicePDFFilePath);
+            Assert.Null(inv.ApprDTimeUTC);
+            Assert.Null(inv.ApprBy);
+            var logs = await svc.ApproveLogsAsync(invId);
+            Assert.Equal(2, logs.Count);
+            Assert.Equal(ApproveAction.Unapprove, logs[0].Action);   // mới nhất trước
+        }
+    }
+
+    [Fact]
+    public async Task Unapprove_OnDraft_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);   // Draft, chưa duyệt
+            var (ok, msg) = await svc.UnapproveAsync(invId, null, null);
+            Assert.False(ok);
+            Assert.Contains("đã duyệt", msg);
+        }
+    }
 }

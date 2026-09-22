@@ -64,6 +64,15 @@ public static class Seeder
                 Note = "Ký lại do lỗi chữ ký", CreatedAt = DateTime.UtcNow.AddDays(-4)
             });
             await db.SaveChangesAsync();
+            // Duyệt hóa đơn (theo Invoice_Invoice_Approved của TVAN gốc): inv1 đã được duyệt trước khi phát hành.
+            db.ApproveLogs.Add(new ApproveLog
+            {
+                InvoiceId = inv1.Id, Action = ApproveAction.Approve,
+                FilePath = $"{DateTime.Today.AddDays(-5):yyyy-MM-dd}/HD00000001.xml",
+                PdfFilePath = $"{DateTime.Today.AddDays(-5):yyyy-MM-dd}/HD00000001.pdf",
+                By = "kế toán trưởng", Note = "Duyệt phát hành", CreatedAt = DateTime.UtcNow.AddDays(-5)
+            });
+            await db.SaveChangesAsync();
             db.Messages.AddRange(
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300", Text = "Gửi HĐ 1C26TAA-00000001", CreatedAt = DateTime.UtcNow.AddDays(-5) },
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "202", Text = "TCT cấp mã: 0026082512345678", CreatedAt = DateTime.UtcNow.AddDays(-5) },

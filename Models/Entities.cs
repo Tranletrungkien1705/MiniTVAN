@@ -5,7 +5,8 @@ public interface IOrgOwned { Guid OrgId { get; set; } }
 public enum RegStatus { None = 0, Pending = 1, Registered = 2, Rejected = 3 }
 // Vòng đời hóa đơn khi truyền tới cơ quan thuế
 // Deleted = xóa hóa đơn đã phát hành (theo TConst.InvoiceStatus.Deleted của TVAN gốc)
-public enum InvoiceStatus { Draft = 0, Sent = 1, Accepted = 2, Rejected = 3, Cancelled = 4, Deleted = 5 }
+// Approved = đã duyệt hóa đơn (theo TConst.InvoiceStatus.Approved của TVAN gốc): PENDING → APPROVED trước khi phát hành.
+public enum InvoiceStatus { Draft = 0, Sent = 1, Accepted = 2, Rejected = 3, Cancelled = 4, Deleted = 5, Approved = 6 }
 public enum MsgType { RegisterNnt = 0, SendInvoice = 1, CancelInvoice = 2, AdjustInvoice = 3, ReplaceInvoice = 4 }
 public enum MsgDir { Out = 0, In = 1 }   // Out = gửi tới TCT, In = TCT phản hồi
 
@@ -41,6 +42,9 @@ public enum Sign60DayFlag { Check = 1, Uncheck = 0 }
 // Cờ đánh dấu hóa đơn đã được ký lại (theo Invoice_Invoice.FlagHotfix của TVAN gốc):
 // None = chưa ký lại (FlagHotfix is null), Hotfixed = đã ký lại (FlagHotfix = '1').
 public enum HotfixFlag { None = 0, Hotfixed = 1 }
+
+// Loại thao tác duyệt hóa đơn (theo Invoice_Invoice_Approved của TVAN gốc)
+public enum ApproveAction { Approve = 0, Unapprove = 1 }
 
 public class Org
 {
@@ -118,6 +122,11 @@ public class Invoice : IOrgOwned
     public DateTime? DeleteDTimeUTC { get; set; }
     public string? DeleteBy { get; set; }
     public string? Remark { get; set; }
+
+    // Duyệt hóa đơn (theo Invoice_Invoice_Approved của TVAN gốc):
+    // InvoiceFilePath/InvoicePDFFilePath = đường dẫn file XML/PDF hóa đơn đã duyệt;
+    // ApprDTimeUTC/ApprBy = thời điểm & người duyệt (dùng chung với ký lại).
+    public string? InvoicePDFFilePath { get; set; }
 
     public decimal VatAmount => Math.Round(Amount * VatRate / 100m, 0);
     public decimal Total => Amount + VatAmount;
@@ -264,6 +273,22 @@ public class ConversionPrintLog : IOrgOwned
     public int InvoiceId { get; set; }
     public Invoice? Invoice { get; set; }
     public ConversionPrintAction Action { get; set; }   // Print = in chuyển đổi, Reset = bỏ cờ in chuyển đổi
+    public string? Note { get; set; }                  // Ghi chú / lý do
+    public string? By { get; set; }                    // Người thực hiện
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Nhật ký duyệt hóa đơn (theo Invoice_Invoice_Approved của TVAN gốc).
+// Mỗi lần duyệt (PENDING → APPROVED) hoặc bỏ duyệt (APPROVED → PENDING) ghi lại để đối soát.
+public class ApproveLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InvoiceId { get; set; }
+    public Invoice? Invoice { get; set; }
+    public ApproveAction Action { get; set; }          // Approve = duyệt, Unapprove = bỏ duyệt
+    public string? FilePath { get; set; }              // Đường dẫn file XML hóa đơn đã duyệt
+    public string? PdfFilePath { get; set; }           // Đường dẫn file PDF hóa đơn đã duyệt
     public string? Note { get; set; }                  // Ghi chú / lý do
     public string? By { get; set; }                    // Người thực hiện
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
