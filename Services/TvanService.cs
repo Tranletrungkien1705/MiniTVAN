@@ -57,6 +57,7 @@ public interface ITvanService
     Task<(bool ok, string msg)> InactivateTemplateAsync(int templateId, string? remark);
     Task<(bool ok, string msg)> IncreaseTemplateEndNoAsync(int templateId, int newEndInvoiceNo, string? remark, string? by);
     Task<List<TemplateRangeLog>> TemplateRangeLogsAsync(int? templateId);
+    Task<(bool ok, string msg)> UpdateTemplateContactAsync(int templateId, string? nntName, string? nntAddress, string? nntPhone, string? nntEmail, string? nntWebsite, bool flagStyleComma, string? by);
     Task<(bool ok, string msg, string? invoiceNo)> AllocateInvoiceNoAsync(int invoiceId, DateTime invoiceDate, string? by);
     Task<(bool ok, string msg, string? invoiceNo)> AllocateApproveIssueAsync(int invoiceId, DateTime invoiceDate, string? filePath, string? pdfFilePath, string? emailSend, string? note, string? by);
     Task<List<InvoiceNoAllocLog>> AllocLogsAsync(int? invoiceId);
@@ -949,6 +950,34 @@ public class TvanService(AppDbContext db) : ITvanService
         var q = db.TemplateRangeLogs.Include(l => l.Template).AsQueryable();
         if (templateId.HasValue) q = q.Where(l => l.TemplateId == templateId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
+
+    // Cập nhật thông tin liên hệ của NNT in trên mẫu hóa đơn
+    // (theo Invoice_TempInvoice_SupportUpdEmailAndAddress của TVAN gốc):
+    // sửa tên đơn vị, địa chỉ, điện thoại, email, website và cờ dấu phân cách động (FlagStyleComma)
+    // hiển thị trên hóa đơn phát hành. Ràng buộc theo TVAN gốc: mẫu phải tồn tại; nếu cập nhật
+    // tên đơn vị thì tên không được rỗng. Ghi lại thời điểm & người cập nhật để đối soát.
+    public async Task<(bool ok, string msg)> UpdateTemplateContactAsync(int templateId, string? nntName, string? nntAddress, string? nntPhone, string? nntEmail, string? nntWebsite, bool flagStyleComma, string? by)
+    {
+        var tpl = await db.InvoiceTemplates.Include(t => t.Nnt).FirstOrDefaultAsync(t => t.Id == templateId);
+        if (tpl == null) return (false, "Không tìm thấy mẫu hóa đơn.");
+        if (string.IsNullOrWhiteSpace(nntName)) return (false, "Tên đơn vị không được để trống.");
+
+        tpl.NNTName = nntName.Trim();
+        tpl.NNTAddress = string.IsNullOrWhiteSpace(nntAddress) ? null : nntAddress.Trim();
+        tpl.NNTPhone = string.IsNullOrWhiteSpace(nntPhone) ? null : nntPhone.Trim();
+        tpl.NNTEmail = string.IsNullOrWhiteSpace(nntEmail) ? null : nntEmail.Trim();
+        tpl.NNTWebsite = string.IsNullOrWhiteSpace(nntWebsite) ? null : nntWebsite.Trim();
+        tpl.FlagStyleComma = flagStyleComma;
+        tpl.ContactUpdatedAt = DateTime.UtcNow;
+        tpl.ContactUpdatedBy = by;
+        db.Messages.Add(new TranMessage
+        {
+            NntId = tpl.NntId, Type = MsgType.RegisterNnt, Dir = MsgDir.Out, Code = "300",
+            Text = $"Cập nhật thông tin liên hệ mẫu {tpl.FormNo} ({tpl.TInvoiceCode}): {tpl.NNTName}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật thông tin liên hệ mẫu {tpl.FormNo} ({tpl.TInvoiceCode}).");
     }
 
     // Cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc):

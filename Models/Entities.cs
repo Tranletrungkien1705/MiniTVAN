@@ -455,6 +455,20 @@ public class InvoiceTemplate : IOrgOwned
     public TctAcceptStatus? TCTChapNhan { get; set; }
     public DateTime? TCTChapNhanDTime { get; set; }
 
+    // Thông tin liên hệ của NNT in trên mẫu hóa đơn (theo Invoice_TempInvoice_SupportUpdEmailAndAddress
+    // của TVAN gốc): tên đơn vị, địa chỉ, điện thoại, email, website hiển thị trên hóa đơn phát hành.
+    public string? NNTName { get; set; }
+    public string? NNTAddress { get; set; }
+    public string? NNTPhone { get; set; }
+    public string? NNTEmail { get; set; }
+    public string? NNTWebsite { get; set; }
+    // Cấu hình dấu phân cách động (theo Invoice_TempInvoice.FlagStyleComma của TVAN gốc):
+    // true = dùng dấu ',' động khi hiển thị số trên hóa đơn.
+    public bool FlagStyleComma { get; set; }
+    // Thời điểm & người cập nhật thông tin liên hệ gần nhất (theo LogLUDTimeUTC/LogLUBy của TVAN gốc).
+    public DateTime? ContactUpdatedAt { get; set; }
+    public string? ContactUpdatedBy { get; set; }
+
     public int QtyRemain => EndInvoiceNo - StartInvoiceNo + 1 - QtyUsed;
 }
 

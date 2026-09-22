@@ -31,6 +31,10 @@
                         {
                             var (acText, acCss) = Ui.TctAccept(t.TCTChapNhan.Value);
                             <span class="badge bg-@acCss">CQT: @acText</span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(t.NNTName))
+                        {
+                            <div class="small text-muted"><i class="bi bi-person-lines-fill me-1"></i>@t.NNTName@(string.IsNullOrWhiteSpace(t.NNTPhone) ? "" : " · " + t.NNTPhone)</div>
                         }</td>
                     <td><b>@t.Nnt?.Name</b><div class="small text-muted">MST @t.Nnt?.Mst</div></td>
                     <td class="small">@Ui.NoRule(t.TTType)</td>
@@ -42,6 +46,10 @@
                     </td>
                     <td class="text-end">
                         <a class="btn btn-sm btn-outline-primary" href="/InvoiceTemplate?nntId=@t.NntId"><i class="bi bi-funnel me-1"></i>Lọc</a>
+                        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#contactModal"
+                                data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode"
+                                data-name="@t.NNTName" data-address="@t.NNTAddress" data-phone="@t.NNTPhone"
+                                data-email="@t.NNTEmail" data-website="@t.NNTWebsite" data-comma="@(t.FlagStyleComma ? "true" : "false")"><i class="bi bi-person-lines-fill me-1"></i>Liên hệ</button>
                         @if (t.TInvoiceStatus == TemplateStatus.Draft && t.FlagActive)
                         {
                             <button class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#issueModal"
@@ -238,6 +246,37 @@
     </form>
 </div></div></div>
 
+<!-- Cập nhật thông tin liên hệ của NNT trên mẫu hóa đơn (theo Invoice_TempInvoice_SupportUpdEmailAndAddress của TVAN gốc) -->
+<div class="modal fade" id="contactModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <form method="post" action="/InvoiceTemplate/UpdateContact">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="id" id="contactId" />
+        <div class="modal-header"><h6 class="modal-title">Thông tin liên hệ trên mẫu hóa đơn</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <p class="small text-muted mb-3">Thông tin liên hệ của NNT in trên mẫu <b id="contactLabel"></b>.</p>
+            <div class="mb-2"><label class="form-label small mb-1">Tên đơn vị</label>
+                <input type="text" name="nntName" id="contactName" class="form-control" required /></div>
+            <div class="mb-2"><label class="form-label small mb-1">Địa chỉ</label>
+                <input type="text" name="nntAddress" id="contactAddress" class="form-control" /></div>
+            <div class="row g-2">
+                <div class="col-6 mb-2"><label class="form-label small mb-1">Điện thoại</label>
+                    <input type="text" name="nntPhone" id="contactPhone" class="form-control" /></div>
+                <div class="col-6 mb-2"><label class="form-label small mb-1">Email</label>
+                    <input type="text" name="nntEmail" id="contactEmail" class="form-control" /></div>
+            </div>
+            <div class="mb-2"><label class="form-label small mb-1">Website</label>
+                <input type="text" name="nntWebsite" id="contactWebsite" class="form-control" /></div>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" name="flagStyleComma" id="contactComma" value="true" />
+                <label class="form-check-label small" for="contactComma">Dùng dấu phân cách động (FlagStyleComma)</label>
+            </div>
+            <div class="mb-2"><label class="form-label small mb-1">Người thực hiện</label>
+                <input type="text" name="by" class="form-control" placeholder="VD: kế toán" /></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-primary">Lưu thông tin</button></div>
+    </form>
+</div></div></div>
+
 @section Scripts {
 <script>
     document.getElementById('issueModal').addEventListener('show.bs.modal', e => {
@@ -266,6 +305,17 @@
         const b = e.relatedTarget;
         document.getElementById('receiveTctId').value = b.dataset.id;
         document.getElementById('receiveTctLabel').textContent = b.dataset.form + ' (' + b.dataset.code + ')';
+    });
+    document.getElementById('contactModal').addEventListener('show.bs.modal', e => {
+        const b = e.relatedTarget;
+        document.getElementById('contactId').value = b.dataset.id;
+        document.getElementById('contactLabel').textContent = b.dataset.form + ' (' + b.dataset.code + ')';
+        document.getElementById('contactName').value = b.dataset.name || '';
+        document.getElementById('contactAddress').value = b.dataset.address || '';
+        document.getElementById('contactPhone').value = b.dataset.phone || '';
+        document.getElementById('contactEmail').value = b.dataset.email || '';
+        document.getElementById('contactWebsite').value = b.dataset.website || '';
+        document.getElementById('contactComma').checked = b.dataset.comma === 'true';
     });
 </script>
 }

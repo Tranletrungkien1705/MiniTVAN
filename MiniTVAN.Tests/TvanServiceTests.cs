@@ -1930,4 +1930,54 @@ public class TvanServiceTests
             Assert.Equal("Mã kho", ls[0].InvoiceDtlCustomFieldName);
         }
     }
+
+    // ===== Cập nhật thông tin liên hệ của NNT trên mẫu hóa đơn
+    // (theo Invoice_TempInvoice_SupportUpdEmailAndAddress của TVAN gốc) =====
+
+    [Fact]
+    public async Task UpdateTemplateContact_SavesAllFields()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddTemplate(db, nntId);
+            var (ok, msg) = await svc.UpdateTemplateContactAsync(tplId, "Cty Bán", "Hà Nội", "024 1234", "kt@cty.vn", "https://cty.vn", true, "kế toán");
+            Assert.True(ok);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            Assert.Equal("Cty Bán", tpl.NNTName);
+            Assert.Equal("Hà Nội", tpl.NNTAddress);
+            Assert.Equal("024 1234", tpl.NNTPhone);
+            Assert.Equal("kt@cty.vn", tpl.NNTEmail);
+            Assert.Equal("https://cty.vn", tpl.NNTWebsite);
+            Assert.True(tpl.FlagStyleComma);
+            Assert.Equal("kế toán", tpl.ContactUpdatedBy);
+            Assert.NotNull(tpl.ContactUpdatedAt);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateTemplateContact_EmptyName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddTemplate(db, nntId);
+            var (ok, msg) = await svc.UpdateTemplateContactAsync(tplId, "  ", "Hà Nội", null, null, null, false, null);
+            Assert.False(ok);
+            Assert.Contains("Tên đơn vị", msg);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            Assert.Null(tpl.NNTName);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateTemplateContact_UnknownTemplate_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.UpdateTemplateContactAsync(9999, "Cty Bán", null, null, null, null, false, null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
 }

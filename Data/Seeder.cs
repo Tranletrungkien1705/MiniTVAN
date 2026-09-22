@@ -205,7 +205,12 @@ public static class Seeder
                     FormNo = "1C26TAA", Sign = "K26TAA", TTType = InvoiceNoRule.TT78,
                     EffDateStart = DateTime.Today.AddDays(-30), StartInvoiceNo = 1, EndInvoiceNo = 1000,
                     LastInvoiceNo = "00000003", QtyUsed = 3, LastInvoiceDateUTC = DateTime.Today.AddDays(-1),
-                    TInvoiceStatus = TemplateStatus.Issued, FlagActive = true
+                    TInvoiceStatus = TemplateStatus.Issued, FlagActive = true,
+                    // Thông tin liên hệ của NNT in trên mẫu hóa đơn
+                    // (theo Invoice_TempInvoice_SupportUpdEmailAndAddress của TVAN gốc).
+                    NNTName = seller.Name, NNTAddress = seller.Address, NNTPhone = "024 3825 0000",
+                    NNTEmail = seller.Email, NNTWebsite = "https://dongdo.vn", FlagStyleComma = true,
+                    ContactUpdatedAt = DateTime.UtcNow.AddDays(-2), ContactUpdatedBy = "kế toán"
                 };
                 db.InvoiceTemplates.Add(tpl); await db.SaveChangesAsync();
 

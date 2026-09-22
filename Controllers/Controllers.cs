@@ -500,6 +500,16 @@ public class InvoiceTemplateController(ITvanService svc) : Controller
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Index));
     }
+
+    // Cập nhật thông tin liên hệ của NNT in trên mẫu hóa đơn
+    // (theo Invoice_TempInvoice_SupportUpdEmailAndAddress của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateContact(int id, string? nntName, string? nntAddress, string? nntPhone, string? nntEmail, string? nntWebsite, bool flagStyleComma, string? by)
+    {
+        var (ok, msg) = await svc.UpdateTemplateContactAsync(id, nntName, nntAddress, nntPhone, nntEmail, nntWebsite, flagStyleComma, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
 }
 
 // Cấu hình hệ thống: bật/bỏ kiểm tra ký quá 60 ngày (theo Invoice_Invoice_Support_Sign60Day của TVAN gốc).
