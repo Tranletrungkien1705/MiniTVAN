@@ -362,6 +362,7 @@ public class InvoiceTemplateController(ITvanService svc) : Controller
         ViewBag.Nnts = await svc.NntsAsync();
         ViewBag.NntId = nntId;
         ViewBag.Logs = await svc.AllocLogsAsync(null);
+        ViewBag.RangeLogs = await svc.TemplateRangeLogsAsync(null);
         return View(await svc.TemplatesAsync(nntId));
     }
 
@@ -379,6 +380,16 @@ public class InvoiceTemplateController(ITvanService svc) : Controller
     public async Task<IActionResult> Inactivate(int id, string? remark)
     {
         var (ok, msg) = await svc.InactivateTemplateAsync(id, remark);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Tăng số hóa đơn cuối (EndInvoiceNo) của mẫu hóa đơn — mở rộng dải số được cấp phát
+    // (theo Invoice_TempInvoice_IncreaseEndInvoiceNo của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> IncreaseEndNo(int id, int newEndInvoiceNo, string? remark, string? by)
+    {
+        var (ok, msg) = await svc.IncreaseTemplateEndNoAsync(id, newEndInvoiceNo, remark, by);
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Index));
     }

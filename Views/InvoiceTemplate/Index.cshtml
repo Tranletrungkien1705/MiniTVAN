@@ -2,6 +2,7 @@
 @{ ViewData["Title"] = "Mẫu & cấp số hóa đơn";
    var nnts = (List<Nnt>)ViewBag.Nnts;
    var logs = (List<InvoiceNoAllocLog>)ViewBag.Logs;
+   var rangeLogs = (List<TemplateRangeLog>)ViewBag.RangeLogs;
    int? filterNnt = ViewBag.NntId as int?; }
 <div class="row g-3">
     <div class="col-lg-8"><div class="card"><div class="card-body">
@@ -38,6 +39,8 @@
                         }
                         @if (t.TInvoiceStatus == TemplateStatus.Issued && t.FlagActive)
                         {
+                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#increaseEndModal"
+                                    data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode" data-end="@t.EndInvoiceNo"><i class="bi bi-arrows-expand me-1"></i>Tăng dải số</button>
                             <button class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#inactiveModal"
                                     data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode"><i class="bi bi-slash-circle me-1"></i>Ngừng</button>
                         }
@@ -66,6 +69,28 @@
                     </tr>
                 }
                 @if (logs.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-3">Chưa có lần cấp số nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+
+        <div class="card mt-3"><div class="card-body">
+            <h6 class="fw-bold mb-2">Nhật ký mở rộng dải số mẫu hóa đơn</h6>
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Thời điểm</th><th>Mẫu</th><th>Thao tác</th><th class="text-end">Số cuối cũ</th><th class="text-end">Số cuối mới</th><th>Ghi chú</th><th>Người thực hiện</th></tr></thead>
+                <tbody>
+                @foreach (var l in rangeLogs)
+                {
+                    <tr>
+                        <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                        <td class="small">@l.Template?.FormNo</td>
+                        <td class="small">@Ui.RangeAction(l.Action)</td>
+                        <td class="small text-end">@l.OldEndInvoiceNo.ToString("N0")</td>
+                        <td class="small text-end fw-semibold">@l.NewEndInvoiceNo.ToString("N0")</td>
+                        <td class="small">@l.Remark</td>
+                        <td class="small">@l.By</td>
+                    </tr>
+                }
+                @if (rangeLogs.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-3">Chưa có lần tăng dải số nào.</td></tr> }
                 </tbody>
             </table>
         </div></div>
@@ -116,6 +141,25 @@
     </form>
 </div></div></div>
 
+<!-- Tăng số hóa đơn cuối (EndInvoiceNo) của mẫu hóa đơn (theo Invoice_TempInvoice_IncreaseEndInvoiceNo của TVAN gốc) -->
+<div class="modal fade" id="increaseEndModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <form method="post" action="/InvoiceTemplate/IncreaseEndNo">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="id" id="incEndId" />
+        <div class="modal-header"><h6 class="modal-title">Tăng dải số mẫu hóa đơn</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <p class="small text-muted mb-3">Mẫu <b id="incEndLabel"></b> sẽ được mở rộng dải số. Số cuối mới phải lớn hơn số cuối hiện tại (<b id="incEndCurrent"></b>).</p>
+            <div class="mb-2"><label class="form-label small mb-1">Số hóa đơn cuối mới</label>
+                <input type="number" name="newEndInvoiceNo" id="incEndNew" class="form-control" min="1" required /></div>
+            <div class="mb-2"><label class="form-label small mb-1">Ghi chú / lý do</label>
+                <input type="text" name="remark" class="form-control" placeholder="VD: Mở rộng dải số theo đề nghị NNT" /></div>
+            <div class="mb-2"><label class="form-label small mb-1">Người thực hiện</label>
+                <input type="text" name="by" class="form-control" placeholder="VD: kế toán" /></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-primary">Tăng dải số</button></div>
+    </form>
+</div></div></div>
+
 @section Scripts {
 <script>
     document.getElementById('issueModal').addEventListener('show.bs.modal', e => {
@@ -127,6 +171,13 @@
         const b = e.relatedTarget;
         document.getElementById('inactiveId').value = b.dataset.id;
         document.getElementById('inactiveLabel').textContent = b.dataset.form + ' (' + b.dataset.code + ')';
+    });
+    document.getElementById('increaseEndModal').addEventListener('show.bs.modal', e => {
+        const b = e.relatedTarget;
+        document.getElementById('incEndId').value = b.dataset.id;
+        document.getElementById('incEndLabel').textContent = b.dataset.form + ' (' + b.dataset.code + ')';
+        document.getElementById('incEndCurrent').textContent = b.dataset.end;
+        document.getElementById('incEndNew').value = parseInt(b.dataset.end) + 1;
     });
 </script>
 }

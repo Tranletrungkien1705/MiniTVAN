@@ -152,6 +152,13 @@ public static class Ui
         _ => ("", "secondary")
     };
 
+    // Loại thao tác mở rộng dải số mẫu hóa đơn (theo Invoice_TempInvoice_IncreaseEndInvoiceNo của TVAN gốc).
+    public static string RangeAction(TemplateRangeAction a) => a switch
+    {
+        TemplateRangeAction.IncreaseEndNo => "Tăng số cuối",
+        _ => a.ToString()
+    };
+
     // Mã loại thông điệp CQT phản hồi (theo Invoice_Invoice_TCTReceive của TVAN gốc).
     public static string TctMsg(TctMessageType t) => t switch
     {

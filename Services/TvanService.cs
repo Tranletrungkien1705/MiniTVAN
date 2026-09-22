@@ -53,6 +53,8 @@ public interface ITvanService
     Task<List<InvoiceTemplate>> TemplatesAsync(int? nntId);
     Task<(bool ok, string msg)> IssueTemplateAsync(int templateId, DateTime effDateStart, string? remark);
     Task<(bool ok, string msg)> InactivateTemplateAsync(int templateId, string? remark);
+    Task<(bool ok, string msg)> IncreaseTemplateEndNoAsync(int templateId, int newEndInvoiceNo, string? remark, string? by);
+    Task<List<TemplateRangeLog>> TemplateRangeLogsAsync(int? templateId);
     Task<(bool ok, string msg, string? invoiceNo)> AllocateInvoiceNoAsync(int invoiceId, DateTime invoiceDate, string? by);
     Task<List<InvoiceNoAllocLog>> AllocLogsAsync(int? invoiceId);
     Task<(bool ok, string msg)> ReceiveTctResultAsync(int invoiceId, TctMessageType mltDiep, string? maCQT, string? maLoi, string? lyDo);
@@ -836,6 +838,50 @@ public class TvanService(AppDbContext db) : ITvanService
         });
         await db.SaveChangesAsync();
         return (true, $"Đã ngừng hoạt động mẫu {tpl.FormNo} ({tpl.TInvoiceCode}).");
+    }
+
+    // Tăng số hóa đơn cuối (EndInvoiceNo) của mẫu hóa đơn — mở rộng dải số được cấp phát
+    // (theo Invoice_TempInvoice_IncreaseEndInvoiceNo / Invoice_TempInvoice_IncreaseQtyInvoiceNo của TVAN gốc).
+    // Ràng buộc theo TVAN gốc:
+    //  - Mẫu phải đang sử dụng (ISSUED) và đang hoạt động (FlagActive);
+    //  - Số cuối mới phải LỚN HƠN số cuối hiện tại (chỉ tăng, không giảm);
+    //  - (EndInvoiceNo - StartInvoiceNo) >= QtyUsed (dải số không được nhỏ hơn số đã dùng);
+    //  - LastInvoiceNo (số cuối đã cấp) không được vượt quá số cuối mới.
+    // Mọi lần tăng ghi nhật ký (TemplateRangeLog) để đối soát.
+    public async Task<(bool ok, string msg)> IncreaseTemplateEndNoAsync(int templateId, int newEndInvoiceNo, string? remark, string? by)
+    {
+        var tpl = await db.InvoiceTemplates.Include(t => t.Nnt).FirstOrDefaultAsync(t => t.Id == templateId);
+        if (tpl == null) return (false, "Không tìm thấy mẫu hóa đơn.");
+        if (tpl.TInvoiceStatus != TemplateStatus.Issued) return (false, "Chỉ tăng dải số được cho mẫu đang sử dụng (ISSUED).");
+        if (!tpl.FlagActive) return (false, "Mẫu đã ngừng hoạt động, không thể tăng dải số.");
+        if (newEndInvoiceNo <= tpl.EndInvoiceNo)
+            return (false, $"Số hóa đơn cuối mới ({newEndInvoiceNo}) phải lớn hơn số cuối hiện tại ({tpl.EndInvoiceNo}).");
+        if (newEndInvoiceNo - tpl.StartInvoiceNo < tpl.QtyUsed)
+            return (false, $"Dải số mới ({tpl.StartInvoiceNo}..{newEndInvoiceNo}) nhỏ hơn số hóa đơn đã dùng ({tpl.QtyUsed}).");
+        if (int.TryParse(tpl.LastInvoiceNo, out var lastNo) && lastNo > newEndInvoiceNo)
+            return (false, $"Số hóa đơn cuối đã cấp ({tpl.LastInvoiceNo}) vượt quá số cuối mới ({newEndInvoiceNo}).");
+
+        var oldEnd = tpl.EndInvoiceNo;
+        tpl.EndInvoiceNo = newEndInvoiceNo;
+        db.TemplateRangeLogs.Add(new TemplateRangeLog
+        {
+            TemplateId = tpl.Id, Action = TemplateRangeAction.IncreaseEndNo,
+            OldEndInvoiceNo = oldEnd, NewEndInvoiceNo = newEndInvoiceNo, Remark = remark, By = by,
+        });
+        db.Messages.Add(new TranMessage
+        {
+            NntId = tpl.NntId, Type = MsgType.RegisterNnt, Dir = MsgDir.Out, Code = "300",
+            Text = $"Tăng dải số mẫu {tpl.FormNo} ({tpl.TInvoiceCode}): {oldEnd} → {newEndInvoiceNo}{(string.IsNullOrWhiteSpace(remark) ? "" : ": " + remark.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã tăng số hóa đơn cuối mẫu {tpl.FormNo} từ {oldEnd} lên {newEndInvoiceNo}.");
+    }
+
+    public Task<List<TemplateRangeLog>> TemplateRangeLogsAsync(int? templateId)
+    {
+        var q = db.TemplateRangeLogs.Include(l => l.Template).AsQueryable();
+        if (templateId.HasValue) q = q.Where(l => l.TemplateId == templateId.Value);
+        return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
     }
 
     // Cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc):

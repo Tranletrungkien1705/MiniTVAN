@@ -332,6 +332,21 @@ app.MapPost("/api/templates/{id:int}/inactivate", async (int id, InactivateTempl
     return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
 });
 
+// Tăng số hóa đơn cuối (EndInvoiceNo) của mẫu hóa đơn — mở rộng dải số được cấp phát
+// (theo Invoice_TempInvoice_IncreaseEndInvoiceNo của TVAN gốc).
+app.MapPost("/api/templates/{id:int}/increase-end-no", async (int id, IncreaseEndNoDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.IncreaseTemplateEndNoAsync(id, dto.NewEndInvoiceNo, dto.Remark, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Nhật ký mở rộng dải số mẫu hóa đơn (lọc theo mẫu nếu có).
+app.MapGet("/api/template-range-logs", async (int? templateId, ITvanService svc) =>
+{
+    var ls = await svc.TemplateRangeLogsAsync(templateId);
+    return Results.Ok(ls.Select(l => new { l.Id, l.TemplateId, form = l.Template != null ? l.Template.FormNo : null, action = l.Action.ToString(), l.OldEndInvoiceNo, l.NewEndInvoiceNo, l.Remark, l.By, l.CreatedAt }));
+});
+
 // Cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc): PENDING + chưa có số → cấp số kế tiếp từ mẫu.
 app.MapPost("/api/invoices/{id:int}/allocate-no", async (int id, AllocateNoDto dto, ITvanService svc) =>
 {
@@ -401,5 +416,6 @@ record Sign60DayDto(Sign60DayFlag Flag, string? Note);
 record AllocateNoDto(DateTime? InvoiceDate, string? By);
 record IssueTemplateDto(DateTime? EffDateStart, string? Remark);
 record InactivateTemplateDto(string? Remark);
+record IncreaseEndNoDto(int NewEndInvoiceNo, string? Remark, string? By);
 record TctReceiveDto(TctMessageType MltDiep, string? MaCQT, string? MaLoi, string? LyDo);
 record UpdateAfterAllocatedDto(string? BuyerName, string? BuyerMst, string? BuyerAddress, PaymentMethod PaymentMethod, decimal Amount, decimal VatRate, DateTime? InvoiceDate, string? Note, string? By);

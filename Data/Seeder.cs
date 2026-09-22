@@ -198,6 +198,17 @@ public static class Seeder
                     QtyUsed = 0, TInvoiceStatus = TemplateStatus.Draft, FlagActive = true
                 });
                 await db.SaveChangesAsync();
+
+                // Mở rộng dải số mẫu hóa đơn (theo Invoice_TempInvoice_IncreaseEndInvoiceNo của TVAN gốc):
+                // mẫu 1C26TAA đã được tăng số cuối từ 1000 lên 2000.
+                db.TemplateRangeLogs.Add(new TemplateRangeLog
+                {
+                    TemplateId = tpl.Id, Action = TemplateRangeAction.IncreaseEndNo,
+                    OldEndInvoiceNo = 1000, NewEndInvoiceNo = 2000,
+                    Remark = "Mở rộng dải số theo đề nghị NNT", By = "kế toán",
+                    CreatedAt = DateTime.UtcNow.AddDays(-1)
+                });
+                await db.SaveChangesAsync();
             }
         }
     }

@@ -1319,4 +1319,106 @@ public class TvanServiceTests
             Assert.Contains("liền trước", msg);
         }
     }
+
+    // Tăng số hóa đơn cuối (EndInvoiceNo) của mẫu hóa đơn
+    // (theo Invoice_TempInvoice_IncreaseEndInvoiceNo của TVAN gốc).
+    [Fact]
+    public async Task IncreaseEndNo_OnIssued_ExtendsRangeAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddTemplate(db, nntId, InvoiceNoRule.TT78, lastNo: "00000003", qtyUsed: 3);
+            var (ok, msg) = await svc.IncreaseTemplateEndNoAsync(tplId, 2000, "mở rộng dải số", "kế toán");
+            Assert.True(ok);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            Assert.Equal(2000, tpl.EndInvoiceNo);
+            var logs = await svc.TemplateRangeLogsAsync(tplId);
+            Assert.Single(logs);
+            Assert.Equal(TemplateRangeAction.IncreaseEndNo, logs[0].Action);
+            Assert.Equal(1000, logs[0].OldEndInvoiceNo);
+            Assert.Equal(2000, logs[0].NewEndInvoiceNo);
+            Assert.Equal("kế toán", logs[0].By);
+        }
+    }
+
+    [Fact]
+    public async Task IncreaseEndNo_NotGreater_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddTemplate(db, nntId);   // EndInvoiceNo = 1000
+            var (ok, msg) = await svc.IncreaseTemplateEndNoAsync(tplId, 1000, null, null);
+            Assert.False(ok);
+            Assert.Contains("phải lớn hơn", msg);
+            Assert.Empty(await svc.TemplateRangeLogsAsync(tplId));
+        }
+    }
+
+    [Fact]
+    public async Task IncreaseEndNo_RangeSmallerThanUsed_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            // StartInvoiceNo=1, EndInvoiceNo=1000, QtyUsed=1000 → dải mới 1..1001 vẫn < QtyUsed? Không.
+            // Dùng mẫu dải nhỏ: Start=1, End=10, QtyUsed=10 → tăng lên 11 vẫn hợp lệ; cần dải mới < QtyUsed.
+            var tpl = new InvoiceTemplate
+            {
+                NntId = nntId, TInvoiceCode = "TINV-SMALL", TInvoiceName = "Mẫu nhỏ",
+                FormNo = "1C26TAC", Sign = "K26TAC", TTType = InvoiceNoRule.TT78,
+                EffDateStart = DateTime.Today.AddDays(-30), StartInvoiceNo = 1, EndInvoiceNo = 10,
+                QtyUsed = 10, TInvoiceStatus = TemplateStatus.Issued, FlagActive = true
+            };
+            db.InvoiceTemplates.Add(tpl); await db.SaveChangesAsync();
+            // Số cuối mới 11 > 10 (hợp lệ về tăng) nhưng 11 - 1 = 10 >= QtyUsed(10) → hợp lệ.
+            // Để chạm ràng buộc, đặt QtyUsed lớn hơn dải mới: QtyUsed=15.
+            tpl.QtyUsed = 15; await db.SaveChangesAsync();
+            var (ok, msg) = await svc.IncreaseTemplateEndNoAsync(tpl.Id, 11, null, null);
+            Assert.False(ok);
+            Assert.Contains("nhỏ hơn số hóa đơn đã dùng", msg);
+        }
+    }
+
+    [Fact]
+    public async Task IncreaseEndNo_LastNoExceedsNewEnd_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddTemplate(db, nntId, InvoiceNoRule.TT78, lastNo: "00000900", qtyUsed: 900);
+            // Số cuối mới 800 > EndInvoiceNo(1000)? Không → phải chọn số > 1000 nhưng < LastInvoiceNo(900)?
+            // LastInvoiceNo=900 <= EndInvoiceNo=1000. Đặt LastInvoiceNo vượt số cuối mới: tăng lên 1001 nhưng Last=1500.
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            tpl.LastInvoiceNo = "00001500"; await db.SaveChangesAsync();
+            var (ok, msg) = await svc.IncreaseTemplateEndNoAsync(tplId, 1001, null, null);
+            Assert.False(ok);
+            Assert.Contains("vượt quá số cuối mới", msg);
+        }
+    }
+
+    [Fact]
+    public async Task IncreaseEndNo_NotIssued_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddDraftTemplate(db, nntId);   // Draft
+            var (ok, msg) = await svc.IncreaseTemplateEndNoAsync(tplId, 2000, null, null);
+            Assert.False(ok);
+            Assert.Contains("đang sử dụng", msg);
+        }
+    }
+
+    [Fact]
+    public async Task IncreaseEndNo_UnknownTemplate_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.IncreaseTemplateEndNoAsync(9999, 2000, null, null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
 }

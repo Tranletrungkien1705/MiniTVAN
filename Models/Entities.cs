@@ -64,6 +64,11 @@ public enum PaymentMethod { Cash = 0, Transfer = 1, CashOrTransfer = 2 }
 // TT68 = số 8 chữ số liên tục; TT78 = số 7 chữ số, reset theo năm trên mẫu số.
 public enum InvoiceNoRule { TT68 = 0, TT78 = 1 }
 
+// Loại thao tác mở rộng dải số của mẫu hóa đơn (theo Invoice_TempInvoice_IncreaseEndInvoiceNo /
+// Invoice_TempInvoice_IncreaseQtyInvoiceNo của TVAN gốc):
+// IncreaseEndNo = tăng số hóa đơn cuối (mở rộng dải số được cấp phát).
+public enum TemplateRangeAction { IncreaseEndNo = 0 }
+
 public class Org
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -427,6 +432,23 @@ public class TranMessage : IOrgOwned
     public MsgDir Dir { get; set; }
     public string? Code { get; set; }                // Mã kết quả TCT: 202/204/301...
     public string? Text { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Nhật ký mở rộng dải số của mẫu hóa đơn (theo Invoice_TempInvoice_IncreaseEndInvoiceNo /
+// Invoice_TempInvoice_IncreaseQtyInvoiceNo của TVAN gốc).
+// Mỗi lần tăng số hóa đơn cuối (EndInvoiceNo) ghi lại để đối soát.
+public class TemplateRangeLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int TemplateId { get; set; }
+    public InvoiceTemplate? Template { get; set; }
+    public TemplateRangeAction Action { get; set; } = TemplateRangeAction.IncreaseEndNo;
+    public int OldEndInvoiceNo { get; set; }           // Số hóa đơn cuối trước khi tăng
+    public int NewEndInvoiceNo { get; set; }           // Số hóa đơn cuối sau khi tăng
+    public string? Remark { get; set; }                // Ghi chú / lý do
+    public string? By { get; set; }                    // Người thực hiện
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
