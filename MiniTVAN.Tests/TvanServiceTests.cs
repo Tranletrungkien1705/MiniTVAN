@@ -2470,4 +2470,59 @@ public class TvanServiceTests
             Assert.Empty(await svc.NntTypesAsync(null));
         }
     }
+
+    // Danh mục Tỉnh/Thành phố (theo Mst_Province của TVAN gốc).
+    [Fact]
+    public async Task Province_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveProvinceAsync(null, "01", "Hà Nội", true, "kế toán");
+            Assert.True(ok);
+            var list = await svc.ProvincesAsync(null);
+            Assert.Single(list);
+            Assert.Equal("Hà Nội", list[0].ProvinceName);
+            Assert.True(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task Province_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveProvinceAsync(null, "01", "Hà Nội", true, null);
+            // Lưu lại cùng mã tỉnh = cập nhật (không tạo mới).
+            var (ok, _, id2) = await svc.SaveProvinceAsync(null, "01", "Thủ đô Hà Nội", false, null);
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            var list = await svc.ProvincesAsync(null);
+            Assert.Single(list);
+            Assert.Equal("Thủ đô Hà Nội", list[0].ProvinceName);
+            Assert.False(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task Province_Save_MissingName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveProvinceAsync(null, "01", "  ", true, null);
+            Assert.False(ok);
+            Assert.Contains("tên", msg);
+        }
+    }
+
+    [Fact]
+    public async Task Province_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveProvinceAsync(null, "79", "TP Hồ Chí Minh", true, null);
+            var (ok, _) = await svc.DeleteProvinceAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.ProvincesAsync(null));
+        }
+    }
 }

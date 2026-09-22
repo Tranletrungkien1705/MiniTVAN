@@ -197,6 +197,21 @@ public class NntType : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Danh mục Tỉnh/Thành phố (theo bảng Mst_Province của TVAN gốc): danh mục địa giới hành chính
+// cấp tỉnh dùng để chọn khi khai báo địa chỉ NNT/khách hàng (CustomerNnt.ProvinceCode).
+// Khóa nghiệp vụ: (OrgId, ProvinceCode). FlagActive = tỉnh/thành đang dùng hay không.
+public class Province : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ProvinceCode { get; set; } = "";      // Mã tỉnh/thành (VD 01)
+    public string ProvinceName { get; set; } = "";      // Tên tỉnh/thành (VD Hà Nội)
+    public bool FlagActive { get; set; } = true;         // Tỉnh/thành đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 public class Invoice : IOrgOwned
 {
     public int Id { get; set; }

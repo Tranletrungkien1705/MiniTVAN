@@ -737,6 +737,33 @@ public class NntTypeController(ITvanService svc) : Controller
     }
 }
 
+// Danh mục Tỉnh/Thành phố (theo Mst_Province của TVAN gốc):
+// danh mục địa giới hành chính cấp tỉnh dùng khi khai báo địa chỉ NNT/khách hàng.
+public class ProvinceController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.ProvincesAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string name, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveProvinceAsync(id, code, name, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteProvinceAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     public DbSet<Nnt> Nnts => Set<Nnt>();
     public DbSet<CustomerNnt> CustomerNnts => Set<CustomerNnt>();
     public DbSet<NntType> NntTypes => Set<NntType>();
+    public DbSet<Province> Provinces => Set<Province>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<TranMessage> Messages => Set<TranMessage>();
     public DbSet<InvoiceLicense> Licenses => Set<InvoiceLicense>();
@@ -59,6 +60,11 @@ public class AppDbContext : DbContext
         b.Entity<NntType>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.NNTType }).IsUnique();   // mỗi tổ chức một mã loại NNT
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Province>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ProvinceCode }).IsUnique();   // mỗi tổ chức một mã tỉnh/thành
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<Invoice>(e =>

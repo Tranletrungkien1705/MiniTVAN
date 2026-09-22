@@ -103,6 +103,10 @@ public interface ITvanService
     Task<NntType?> GetNntTypeAsync(int id);
     Task<(bool ok, string msg, int id)> SaveNntTypeAsync(int? id, string code, string name, bool active, string? by);
     Task<(bool ok, string msg)> DeleteNntTypeAsync(int id);
+    Task<List<Province>> ProvincesAsync(string? keyword);
+    Task<Province?> GetProvinceAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveProvinceAsync(int? id, string code, string name, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteProvinceAsync(int id);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -2127,6 +2131,72 @@ public class TvanService(AppDbContext db) : ITvanService
         db.NntTypes.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa loại người nộp thuế {code}.");
+    }
+
+    // Danh mục Tỉnh/Thành phố (theo Mst_Province của TVAN gốc):
+    // danh sách tỉnh/thành (lọc theo từ khóa mã/tên nếu có).
+    public Task<List<Province>> ProvincesAsync(string? keyword)
+    {
+        var q = db.Provinces.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(p => p.ProvinceCode.Contains(k) || p.ProvinceName.Contains(k));
+        }
+        return q.OrderBy(p => p.ProvinceCode).ToListAsync();
+    }
+
+    public Task<Province?> GetProvinceAsync(int id) =>
+        db.Provinces.FirstOrDefaultAsync(p => p.Id == id);
+
+    // Lưu (tạo mới/cập nhật) tỉnh/thành theo khóa nghiệp vụ (OrgId, ProvinceCode)
+    // (theo Mst_Province_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã tỉnh/thành + tên tỉnh/thành;
+    //  - khi tạo: mã tỉnh/thành chưa tồn tại trong tổ chức (Mst_Province_CheckDB_ProvinceExist).
+    public async Task<(bool ok, string msg, int id)> SaveProvinceAsync(int? id, string code, string name, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã tỉnh/thành phố.", 0);
+        if (name.Length == 0) return (false, "Cần tên tỉnh/thành phố.", 0);
+
+        Province? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.Provinces.FirstOrDefaultAsync(p => p.Id == id.Value);
+        else e = await db.Provinces.FirstOrDefaultAsync(p => p.ProvinceCode == code);
+
+        if (e == null)
+        {
+            if (await db.Provinces.AnyAsync(p => p.ProvinceCode == code))
+                return (false, "Mã tỉnh/thành phố đã tồn tại.", 0);
+            e = new Province { ProvinceCode = code };
+            db.Provinces.Add(e);
+        }
+        else
+        {
+            // Đổi mã tỉnh/thành: chặn trùng với tỉnh/thành khác.
+            if (!string.Equals(e.ProvinceCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.Provinces.AnyAsync(p => p.ProvinceCode == code && p.Id != e.Id))
+                return (false, "Mã tỉnh/thành phố đã tồn tại.", 0);
+            e.ProvinceCode = code;
+        }
+
+        e.ProvinceName = name;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu tỉnh/thành phố {code} — {name}.", e.Id);
+    }
+
+    // Xóa tỉnh/thành theo id (theo Mst_Province_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteProvinceAsync(int id)
+    {
+        var e = await db.Provinces.FirstOrDefaultAsync(p => p.Id == id);
+        if (e == null) return (false, "Không tìm thấy tỉnh/thành phố.");
+        var code = e.ProvinceCode;
+        db.Provinces.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa tỉnh/thành phố {code}.");
     }
 
     // Khoảng thời gian [from, to) của kỳ dữ liệu theo loại kỳ (LKDLieu).

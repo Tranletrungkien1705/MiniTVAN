@@ -446,6 +446,17 @@ public static class Seeder
                 new NntType { NNTType = "CN", NNTTypeName = "Cá nhân", FlagActive = true, UpdatedBy = "kế toán" });
             await db.SaveChangesAsync();
         }
+
+        // Danh mục Tỉnh/Thành phố (theo Mst_Province của TVAN gốc):
+        // các tỉnh/thành demo dùng khi khai báo địa chỉ NNT/khách hàng.
+        if (!await db.Provinces.AnyAsync())
+        {
+            db.Provinces.AddRange(
+                new Province { ProvinceCode = "01", ProvinceName = "Hà Nội", FlagActive = true, UpdatedBy = "kế toán" },
+                new Province { ProvinceCode = "79", ProvinceName = "TP Hồ Chí Minh", FlagActive = true, UpdatedBy = "kế toán" },
+                new Province { ProvinceCode = "48", ProvinceName = "Đà Nẵng", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
