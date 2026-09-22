@@ -362,6 +362,27 @@ app.MapGet("/api/template-range-logs", async (int? templateId, ITvanService svc)
     return Results.Ok(ls.Select(l => new { l.Id, l.TemplateId, form = l.Template != null ? l.Template.FormNo : null, action = l.Action.ToString(), l.OldEndInvoiceNo, l.NewEndInvoiceNo, l.Remark, l.By, l.CreatedAt }));
 });
 
+// Gửi mẫu hóa đơn tới CQT (theo Invoice_TempInvoice_SentTCT của TVAN gốc): PENDING → SENTTCT, ghi mã V tham chiếu.
+app.MapPost("/api/templates/{id:int}/send-tct", async (int id, SendTemplateTctDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.SendTemplateToTctAsync(id, dto.Remark, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Nhận kết quả phát hành mẫu từ CQT (theo Invoice_TempInvoice_TCTIssued của TVAN gốc): ACCEPT → ISSUED, REJECT → PENDING.
+app.MapPost("/api/templates/{id:int}/receive-tct", async (int id, ReceiveTemplateTctDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.ReceiveTemplateTctResultAsync(id, dto.ChapNhan, dto.Message, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Nhật ký gửi/nhận kết quả mẫu hóa đơn với CQT (lọc theo mẫu nếu có).
+app.MapGet("/api/template-tct-logs", async (int? templateId, ITvanService svc) =>
+{
+    var ls = await svc.TemplateTctLogsAsync(templateId);
+    return Results.Ok(ls.Select(l => new { l.Id, l.TemplateId, form = l.Template != null ? l.Template.FormNo : null, action = l.Action.ToString(), l.TCTRefNo, chapNhan = l.ChapNhan?.ToString(), l.Message, l.Remark, l.By, l.CreatedAt }));
+});
+
 // Cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc): PENDING + chưa có số → cấp số kế tiếp từ mẫu.
 app.MapPost("/api/invoices/{id:int}/allocate-no", async (int id, AllocateNoDto dto, ITvanService svc) =>
 {
@@ -486,6 +507,8 @@ record AllocateApproveIssueDto(DateTime? InvoiceDate, string? FilePath, string? 
 record IssueTemplateDto(DateTime? EffDateStart, string? Remark);
 record InactivateTemplateDto(string? Remark);
 record IncreaseEndNoDto(int NewEndInvoiceNo, string? Remark, string? By);
+record SendTemplateTctDto(string? Remark, string? By);
+record ReceiveTemplateTctDto(TctAcceptStatus ChapNhan, string? Message, string? By);
 record TctReceiveDto(TctMessageType MltDiep, string? MaCQT, string? MaLoi, string? LyDo);
 record UpdateAfterAllocatedDto(string? BuyerName, string? BuyerMst, string? BuyerAddress, PaymentMethod PaymentMethod, decimal Amount, decimal VatRate, DateTime? InvoiceDate, string? Note, string? By);
 record CancelInvoiceDto(string? Remark, string? By);

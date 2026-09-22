@@ -139,6 +139,7 @@ public static class Ui
     public static (string text, string css) Template(TemplateStatus s) => s switch
     {
         TemplateStatus.Draft    => ("Nháp", "secondary"),
+        TemplateStatus.SentTct  => ("Đã gửi CQT", "info"),
         TemplateStatus.Issued   => ("Đang sử dụng", "success"),
         TemplateStatus.Inactive => ("Ngừng hoạt động", "dark"),
         _ => (s.ToString(), "secondary")
@@ -164,6 +165,15 @@ public static class Ui
     {
         TemplateRangeAction.IncreaseEndNo => "Tăng số cuối",
         _ => a.ToString()
+    };
+
+    // Loại thao tác gửi/nhận kết quả mẫu hóa đơn với CQT (theo Invoice_TempInvoice_SentTCT /
+    // Invoice_TempInvoice_TCTIssued của TVAN gốc).
+    public static (string text, string css) TemplateTctAction(TemplateTctAction a) => a switch
+    {
+        Models.TemplateTctAction.SendTct    => ("Gửi CQT", "primary"),
+        Models.TemplateTctAction.ReceiveTct => ("Nhận KQ CQT", "info"),
+        _ => (a.ToString(), "secondary")
     };
 
     // Mã loại thông điệp CQT phản hồi (theo Invoice_Invoice_TCTReceive của TVAN gốc).

@@ -1776,4 +1776,96 @@ public class TvanServiceTests
             Assert.Contains("Không tìm thấy", msg);
         }
     }
+
+    // Gửi mẫu hóa đơn tới CQT (theo Invoice_TempInvoice_SentTCT của TVAN gốc).
+    private static async Task<int> AddDraftTemplate(AppDbContext db, int nntId)
+    {
+        var tpl = new InvoiceTemplate
+        {
+            NntId = nntId, TInvoiceCode = "TINV-1C26TAC", TInvoiceName = "Mẫu 1C26TAC",
+            FormNo = "1C26TAC", Sign = "K26TAC", TTType = InvoiceNoRule.TT78,
+            EffDateStart = DateTime.Today, StartInvoiceNo = 1, EndInvoiceNo = 500,
+            QtyUsed = 0, TInvoiceStatus = TemplateStatus.Draft, FlagActive = true
+        };
+        db.InvoiceTemplates.Add(tpl); await db.SaveChangesAsync();
+        return tpl.Id;
+    }
+
+    [Fact]
+    public async Task SendTemplateToTct_OnDraft_SetsSentTctAndRefNo()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            var tplId = await AddDraftTemplate(db, nntId);
+            var (ok, msg) = await svc.SendTemplateToTctAsync(tplId, "Gửi đăng ký", "kế toán");
+            Assert.True(ok);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            Assert.Equal(TemplateStatus.SentTct, tpl.TInvoiceStatus);
+            Assert.False(string.IsNullOrWhiteSpace(tpl.TCTRefNo));
+            Assert.NotNull(tpl.SentTCTDTime);
+            Assert.Equal("kế toán", tpl.SentTCTBy);
+            Assert.Single(await svc.TemplateTctLogsAsync(tplId));
+        }
+    }
+
+    [Fact]
+    public async Task SendTemplateToTct_OnIssued_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            var tplId = await AddTemplate(db, nntId);   // Issued
+            var (ok, msg) = await svc.SendTemplateToTctAsync(tplId, null, null);
+            Assert.False(ok);
+            Assert.Contains("chờ", msg);
+        }
+    }
+
+    [Fact]
+    public async Task ReceiveTemplateTct_Accept_SetsIssued()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            var tplId = await AddDraftTemplate(db, nntId);
+            await svc.SendTemplateToTctAsync(tplId, null, "kế toán");
+            var (ok, _) = await svc.ReceiveTemplateTctResultAsync(tplId, TctAcceptStatus.Accept, "Mẫu hợp lệ", "kế toán");
+            Assert.True(ok);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            Assert.Equal(TemplateStatus.Issued, tpl.TInvoiceStatus);
+            Assert.Equal(TctAcceptStatus.Accept, tpl.TCTChapNhan);
+            Assert.NotNull(tpl.TCTChapNhanDTime);
+            Assert.Equal(2, (await svc.TemplateTctLogsAsync(tplId)).Count);
+        }
+    }
+
+    [Fact]
+    public async Task ReceiveTemplateTct_Reject_BackToDraft()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            var tplId = await AddDraftTemplate(db, nntId);
+            await svc.SendTemplateToTctAsync(tplId, null, null);
+            var (ok, _) = await svc.ReceiveTemplateTctResultAsync(tplId, TctAcceptStatus.Reject, "Sai mẫu số", null);
+            Assert.False(ok);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            Assert.Equal(TemplateStatus.Draft, tpl.TInvoiceStatus);
+            Assert.Equal(TctAcceptStatus.Reject, tpl.TCTChapNhan);
+        }
+    }
+
+    [Fact]
+    public async Task ReceiveTemplateTct_NotSent_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            var tplId = await AddDraftTemplate(db, nntId);   // Draft, chưa gửi CQT
+            var (ok, msg) = await svc.ReceiveTemplateTctResultAsync(tplId, TctAcceptStatus.Accept, null, null);
+            Assert.False(ok);
+            Assert.Contains("SENTTCT", msg);
+        }
+    }
 }

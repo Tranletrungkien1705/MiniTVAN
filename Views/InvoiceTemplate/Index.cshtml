@@ -3,6 +3,7 @@
    var nnts = (List<Nnt>)ViewBag.Nnts;
    var logs = (List<InvoiceNoAllocLog>)ViewBag.Logs;
    var rangeLogs = (List<TemplateRangeLog>)ViewBag.RangeLogs;
+   var tctLogs = (List<TemplateTctLog>)ViewBag.TctLogs;
    int? filterNnt = ViewBag.NntId as int?; }
 <div class="row g-3">
     <div class="col-lg-8"><div class="card"><div class="card-body">
@@ -21,7 +22,16 @@
                 var barCss = pct >= 90 ? "bg-danger" : pct >= 70 ? "bg-warning" : "bg-success";
                 <tr>
                     <td><b>@t.FormNo</b> <span class="badge bg-@stCss ms-1">@stText</span>
-                        <div class="small text-muted">@t.TInvoiceCode · @t.TInvoiceName</div></td>
+                        <div class="small text-muted">@t.TInvoiceCode · @t.TInvoiceName</div>
+                        @if (!string.IsNullOrWhiteSpace(t.TCTRefNo))
+                        {
+                            <div class="small text-muted"><i class="bi bi-send me-1"></i>Mã V: @t.TCTRefNo</div>
+                        }
+                        @if (t.TCTChapNhan.HasValue)
+                        {
+                            var (acText, acCss) = Ui.TctAccept(t.TCTChapNhan.Value);
+                            <span class="badge bg-@acCss">CQT: @acText</span>
+                        }</td>
                     <td><b>@t.Nnt?.Name</b><div class="small text-muted">MST @t.Nnt?.Mst</div></td>
                     <td class="small">@Ui.NoRule(t.TTType)</td>
                     <td class="text-end small">@t.StartInvoiceNo.ToString("D8") → @t.EndInvoiceNo.ToString("D8")</td>
@@ -36,6 +46,13 @@
                         {
                             <button class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#issueModal"
                                     data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode"><i class="bi bi-send-check me-1"></i>Phát hành</button>
+                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#sendTctModal"
+                                    data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode"><i class="bi bi-cloud-upload me-1"></i>Gửi CQT</button>
+                        }
+                        @if (t.TInvoiceStatus == TemplateStatus.SentTct && t.FlagActive)
+                        {
+                            <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#receiveTctModal"
+                                    data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode"><i class="bi bi-inbox me-1"></i>Nhận KQ CQT</button>
                         }
                         @if (t.TInvoiceStatus == TemplateStatus.Issued && t.FlagActive)
                         {
@@ -91,6 +108,28 @@
                     </tr>
                 }
                 @if (rangeLogs.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-3">Chưa có lần tăng dải số nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+
+        <div class="card mt-3"><div class="card-body">
+            <h6 class="fw-bold mb-2">Nhật ký gửi / nhận kết quả mẫu hóa đơn với CQT</h6>
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Thời điểm</th><th>Mẫu</th><th>Thao tác</th><th>Mã V</th><th>KQ CQT</th><th>Thông báo</th><th>Người thực hiện</th></tr></thead>
+                <tbody>
+                @foreach (var l in tctLogs)
+                {
+                    <tr>
+                        <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                        <td class="small">@l.Template?.FormNo</td>
+                        <td class="small">@Ui.TemplateTctAction(l.Action).text</td>
+                        <td class="small">@l.TCTRefNo</td>
+                        <td class="small">@if (l.ChapNhan.HasValue) { var (t2, c2) = Ui.TctAccept(l.ChapNhan.Value); <span class="badge bg-@c2">@t2</span> }</td>
+                        <td class="small">@l.Message</td>
+                        <td class="small">@l.By</td>
+                    </tr>
+                }
+                @if (tctLogs.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-3">Chưa có lần gửi/nhận kết quả mẫu với CQT nào.</td></tr> }
                 </tbody>
             </table>
         </div></div>
@@ -160,6 +199,45 @@
     </form>
 </div></div></div>
 
+<!-- Gửi mẫu hóa đơn tới CQT (theo Invoice_TempInvoice_SentTCT của TVAN gốc) -->
+<div class="modal fade" id="sendTctModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <form method="post" action="/InvoiceTemplate/SendTct">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="id" id="sendTctId" />
+        <div class="modal-header"><h6 class="modal-title">Gửi mẫu hóa đơn tới CQT</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <p class="small text-muted mb-3">Mẫu <b id="sendTctLabel"></b> sẽ được gửi tới CQT để đăng ký phát hành và chuyển sang trạng thái <b>Đã gửi CQT</b> (SENTTCT).</p>
+            <div class="mb-2"><label class="form-label small mb-1">Ghi chú / lý do</label>
+                <input type="text" name="remark" class="form-control" placeholder="VD: Gửi đăng ký mẫu theo thông báo" /></div>
+            <div class="mb-2"><label class="form-label small mb-1">Người thực hiện</label>
+                <input type="text" name="by" class="form-control" placeholder="VD: kế toán" /></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-primary">Gửi CQT</button></div>
+    </form>
+</div></div></div>
+
+<!-- Nhận kết quả phát hành mẫu từ CQT (theo Invoice_TempInvoice_TCTIssued của TVAN gốc) -->
+<div class="modal fade" id="receiveTctModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <form method="post" action="/InvoiceTemplate/ReceiveTct">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="id" id="receiveTctId" />
+        <div class="modal-header"><h6 class="modal-title">Nhận kết quả phát hành mẫu từ CQT</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <p class="small text-muted mb-3">Kết quả CQT cho mẫu <b id="receiveTctLabel"></b>. Chấp nhận → mẫu chuyển <b>Đang sử dụng</b>; Từ chối → mẫu quay về <b>Nháp</b>.</p>
+            <div class="mb-2"><label class="form-label small mb-1">Kết quả CQT</label>
+                <select name="chapNhan" class="form-select">
+                    <option value="Accept">Chấp nhận (ACCEPT)</option>
+                    <option value="Reject">Từ chối (REJECT)</option>
+                </select></div>
+            <div class="mb-2"><label class="form-label small mb-1">Thông báo / mã lỗi</label>
+                <input type="text" name="message" class="form-control" placeholder="VD: Mẫu hợp lệ" /></div>
+            <div class="mb-2"><label class="form-label small mb-1">Người thực hiện</label>
+                <input type="text" name="by" class="form-control" placeholder="VD: kế toán" /></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-primary">Nhận kết quả</button></div>
+    </form>
+</div></div></div>
+
 @section Scripts {
 <script>
     document.getElementById('issueModal').addEventListener('show.bs.modal', e => {
@@ -178,6 +256,16 @@
         document.getElementById('incEndLabel').textContent = b.dataset.form + ' (' + b.dataset.code + ')';
         document.getElementById('incEndCurrent').textContent = b.dataset.end;
         document.getElementById('incEndNew').value = parseInt(b.dataset.end) + 1;
+    });
+    document.getElementById('sendTctModal').addEventListener('show.bs.modal', e => {
+        const b = e.relatedTarget;
+        document.getElementById('sendTctId').value = b.dataset.id;
+        document.getElementById('sendTctLabel').textContent = b.dataset.form + ' (' + b.dataset.code + ')';
+    });
+    document.getElementById('receiveTctModal').addEventListener('show.bs.modal', e => {
+        const b = e.relatedTarget;
+        document.getElementById('receiveTctId').value = b.dataset.id;
+        document.getElementById('receiveTctLabel').textContent = b.dataset.form + ' (' + b.dataset.code + ')';
     });
 </script>
 }

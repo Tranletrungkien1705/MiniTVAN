@@ -65,8 +65,13 @@ public enum TctMessageType { Success202 = 202, Fail204 = 204 }
 // Trạng thái CQT chấp nhận/từ chối (theo TConst.TCTStatus của TVAN gốc: ACCEPT/REJECT)
 public enum TctAcceptStatus { Accept = 0, Reject = 1 }
 
-// Trạng thái mẫu hóa đơn (theo Invoice_TempInvoice.TInvoiceStatus của TVAN gốc)
-public enum TemplateStatus { Draft = 0, Issued = 1, Inactive = 2 }
+// Trạng thái mẫu hóa đơn (theo Invoice_TempInvoice.TInvoiceStatus của TVAN gốc):
+// Draft = PENDING (chờ), SentTct = SENTTCT (đã gửi CQT, chờ CQT phát hành), Issued = ISSUED (đang sử dụng), Inactive = ngừng.
+public enum TemplateStatus { Draft = 0, Issued = 1, Inactive = 2, SentTct = 3 }
+
+// Loại thao tác gửi/nhận kết quả mẫu hóa đơn với CQT (theo Invoice_TempInvoice_SentTCT /
+// Invoice_TempInvoice_TCTIssued của TVAN gốc).
+public enum TemplateTctAction { SendTct = 0, ReceiveTct = 1 }
 
 // Phương thức thanh toán của hóa đơn (theo Mst_PaymentMethods của TVAN gốc):
 // TM = tiền mặt, CK = chuyển khoản, TM/CK = tiền mặt/chuyển khoản.
@@ -433,7 +438,38 @@ public class InvoiceTemplate : IOrgOwned
     public bool FlagActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    // Gửi mẫu hóa đơn tới CQT (theo Invoice_TempInvoice_SentTCT của TVAN gốc):
+    // TCTRefNo = mã V tham chiếu file đã gửi, TCTMessage = thông tin CQT trả về (mã lỗi/ghi chú),
+    // SentTCTDTime/SentTCTBy = thời điểm & người gửi mẫu tới CQT.
+    public string? TCTRefNo { get; set; }
+    public string? TCTMessage { get; set; }
+    public DateTime? SentTCTDTime { get; set; }
+    public string? SentTCTBy { get; set; }
+
+    // CQT phát hành mẫu (theo Invoice_TempInvoice_TCTIssued của TVAN gốc):
+    // TCTChapNhan = CQT chấp nhận/từ chối, TCTChapNhanDTime = thời điểm CQT phản hồi.
+    public TctAcceptStatus? TCTChapNhan { get; set; }
+    public DateTime? TCTChapNhanDTime { get; set; }
+
     public int QtyRemain => EndInvoiceNo - StartInvoiceNo + 1 - QtyUsed;
+}
+
+// Nhật ký gửi/nhận kết quả mẫu hóa đơn với CQT (theo Invoice_TempInvoice_SentTCT /
+// Invoice_TempInvoice_TCTIssued của TVAN gốc). Mỗi lần gửi mẫu tới CQT hoặc nhận kết quả
+// phát hành mẫu từ CQT ghi lại để đối soát.
+public class TemplateTctLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int TemplateId { get; set; }
+    public InvoiceTemplate? Template { get; set; }
+    public TemplateTctAction Action { get; set; } = TemplateTctAction.SendTct;   // Gửi CQT / Nhận KQ CQT
+    public string? TCTRefNo { get; set; }              // Mã V tham chiếu file đã gửi
+    public TctAcceptStatus? ChapNhan { get; set; }     // CQT chấp nhận/từ chối (khi nhận KQ)
+    public string? Message { get; set; }               // Thông báo kết quả
+    public string? Remark { get; set; }                // Ghi chú / lý do
+    public string? By { get; set; }                    // Người thực hiện
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
 // Nhật ký cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc).

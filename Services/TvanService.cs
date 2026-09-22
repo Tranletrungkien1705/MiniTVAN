@@ -73,6 +73,9 @@ public interface ITvanService
     Task<List<Invoice>> BulkFixCandidatesAsync(string tinvoiceCode);
     Task<(bool ok, string msg, int fixedCount)> BulkFixByTemplateAsync(string tinvoiceCode, string? reason, string? by);
     Task<List<BulkFixLog>> BulkFixLogsAsync(int? templateId);
+    Task<(bool ok, string msg)> SendTemplateToTctAsync(int templateId, string? remark, string? by);
+    Task<(bool ok, string msg)> ReceiveTemplateTctResultAsync(int templateId, TctAcceptStatus chapNhan, string? message, string? by);
+    Task<List<TemplateTctLog>> TemplateTctLogsAsync(int? templateId);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -1473,6 +1476,86 @@ public class TvanService(AppDbContext db) : ITvanService
     public Task<List<BulkFixLog>> BulkFixLogsAsync(int? templateId)
     {
         var q = db.BulkFixLogs.Include(l => l.Template).AsQueryable();
+        if (templateId.HasValue) q = q.Where(l => l.TemplateId == templateId.Value);
+        return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
+
+    // Gửi mẫu hóa đơn tới CQT (theo Invoice_TempInvoice_SentTCT của TVAN gốc):
+    // mẫu đang ở trạng thái chờ (Draft/PENDING) và đang hoạt động (FlagActive) được gửi tới CQT
+    // để đăng ký phát hành. Ràng buộc theo TVAN gốc: dải số phải hợp lệ (StartInvoiceNo/EndInvoiceNo != 0).
+    // Đưa mẫu sang SENTTCT, ghi mã V tham chiếu (TCTRefNo), thông báo CQT (TCTMessage),
+    // thời điểm & người gửi (SentTCTDTime/SentTCTBy) và ghi nhật ký (TemplateTctLog) để đối soát.
+    public async Task<(bool ok, string msg)> SendTemplateToTctAsync(int templateId, string? remark, string? by)
+    {
+        var tpl = await db.InvoiceTemplates.Include(t => t.Nnt).FirstOrDefaultAsync(t => t.Id == templateId);
+        if (tpl == null) return (false, "Không tìm thấy mẫu hóa đơn.");
+        if (tpl.TInvoiceStatus != TemplateStatus.Draft) return (false, "Chỉ gửi CQT được mẫu đang ở trạng thái chờ (PENDING).");
+        if (!tpl.FlagActive) return (false, "Mẫu đã ngừng hoạt động, không thể gửi CQT.");
+        if (tpl.StartInvoiceNo == 0 || tpl.EndInvoiceNo == 0)
+            return (false, "Mẫu chưa có dải số hợp lệ (số bắt đầu/kết thúc phải khác 0).");
+
+        // CQT giả lập tiếp nhận: cấp mã V tham chiếu file đã gửi.
+        var refNo = "V" + DateTime.Now.ToString("yyMMddHHmmss");
+        tpl.TInvoiceStatus = TemplateStatus.SentTct;
+        tpl.TCTRefNo = refNo;
+        tpl.TCTMessage = "CQT đã tiếp nhận mẫu hóa đơn, chờ phát hành.";
+        tpl.SentTCTDTime = DateTime.UtcNow;
+        tpl.SentTCTBy = by;
+        tpl.TCTChapNhan = null;
+        tpl.TCTChapNhanDTime = null;
+
+        db.TemplateTctLogs.Add(new TemplateTctLog
+        {
+            TemplateId = tpl.Id, Action = TemplateTctAction.SendTct, TCTRefNo = refNo,
+            Message = tpl.TCTMessage, Remark = remark, By = by,
+        });
+        db.Messages.Add(new TranMessage
+        {
+            NntId = tpl.NntId, Type = MsgType.RegisterNnt, Dir = MsgDir.Out, Code = "300",
+            Text = $"Gửi mẫu hóa đơn {tpl.FormNo} ({tpl.TInvoiceCode}) tới CQT — mã V {refNo}{(string.IsNullOrWhiteSpace(remark) ? "" : ": " + remark.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã gửi mẫu {tpl.FormNo} ({tpl.TInvoiceCode}) tới CQT. Mã V: {refNo}.");
+    }
+
+    // Nhận kết quả phát hành mẫu từ CQT (theo Invoice_TempInvoice_TCTIssued của TVAN gốc):
+    // chỉ nhận kết quả cho mẫu đã gửi CQT (SENTTCT). CQT chấp nhận (ACCEPT) → mẫu chuyển ISSUED
+    // (đang sử dụng); CQT từ chối (REJECT) → mẫu quay về PENDING (chờ). Ghi TCTChapNhan/TCTChapNhanDTime/
+    // TCTMessage và nhật ký (TemplateTctLog) để đối soát.
+    public async Task<(bool ok, string msg)> ReceiveTemplateTctResultAsync(int templateId, TctAcceptStatus chapNhan, string? message, string? by)
+    {
+        var tpl = await db.InvoiceTemplates.Include(t => t.Nnt).FirstOrDefaultAsync(t => t.Id == templateId);
+        if (tpl == null) return (false, "Không tìm thấy mẫu hóa đơn.");
+        if (tpl.TInvoiceStatus != TemplateStatus.SentTct) return (false, "Chỉ nhận kết quả CQT cho mẫu đã gửi CQT (SENTTCT).");
+
+        var accept = chapNhan == TctAcceptStatus.Accept;
+        tpl.TCTChapNhan = chapNhan;
+        tpl.TCTChapNhanDTime = DateTime.UtcNow;
+        tpl.TCTMessage = string.IsNullOrWhiteSpace(message)
+            ? (accept ? "CQT chấp nhận phát hành mẫu hóa đơn." : "CQT từ chối phát hành mẫu hóa đơn.")
+            : message.Trim();
+        tpl.TInvoiceStatus = accept ? TemplateStatus.Issued : TemplateStatus.Draft;
+        if (accept) tpl.EffDateStart = DateTime.Today;
+
+        db.TemplateTctLogs.Add(new TemplateTctLog
+        {
+            TemplateId = tpl.Id, Action = TemplateTctAction.ReceiveTct, TCTRefNo = tpl.TCTRefNo,
+            ChapNhan = chapNhan, Message = tpl.TCTMessage, By = by,
+        });
+        db.Messages.Add(new TranMessage
+        {
+            NntId = tpl.NntId, Type = MsgType.RegisterNnt, Dir = MsgDir.In, Code = accept ? "202" : "204",
+            Text = $"CQT {(accept ? "chấp nhận" : "từ chối")} phát hành mẫu {tpl.FormNo} ({tpl.TInvoiceCode}): {tpl.TCTMessage}"
+        });
+        await db.SaveChangesAsync();
+        return (accept,
+            accept ? $"CQT đã chấp nhận phát hành mẫu {tpl.FormNo} ({tpl.TInvoiceCode}) — mẫu chuyển sang đang sử dụng."
+                   : $"CQT từ chối phát hành mẫu {tpl.FormNo} ({tpl.TInvoiceCode}) — mẫu quay về trạng thái chờ.");
+    }
+
+    public Task<List<TemplateTctLog>> TemplateTctLogsAsync(int? templateId)
+    {
+        var q = db.TemplateTctLogs.Include(l => l.Template).AsQueryable();
         if (templateId.HasValue) q = q.Where(l => l.TemplateId == templateId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
     }

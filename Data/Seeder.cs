@@ -284,6 +284,35 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
         }
+
+        // Gửi mẫu hóa đơn tới CQT (theo Invoice_TempInvoice_SentTCT của TVAN gốc):
+        // seller có mẫu 1C26TAC đã gửi CQT (SENTTCT) kèm mã V tham chiếu + nhật ký gửi CQT.
+        if (!await db.InvoiceTemplates.AnyAsync(t => t.FormNo == "1C26TAC"))
+        {
+            var seller = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == "0101243150");
+            if (seller != null)
+            {
+                var sentTpl = new InvoiceTemplate
+                {
+                    NntId = seller.Id, TInvoiceCode = "TINV-1C26TAC", TInvoiceName = "Hóa đơn GTGT 1C26TAC",
+                    FormNo = "1C26TAC", Sign = "K26TAC", TTType = InvoiceNoRule.TT78,
+                    EffDateStart = DateTime.Today, StartInvoiceNo = 1, EndInvoiceNo = 500,
+                    QtyUsed = 0, TInvoiceStatus = TemplateStatus.SentTct, FlagActive = true,
+                    TCTRefNo = "V" + DateTime.Now.AddDays(-1).ToString("yyMMddHHmmss"),
+                    TCTMessage = "CQT đã tiếp nhận mẫu hóa đơn, chờ phát hành.",
+                    SentTCTDTime = DateTime.UtcNow.AddDays(-1), SentTCTBy = "kế toán"
+                };
+                db.InvoiceTemplates.Add(sentTpl); await db.SaveChangesAsync();
+
+                db.TemplateTctLogs.Add(new TemplateTctLog
+                {
+                    TemplateId = sentTpl.Id, Action = TemplateTctAction.SendTct, TCTRefNo = sentTpl.TCTRefNo,
+                    Message = sentTpl.TCTMessage, Remark = "Gửi đăng ký mẫu theo thông báo", By = "kế toán",
+                    CreatedAt = DateTime.UtcNow.AddDays(-1)
+                });
+                await db.SaveChangesAsync();
+            }
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

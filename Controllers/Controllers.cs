@@ -450,6 +450,7 @@ public class InvoiceTemplateController(ITvanService svc) : Controller
         ViewBag.NntId = nntId;
         ViewBag.Logs = await svc.AllocLogsAsync(null);
         ViewBag.RangeLogs = await svc.TemplateRangeLogsAsync(null);
+        ViewBag.TctLogs = await svc.TemplateTctLogsAsync(null);
         return View(await svc.TemplatesAsync(nntId));
     }
 
@@ -477,6 +478,25 @@ public class InvoiceTemplateController(ITvanService svc) : Controller
     public async Task<IActionResult> IncreaseEndNo(int id, int newEndInvoiceNo, string? remark, string? by)
     {
         var (ok, msg) = await svc.IncreaseTemplateEndNoAsync(id, newEndInvoiceNo, remark, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Gửi mẫu hóa đơn tới CQT (theo Invoice_TempInvoice_SentTCT của TVAN gốc): PENDING → SENTTCT.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SendTct(int id, string? remark, string? by)
+    {
+        var (ok, msg) = await svc.SendTemplateToTctAsync(id, remark, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Nhận kết quả phát hành mẫu từ CQT (theo Invoice_TempInvoice_TCTIssued của TVAN gốc):
+    // ACCEPT → ISSUED, REJECT → PENDING.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReceiveTct(int id, TctAcceptStatus chapNhan, string? message, string? by)
+    {
+        var (ok, msg) = await svc.ReceiveTemplateTctResultAsync(id, chapNhan, message, by);
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Index));
     }
