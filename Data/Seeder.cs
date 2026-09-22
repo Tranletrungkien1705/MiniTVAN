@@ -37,6 +37,26 @@ public static class Seeder
                 new LicenseHist { NntId = seller.Id, Type = LicenseHistType.Create, Qty = 1000, TotalQtyAfter = 1000, Note = "Cấp hạn mức ban đầu", CreatedAt = DateTime.UtcNow.AddDays(-10) },
                 new LicenseHist { NntId = seller.Id, Type = LicenseHistType.Increase, Qty = 0, TotalQtyAfter = 1000, Note = "Khởi tạo demo", CreatedAt = DateTime.UtcNow.AddDays(-2) });
             await db.SaveChangesAsync();
+
+            // Bảng tổng hợp dữ liệu HĐĐT gửi CQT (theo Mst_GuiTongHop của TVAN gốc):
+            // gom các HĐ đã được CQT chấp nhận của seller trong kỳ tháng hiện tại.
+            var gth = new GuiTongHop
+            {
+                NntId = seller.Id, LKDLieu = PeriodType.Month, KDLieu = DateTime.Today.ToString("yyyy-MM"),
+                BSLThu = 0, LDau = true, TNNT = seller.Name, MST = seller.Mst, NLap = DateTime.Today,
+                SBTHDLieu = $"{seller.Mst}-{DateTime.Today:yyyy-MM}-0", Status = GthStatus.Draft
+            };
+            int stt = 1;
+            foreach (var i in new[] { inv1, inv3 })
+            {
+                gth.Details.Add(new GuiTongHopDtl
+                {
+                    STT = stt++, InvoiceCode = i.TctCode ?? "", KHMSHDon = "01GTKT", KHHDon = i.Symbol, SHDon = i.No,
+                    NLap = i.IssuedDate, TNMua = i.BuyerName, MSTNMua = i.BuyerMst, THHDVu = "Hàng hóa, dịch vụ",
+                    DVTinh = "Lần", SLuong = 1, TTCThue = i.Amount, TSuat = i.VatRate, TgTThue = i.VatAmount, TgTTToan = i.Total
+                });
+            }
+            db.GuiTongHops.Add(gth); await db.SaveChangesAsync();
         }
     }
 

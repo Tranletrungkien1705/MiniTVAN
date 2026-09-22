@@ -162,6 +162,27 @@ app.MapPost("/api/licenses/increase", async (LicenseIncreaseDto dto, ITvanServic
     return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
 });
 
+// Bảng tổng hợp dữ liệu HĐĐT gửi CQT (theo Mst_GuiTongHop của TVAN gốc): danh sách.
+app.MapGet("/api/guitonghop", async (int? nntId, ITvanService svc) =>
+{
+    var ls = await svc.GuiTongHopsAsync(nntId);
+    return Results.Ok(ls.Select(g => new { g.Id, g.SBTHDLieu, nnt = g.Nnt?.Name, mst = g.MST, period = g.LKDLieu.ToString(), g.KDLieu, g.BSLThu, lines = g.Details.Count, total = g.TotalPayment, status = g.Status.ToString() }));
+});
+
+// Lập bảng tổng hợp theo kỳ (gom HĐ đã được CQT chấp nhận trong kỳ).
+app.MapPost("/api/guitonghop", async (GuiTongHopDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.CreateGuiTongHopAsync(dto.NntId, dto.LKDLieu, dto.KDLieu ?? "", dto.BSLThu, dto.Note);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Gửi bảng tổng hợp tới CQT (mô phỏng round-trip 202/204).
+app.MapPost("/api/guitonghop/{id:int}/send", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.SendGuiTongHopAsync(id);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -173,3 +194,4 @@ record ImportInvDto(string? SellerMst, string? Symbol, string? No, string? Buyer
 record AdjustDto(InvoiceAdjType AdjType, decimal Amount, decimal VatRate, string? Reason);
 record ReplaceDto(decimal Amount, decimal VatRate, string? Reason);
 record LicenseIncreaseDto(int NntId, int Qty, string? Note);
+record GuiTongHopDto(int NntId, PeriodType LKDLieu, string? KDLieu, int BSLThu, string? Note);

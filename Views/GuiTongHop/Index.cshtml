@@ -1,0 +1,55 @@
+@model List<GuiTongHop>
+@{ ViewData["Title"] = "Bảng tổng hợp gửi CQT";
+   var nnts = (List<Nnt>)ViewBag.Nnts;
+   int? filterNnt = ViewBag.NntId as int?; }
+<div class="row g-3">
+    <div class="col-lg-8"><div class="card"><div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-bold mb-0">Bảng tổng hợp dữ liệu hóa đơn điện tử</h6>
+            @if (filterNnt.HasValue) { <a class="small" href="/GuiTongHop">Bỏ lọc</a> }
+        </div>
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Số bảng</th><th>NNT</th><th>Kỳ</th><th class="text-end">Số HĐ</th><th class="text-end">Tổng thanh toán</th><th>Trạng thái</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var g in Model)
+            {
+                var (t, css) = Ui.Gth(g.Status);
+                <tr>
+                    <td><b>@g.SBTHDLieu</b><div class="small text-muted">Lập @g.NLap.ToString("dd/MM/yyyy")</div></td>
+                    <td>@g.Nnt?.Name<div class="small text-muted">MST @g.MST</div></td>
+                    <td><span class="badge bg-light text-dark border">@Ui.Period(g.LKDLieu)</span> @g.KDLieu</td>
+                    <td class="text-end">@g.Details.Count</td>
+                    <td class="text-end fw-semibold">@Ui.Money(g.TotalPayment)</td>
+                    <td><span class="badge bg-@css">@t</span></td>
+                    <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/GuiTongHop/Detail/@g.Id"><i class="bi bi-eye me-1"></i>Xem</a></td>
+                </tr>
+            }
+            @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có bảng tổng hợp nào.</td></tr> }
+            </tbody>
+        </table>
+    </div></div></div>
+    <div class="col-lg-4"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Lập bảng tổng hợp</h6>
+        <form asp-action="Create" method="post">@Html.AntiForgeryToken()
+            <div class="mb-2"><label class="form-label small mb-1">Người nộp thuế *</label>
+                <select name="nntId" class="form-select" required>
+                    <option value="">— Chọn NNT —</option>
+                    @foreach (var n in nnts) { <option value="@n.Id">@n.Name (@n.Mst)</option> }
+                </select></div>
+            <div class="mb-2"><label class="form-label small mb-1">Loại kỳ dữ liệu *</label>
+                <select name="lkdlieu" class="form-select" required>
+                    <option value="1">Tháng</option>
+                    <option value="0">Ngày</option>
+                    <option value="2">Quý</option>
+                    <option value="3">Năm</option>
+                </select></div>
+            <div class="mb-2"><label class="form-label small mb-1">Kỳ dữ liệu *</label>
+                <input name="kdlieu" class="form-control" placeholder="VD 2026-06 (tháng) / 2026-2 (quý) / 2026 (năm)" required /></div>
+            <div class="mb-2"><label class="form-label small mb-1">Bổ sung lần thứ</label>
+                <input name="bslthu" type="number" min="0" step="1" value="0" class="form-control" /></div>
+            <div class="mb-3"><label class="form-label small mb-1">Ghi chú</label><input name="note" class="form-control" placeholder="VD bảng tổng hợp tháng 6" /></div>
+            <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Lập bảng tổng hợp</button>
+        </form>
+        <div class="small text-muted mt-3">Hệ thống gom các hóa đơn đã được CQT chấp nhận trong kỳ. Bổ sung lần thứ = 0 là lần đầu.</div>
+    </div></div></div>
+</div>

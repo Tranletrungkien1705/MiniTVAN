@@ -1,0 +1,69 @@
+@model GuiTongHop
+@{ ViewData["Title"] = "Bảng tổng hợp " + Model.SBTHDLieu;
+   var (st, scss) = Ui.Gth(Model.Status); }
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <a href="/GuiTongHop" class="text-decoration-none small"><i class="bi bi-arrow-left me-1"></i>Danh sách bảng tổng hợp</a>
+    <span class="badge bg-@scss fs-6">@st</span>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-8"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Thông tin bảng tổng hợp</h6>
+        <div class="row small">
+            <div class="col-md-6 mb-2"><span class="text-muted">Số bảng tổng hợp:</span> <b>@Model.SBTHDLieu</b></div>
+            <div class="col-md-6 mb-2"><span class="text-muted">Mẫu số:</span> @Model.MSo</div>
+            <div class="col-md-6 mb-2"><span class="text-muted">Người nộp thuế:</span> <b>@Model.TNNT</b></div>
+            <div class="col-md-6 mb-2"><span class="text-muted">MST:</span> @Model.MST</div>
+            <div class="col-md-6 mb-2"><span class="text-muted">Loại kỳ:</span> @Ui.Period(Model.LKDLieu)</div>
+            <div class="col-md-6 mb-2"><span class="text-muted">Kỳ dữ liệu:</span> @Model.KDLieu</div>
+            <div class="col-md-6 mb-2"><span class="text-muted">Bổ sung lần thứ:</span> @Model.BSLThu @(Model.LDau ? "(lần đầu)" : "")</div>
+            <div class="col-md-6 mb-2"><span class="text-muted">Ngày lập:</span> @Model.NLap.ToString("dd/MM/yyyy")</div>
+            @if (!string.IsNullOrEmpty(Model.MessageSentCode)) { <div class="col-md-6 mb-2"><span class="text-muted">Mã thông điệp gửi:</span> @Model.MessageSentCode</div> }
+            @if (!string.IsNullOrEmpty(Model.MessageReplyCode)) { <div class="col-md-6 mb-2"><span class="text-muted">Mã CQT trả về:</span> @Model.MessageReplyCode</div> }
+        </div>
+        @if (!string.IsNullOrEmpty(Model.Remark)) { <div class="alert alert-warning small mt-2 mb-0"><i class="bi bi-info-circle me-1"></i>@Model.Remark</div> }
+    </div></div>
+
+        <div class="card mt-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Chi tiết hóa đơn (@Model.Details.Count dòng)</h6>
+            <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>STT</th><th>Mã tra cứu</th><th>Ký hiệu</th><th>Số HĐ</th><th>Ngày lập</th><th>Người mua</th><th class="text-end">Chưa thuế</th><th class="text-end">Thuế</th><th class="text-end">Thanh toán</th></tr></thead>
+                <tbody>
+                @foreach (var d in Model.Details.OrderBy(x => x.STT))
+                {
+                    <tr>
+                        <td>@d.STT</td>
+                        <td class="small">@d.InvoiceCode</td>
+                        <td class="small">@d.KHHDon</td>
+                        <td>@d.SHDon</td>
+                        <td class="small text-muted">@d.NLap.ToString("dd/MM/yyyy")</td>
+                        <td>@d.TNMua<div class="small text-muted">@d.MSTNMua</div></td>
+                        <td class="text-end">@Ui.Money(d.TTCThue)</td>
+                        <td class="text-end">@Ui.Money(d.TgTThue)</td>
+                        <td class="text-end fw-semibold">@Ui.Money(d.TgTTToan)</td>
+                    </tr>
+                }
+                @if (Model.Details.Count == 0) { <tr><td colspan="9" class="text-center text-muted py-3">Không có dòng dữ liệu.</td></tr> }
+                </tbody>
+                <tfoot><tr class="fw-bold"><td colspan="6" class="text-end">Tổng cộng</td><td class="text-end">@Ui.Money(Model.TotalAmount)</td><td class="text-end">@Ui.Money(Model.TotalVat)</td><td class="text-end">@Ui.Money(Model.TotalPayment)</td></tr></tfoot>
+            </table>
+            </div>
+        </div></div>
+    </div>
+    <div class="col-lg-4"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Gửi cơ quan thuế</h6>
+        @if (Model.Status == GthStatus.Accepted)
+        {
+            <div class="alert alert-success small mb-0"><i class="bi bi-check-circle me-1"></i>Bảng tổng hợp đã được CQT chấp nhận.</div>
+        }
+        else
+        {
+            <form asp-action="Send" method="post">@Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <button class="btn btn-primary w-100"><i class="bi bi-send me-1"></i>Gửi bảng tổng hợp tới CQT</button>
+            </form>
+            <div class="small text-muted mt-3">CQT kiểm tra mã tra cứu và tổng tiền từng dòng; phản hồi 202 (chấp nhận) hoặc 204 (từ chối).</div>
+        }
+    </div></div></div>
+</div>

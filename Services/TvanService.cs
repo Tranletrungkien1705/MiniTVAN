@@ -27,6 +27,10 @@ public interface ITvanService
     Task<InvoiceLicense?> GetLicenseAsync(int nntId);
     Task<(bool ok, string msg, int id)> IncreaseLicenseAsync(int nntId, int qty, string? note);
     Task<List<LicenseHist>> LicenseHistsAsync(int? nntId);
+    Task<List<GuiTongHop>> GuiTongHopsAsync(int? nntId);
+    Task<GuiTongHop?> GetGuiTongHopAsync(int id);
+    Task<(bool ok, string msg, int id)> CreateGuiTongHopAsync(int nntId, PeriodType lkdlieu, string kdlieu, int bslthu, string? note);
+    Task<(bool ok, string msg)> SendGuiTongHopAsync(int id);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -298,5 +302,112 @@ public class TvanService(AppDbContext db) : ITvanService
         var q = db.LicenseHists.AsQueryable();
         if (nntId.HasValue) q = q.Where(h => h.NntId == nntId.Value);
         return q.OrderByDescending(h => h.Id).ToListAsync();
+    }
+
+    // Bảng tổng hợp dữ liệu HĐĐT gửi CQT (theo Mst_GuiTongHop của TVAN gốc):
+    // NNT lập bảng tổng hợp theo kỳ, gom các HĐ đã được CQT chấp nhận trong kỳ đó.
+    public Task<List<GuiTongHop>> GuiTongHopsAsync(int? nntId)
+    {
+        var q = db.GuiTongHops.Include(g => g.Nnt).Include(g => g.Details).AsQueryable();
+        if (nntId.HasValue) q = q.Where(g => g.NntId == nntId.Value);
+        return q.OrderByDescending(g => g.Id).ToListAsync();
+    }
+
+    public Task<GuiTongHop?> GetGuiTongHopAsync(int id) =>
+        db.GuiTongHops.Include(g => g.Nnt).Include(g => g.Details).FirstOrDefaultAsync(g => g.Id == id);
+
+    // Lập bảng tổng hợp: gom HĐ Accepted của NNT trong kỳ (ngày/tháng/quý/năm).
+    // Ràng buộc theo TVAN gốc: BSLThu != 0 (bổ sung) thì LDau phải = 0; ngược lại LDau = 1.
+    public async Task<(bool ok, string msg, int id)> CreateGuiTongHopAsync(int nntId, PeriodType lkdlieu, string kdlieu, int bslthu, string? note)
+    {
+        var nnt = await db.Nnts.FirstOrDefaultAsync(n => n.Id == nntId);
+        if (nnt == null) return (false, "Không tìm thấy NNT.", 0);
+        if (string.IsNullOrWhiteSpace(kdlieu)) return (false, "Cần kỳ dữ liệu (VD 2026-06).", 0);
+        if (bslthu < 0) return (false, "Bổ sung lần thứ không được âm.", 0);
+
+        var (from, to) = PeriodRange(lkdlieu, kdlieu.Trim());
+        var invs = await db.Invoices.Include(i => i.Nnt)
+            .Where(i => i.NntId == nntId && i.Status == InvoiceStatus.Accepted
+                        && i.IssuedDate >= from && i.IssuedDate < to)
+            .OrderBy(i => i.IssuedDate).ThenBy(i => i.Id).ToListAsync();
+        if (invs.Count == 0) return (false, "Không có hóa đơn đã được CQT chấp nhận trong kỳ này.", 0);
+
+        var gth = new GuiTongHop
+        {
+            NntId = nntId, LKDLieu = lkdlieu, KDLieu = kdlieu.Trim(), BSLThu = bslthu,
+            LDau = bslthu == 0, TNNT = nnt.Name, MST = nnt.Mst, NLap = DateTime.Today,
+            SBTHDLieu = $"{nnt.Mst}-{kdlieu.Trim()}-{bslthu}", Status = GthStatus.Draft
+        };
+        int stt = 1;
+        foreach (var i in invs)
+        {
+            gth.Details.Add(new GuiTongHopDtl
+            {
+                STT = stt++, InvoiceCode = i.TctCode ?? "", KHMSHDon = "01GTKT", KHHDon = i.Symbol, SHDon = i.No,
+                NLap = i.IssuedDate, TNMua = i.BuyerName, MSTNMua = i.BuyerMst, THHDVu = "Hàng hóa, dịch vụ",
+                DVTinh = "Lần", SLuong = 1, TTCThue = i.Amount, TSuat = i.VatRate, TgTThue = i.VatAmount, TgTTToan = i.Total,
+                GChu = note
+            });
+        }
+        db.GuiTongHops.Add(gth); await db.SaveChangesAsync();
+        return (true, $"Đã lập bảng tổng hợp {gth.SBTHDLieu} gồm {gth.Details.Count} hóa đơn.", gth.Id);
+    }
+
+    // Gửi bảng tổng hợp tới CQT — mô phỏng round-trip: gửi (Out) → CQT kiểm tra → phản hồi (In 202/204).
+    public async Task<(bool ok, string msg)> SendGuiTongHopAsync(int id)
+    {
+        var gth = await db.GuiTongHops.Include(g => g.Details).FirstOrDefaultAsync(g => g.Id == id);
+        if (gth == null) return (false, "Không tìm thấy bảng tổng hợp.");
+        if (gth.Status is GthStatus.Accepted) return (false, "Bảng tổng hợp đã được CQT chấp nhận.");
+        if (gth.Details.Count == 0) return (false, "Bảng tổng hợp không có dòng dữ liệu.");
+
+        gth.Status = GthStatus.Sent; gth.SentAt = DateTime.UtcNow; gth.Remark = null;
+        gth.MessageSentCode = "K" + DateTime.Now.ToString("yyMMddHHmmss");
+        db.Messages.Add(new TranMessage { NntId = gth.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300", Text = $"Gửi bảng tổng hợp {gth.SBTHDLieu} ({gth.Details.Count} HĐ)" });
+
+        // CQT giả lập kiểm tra: mọi dòng phải có mã tra cứu và tổng tiền > 0.
+        string? reject = null;
+        if (gth.Details.Any(d => string.IsNullOrWhiteSpace(d.InvoiceCode))) reject = "Có dòng thiếu mã tra cứu hóa đơn";
+        else if (gth.Details.Any(d => d.TgTTToan <= 0)) reject = "Có dòng tổng tiền thanh toán không hợp lệ";
+
+        if (reject == null)
+        {
+            gth.Status = GthStatus.Accepted;
+            gth.MessageReplyCode = "202";
+            db.Messages.Add(new TranMessage { NntId = gth.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "202", Text = $"CQT chấp nhận bảng tổng hợp {gth.SBTHDLieu}" });
+            await db.SaveChangesAsync();
+            return (true, $"Cơ quan thuế đã tiếp nhận bảng tổng hợp {gth.SBTHDLieu}.");
+        }
+        gth.Status = GthStatus.Rejected; gth.MessageReplyCode = "204"; gth.Remark = reject;
+        db.Messages.Add(new TranMessage { NntId = gth.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "204", Text = $"CQT từ chối bảng tổng hợp: {reject}" });
+        await db.SaveChangesAsync();
+        return (false, $"CQT từ chối: {reject}");
+    }
+
+    // Khoảng thời gian [from, to) của kỳ dữ liệu theo loại kỳ (LKDLieu).
+    private static (DateTime from, DateTime to) PeriodRange(PeriodType t, string kdlieu)
+    {
+        switch (t)
+        {
+            case PeriodType.Day:
+                var d = DateTime.TryParse(kdlieu, out var dd) ? dd.Date : DateTime.Today;
+                return (d, d.AddDays(1));
+            case PeriodType.Quarter:
+                var parts = kdlieu.Split('-', '/');
+                int qy = parts.Length > 0 && int.TryParse(parts[0], out var y) ? y : DateTime.Today.Year;
+                int qn = parts.Length > 1 && int.TryParse(parts[1], out var q) ? Math.Clamp(q, 1, 4) : 1;
+                var qs = new DateTime(qy, (qn - 1) * 3 + 1, 1);
+                return (qs, qs.AddMonths(3));
+            case PeriodType.Year:
+                int yy = int.TryParse(kdlieu, out var y2) ? y2 : DateTime.Today.Year;
+                var ys = new DateTime(yy, 1, 1);
+                return (ys, ys.AddYears(1));
+            default: // Month
+                var mp = kdlieu.Split('-', '/');
+                int my = mp.Length > 0 && int.TryParse(mp[0], out var y3) ? y3 : DateTime.Today.Year;
+                int mm = mp.Length > 1 && int.TryParse(mp[1], out var m3) ? Math.Clamp(m3, 1, 12) : 1;
+                var ms = new DateTime(my, mm, 1);
+                return (ms, ms.AddMonths(1));
+        }
     }
 }

@@ -251,4 +251,65 @@ public class TvanServiceTests
             Assert.Contains("Không tìm thấy", msg);
         }
     }
+
+    [Fact]
+    public async Task GuiTongHop_Create_GathersAcceptedInvoicesInPeriod()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);   // Accepted, IssuedDate = hôm nay
+            var (ok, _, id) = await svc.CreateGuiTongHopAsync(nntId, PeriodType.Month, DateTime.Today.ToString("yyyy-MM"), 0, "tháng này");
+            Assert.True(ok);
+            var g = await svc.GetGuiTongHopAsync(id);
+            Assert.NotNull(g);
+            Assert.Single(g!.Details);
+            Assert.True(g.LDau);
+            Assert.Equal(GthStatus.Draft, g.Status);
+            Assert.Equal(11_000_000, g.TotalPayment);   // 10tr + 10% VAT
+        }
+    }
+
+    [Fact]
+    public async Task GuiTongHop_Create_NoAcceptedInPeriod_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);   // HĐ còn Draft, chưa truyền
+            var (ok, msg, _) = await svc.CreateGuiTongHopAsync(nntId, PeriodType.Month, DateTime.Today.ToString("yyyy-MM"), 0, null);
+            Assert.False(ok);
+            Assert.Contains("Không có hóa đơn", msg);
+        }
+    }
+
+    [Fact]
+    public async Task GuiTongHop_Send_Accepted_WithReplyCode()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);
+            var (_, _, id) = await svc.CreateGuiTongHopAsync(nntId, PeriodType.Month, DateTime.Today.ToString("yyyy-MM"), 0, null);
+            var (ok, _) = await svc.SendGuiTongHopAsync(id);
+            Assert.True(ok);
+            var g = await svc.GetGuiTongHopAsync(id);
+            Assert.Equal(GthStatus.Accepted, g!.Status);
+            Assert.Equal("202", g.MessageReplyCode);
+        }
+    }
+
+    [Fact]
+    public async Task GuiTongHop_Send_AlreadyAccepted_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);
+            var (_, _, id) = await svc.CreateGuiTongHopAsync(nntId, PeriodType.Month, DateTime.Today.ToString("yyyy-MM"), 0, null);
+            await svc.SendGuiTongHopAsync(id);
+            var (ok, msg) = await svc.SendGuiTongHopAsync(id);
+            Assert.False(ok);
+            Assert.Contains("đã được CQT chấp nhận", msg);
+        }
+    }
 }

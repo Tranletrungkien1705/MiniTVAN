@@ -117,6 +117,39 @@ public class LicenseController(ITvanService svc) : Controller
     }
 }
 
+public class GuiTongHopController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? nntId)
+    {
+        ViewBag.Nnts = await svc.NntsAsync();
+        ViewBag.NntId = nntId;
+        return View(await svc.GuiTongHopsAsync(nntId));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var g = await svc.GetGuiTongHopAsync(id);
+        if (g == null) return NotFound();
+        return View(g);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int nntId, PeriodType lkdlieu, string kdlieu, int bslthu, string? note)
+    {
+        var (ok, msg, id) = await svc.CreateGuiTongHopAsync(nntId, lkdlieu, kdlieu, bslthu, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Detail), new { id }) : RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Send(int id)
+    {
+        var (ok, msg) = await svc.SendGuiTongHopAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+}
+
 public class LookupController(ITvanService svc) : Controller
 {
     [Route("Lookup/{code?}")]

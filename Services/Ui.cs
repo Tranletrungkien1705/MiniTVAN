@@ -58,4 +58,22 @@ public static class Ui
         LicenseHistType.Decrease => ("Giảm", "warning"),
         _ => (t.ToString(), "secondary")
     };
+
+    public static string Period(PeriodType t) => t switch
+    {
+        PeriodType.Day     => "Ngày",
+        PeriodType.Month   => "Tháng",
+        PeriodType.Quarter => "Quý",
+        PeriodType.Year    => "Năm",
+        _ => t.ToString()
+    };
+
+    public static (string text, string css) Gth(GthStatus s) => s switch
+    {
+        GthStatus.Draft    => ("Nháp", "secondary"),
+        GthStatus.Sent     => ("Đang gửi CQT", "info"),
+        GthStatus.Accepted => ("CQT chấp nhận", "success"),
+        GthStatus.Rejected => ("CQT từ chối", "danger"),
+        _ => (s.ToString(), "secondary")
+    };
 }

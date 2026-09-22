@@ -14,6 +14,8 @@ public class AppDbContext : DbContext
     public DbSet<TranMessage> Messages => Set<TranMessage>();
     public DbSet<InvoiceLicense> Licenses => Set<InvoiceLicense>();
     public DbSet<LicenseHist> LicenseHists => Set<LicenseHist>();
+    public DbSet<GuiTongHop> GuiTongHops => Set<GuiTongHop>();
+    public DbSet<GuiTongHopDtl> GuiTongHopDtls => Set<GuiTongHopDtl>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -51,6 +53,26 @@ public class AppDbContext : DbContext
         b.Entity<LicenseHist>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.NntId });
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<GuiTongHop>(e =>
+        {
+            e.Ignore(x => x.TotalAmount);
+            e.Ignore(x => x.TotalVat);
+            e.Ignore(x => x.TotalPayment);
+            e.HasIndex(x => new { x.OrgId, x.NntId });
+            e.HasOne(x => x.Nnt).WithMany().HasForeignKey(x => x.NntId);
+            e.HasMany(x => x.Details).WithOne().HasForeignKey(x => x.GuiTongHopId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<GuiTongHopDtl>(e =>
+        {
+            e.Property(x => x.TTCThue).HasPrecision(18, 2);
+            e.Property(x => x.TgTThue).HasPrecision(18, 2);
+            e.Property(x => x.TgTTToan).HasPrecision(18, 2);
+            e.Property(x => x.SLuong).HasPrecision(18, 2);
+            e.Property(x => x.TSuat).HasPrecision(9, 2);
+            e.HasIndex(x => new { x.OrgId, x.GuiTongHopId });
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }
