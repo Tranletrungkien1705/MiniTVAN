@@ -22,6 +22,7 @@ public interface ITvanService
     Task<(bool ok, string msg, int id)> ReplaceAsync(int invoiceId, decimal amount, decimal vatRate, string? reason);
     Task<(bool ok, string msg)> ResetToPendingAsync(int invoiceId, string? reason);
     Task<(bool ok, string msg)> RestoreInvoiceAsync(int invoiceId, string? reason);
+    Task<(bool ok, string msg)> DeleteAdjustReplaceAsync(int invoiceId, string? reason);
     Task<List<TranMessage>> MessagesAsync(int invoiceId);
     Task<Invoice?> LookupByCodeAsync(string tctCode);
     Task<TvanDash> DashboardAsync();
@@ -288,6 +289,31 @@ public class TvanService(AppDbContext db) : ITvanService
         });
         await db.SaveChangesAsync();
         return (true, $"Đã khôi phục HĐ {inv.Symbol}-{inv.No} về trạng thái đã phát hành (giữ nguyên mã tra cứu).");
+    }
+
+    // Xóa hóa đơn điều chỉnh/thay thế CHƯA phát hành (theo Invoice_Invoice_Support_DeleteInvoiceRefNo của TVAN gốc).
+    // Chỉ xóa được HĐ đang ở trạng thái chờ (Draft), có tham chiếu HĐ gốc (RefTctCode) và chưa được cấp mã tra cứu (TctCode).
+    // Dùng để hủy bỏ một HĐ điều chỉnh/thay thế lập sai trước khi truyền tới CQT.
+    public async Task<(bool ok, string msg)> DeleteAdjustReplaceAsync(int invoiceId, string? reason)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.");
+        if (inv.Status != InvoiceStatus.Draft) return (false, "Chỉ xóa được hóa đơn điều chỉnh/thay thế chưa phát hành (đang ở trạng thái chờ).");
+        if (inv.SourceCode is not (SourceInvoiceCode.Adjust or SourceInvoiceCode.Replace))
+            return (false, "Chỉ xóa được hóa đơn điều chỉnh hoặc thay thế.");
+        if (string.IsNullOrWhiteSpace(inv.RefTctCode)) return (false, "Hóa đơn không có tham chiếu tới hóa đơn gốc.");
+        if (!string.IsNullOrWhiteSpace(inv.TctCode)) return (false, "Hóa đơn đã được cấp mã tra cứu, không thể xóa.");
+
+        var label = inv.SourceCode == SourceInvoiceCode.Adjust ? "điều chỉnh" : "thay thế";
+        var symbol = inv.Symbol; var no = inv.No;
+        db.Invoices.Remove(inv);
+        db.Messages.Add(new TranMessage
+        {
+            NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Xóa hóa đơn {label} chưa phát hành {symbol}-{no} (tham chiếu {inv.RefTctCode}){(string.IsNullOrWhiteSpace(reason) ? "" : ": " + reason.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa hóa đơn {label} chưa phát hành {symbol}-{no}.");
     }
 
     public Task<Invoice?> LookupByCodeAsync(string tctCode) =>

@@ -516,4 +516,65 @@ public class TvanServiceTests
             Assert.Contains("Không tìm thấy", msg);
         }
     }
+
+    [Fact]
+    public async Task DeleteAdjustReplace_OnDraftAdjust_Deletes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);   // HĐ gốc Accepted
+            // Tạo HĐ điều chỉnh nhưng KHÔNG truyền (giữ Draft) để xóa
+            var root = await svc.GetInvoiceAsync(invId);
+            var adj = new Invoice
+            {
+                NntId = root!.NntId, Symbol = root.Symbol, No = "00000099",
+                BuyerName = root.BuyerName, Amount = 1_000_000, VatRate = 10,
+                Status = InvoiceStatus.Draft, SourceCode = SourceInvoiceCode.Adjust,
+                AdjType = InvoiceAdjType.Decrease, RefInvoiceId = root.Id, RefTctCode = root.TctCode
+            };
+            db.Invoices.Add(adj); await db.SaveChangesAsync();
+            var (ok, msg) = await svc.DeleteAdjustReplaceAsync(adj.Id, "lập sai");
+            Assert.True(ok);
+            Assert.Contains("Đã xóa", msg);
+            Assert.Null(await svc.GetInvoiceAsync(adj.Id));
+        }
+    }
+
+    [Fact]
+    public async Task DeleteAdjustReplace_OnRootInvoice_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);   // HĐ gốc Draft, SourceCode = Root
+            var (ok, msg) = await svc.DeleteAdjustReplaceAsync(invId, null);
+            Assert.False(ok);
+            Assert.Contains("điều chỉnh hoặc thay thế", msg);
+        }
+    }
+
+    [Fact]
+    public async Task DeleteAdjustReplace_OnAcceptedAdjust_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);
+            var (_, _, adjId) = await svc.AdjustAsync(invId, InvoiceAdjType.Decrease, 5_000_000, 10, "giảm giá");   // Accepted
+            var (ok, msg) = await svc.DeleteAdjustReplaceAsync(adjId, null);
+            Assert.False(ok);
+            Assert.Contains("chưa phát hành", msg);
+        }
+    }
+
+    [Fact]
+    public async Task DeleteAdjustReplace_UnknownInvoice_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.DeleteAdjustReplaceAsync(9999, null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
 }

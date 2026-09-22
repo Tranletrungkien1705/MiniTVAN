@@ -52,6 +52,16 @@
             @if (Model.Status is InvoiceStatus.Draft or InvoiceStatus.Rejected)
             {
                 <form asp-action="Transmit" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><button class="btn btn-primary w-100"><i class="bi bi-send-fill me-1"></i>Truyền tới cơ quan thuế</button></form>
+                @if (Model.SourceCode is SourceInvoiceCode.Adjust or SourceInvoiceCode.Replace && !string.IsNullOrWhiteSpace(Model.RefTctCode))
+                {
+                    <button class="btn btn-outline-danger w-100" type="button" data-bs-toggle="collapse" data-bs-target="#delAdjRepForm"><i class="bi bi-trash me-1"></i>Xóa HĐ điều chỉnh/thay thế chưa phát hành</button>
+                    <div class="collapse" id="delAdjRepForm"><div class="border rounded p-2">
+                        <form asp-action="DeleteAdjustReplace" method="post" onsubmit="return confirm('Xóa hóa đơn điều chỉnh/thay thế chưa phát hành này?') ">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                            <div class="mb-2"><label class="form-label small mb-1">Lý do (tùy chọn)</label><input name="reason" class="form-control form-control-sm" placeholder="VD lập sai, hủy bỏ" /></div>
+                            <button class="btn btn-danger btn-sm w-100">Xóa hóa đơn</button>
+                        </form>
+                    </div></div>
+                }
             }
             else if (Model.Status == InvoiceStatus.Accepted)
             {
