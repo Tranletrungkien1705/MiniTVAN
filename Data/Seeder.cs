@@ -231,6 +231,46 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
         }
+
+        // Hóa đơn khởi tạo từ MÁY TÍNH TIỀN (theo Invoice_Invoice_AllocatedInvoiceTypeM / GenMCCQTMTTTypeM của TVAN gốc):
+        // seller được CQT cấp mã máy tính tiền (MCCQT), có mẫu loại MTT (FormNo ký tự thứ 4 = 'M')
+        // và 1 HĐ MTT đang chờ đã cấp số + đã sinh mã CQT máy tính tiền (MCCQTMTT).
+        if (!await db.InvoiceTemplates.AnyAsync(t => t.FormNo == "1C2MAA"))
+        {
+            var seller = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == "0101243150");
+            if (seller != null)
+            {
+                seller.MCCQT = "A1B2C";   // mã CQT cấp cho máy tính tiền (5 ký tự)
+                await db.SaveChangesAsync();
+
+                var mttTpl = new InvoiceTemplate
+                {
+                    NntId = seller.Id, TInvoiceCode = "TINV-1C2MAA", TInvoiceName = "Hóa đơn MTT 1C2MAA",
+                    FormNo = "1C2MAA", Sign = "2", TTType = InvoiceNoRule.TT78,
+                    EffDateStart = DateTime.Today.AddDays(-30), StartInvoiceNo = 1, EndInvoiceNo = 1000,
+                    LastInvoiceNo = "00000001", QtyUsed = 1, LastInvoiceDateUTC = DateTime.Today,
+                    TInvoiceStatus = TemplateStatus.Issued, FlagActive = true
+                };
+                db.InvoiceTemplates.Add(mttTpl); await db.SaveChangesAsync();
+
+                var mttInv = new Invoice
+                {
+                    NntId = seller.Id, Symbol = "1C2MAA", No = "00000001", BuyerName = "Khách lẻ",
+                    Amount = 2_000_000, VatRate = 10, IssuedDate = DateTime.Today, Status = InvoiceStatus.Draft,
+                    MCCQTMTT = $"M2-{DateTime.Now:yy}-A1B2C-{DateTime.Now:MMdd}0000001",
+                    InvoiceNoDTimeUTC = DateTime.UtcNow, InvoiceNoBy = "kế toán"
+                };
+                db.Invoices.Add(mttInv); await db.SaveChangesAsync();
+
+                db.InvoiceNoAllocLogs.Add(new InvoiceNoAllocLog
+                {
+                    InvoiceId = mttInv.Id, TemplateId = mttTpl.Id, FormNo = mttTpl.FormNo, Sign = mttTpl.Sign,
+                    InvoiceNo = mttInv.No, InvoiceDate = mttInv.IssuedDate, By = "kế toán",
+                    CreatedAt = DateTime.UtcNow
+                });
+                await db.SaveChangesAsync();
+            }
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

@@ -1558,4 +1558,102 @@ public class TvanServiceTests
             Assert.Contains("Không tìm thấy", msg);
         }
     }
+
+    // Cấp số hóa đơn khởi tạo từ MÁY TÍNH TIỀN + sinh mã CQT máy tính tiền
+    // (theo Invoice_Invoice_AllocatedInvoiceTypeM / Invoice_Invoice_GenMCCQTMTTTypeM của TVAN gốc).
+    private static async Task<(int nntId, int invId)> SetupTypeM(AppDbContext db, ITvanService svc, string? mccqt = "A1B2C")
+    {
+        var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán", MCCQT = mccqt });
+        await svc.RegisterNntAsync(nntId);
+        var inv = new Invoice { NntId = nntId, Symbol = "1C2MAA", No = "", BuyerName = "Khách lẻ", Amount = 2_000_000, Status = InvoiceStatus.Draft };
+        db.Invoices.Add(inv); await db.SaveChangesAsync();
+        return (nntId, inv.Id);
+    }
+
+    private static async Task<int> AddTypeMTemplate(AppDbContext db, int nntId, string formNo = "1C2MAA", string? lastNo = null, int qtyUsed = 0)
+    {
+        var tpl = new InvoiceTemplate
+        {
+            NntId = nntId, TInvoiceCode = "TINV-" + formNo, TInvoiceName = "Mẫu " + formNo,
+            FormNo = formNo, Sign = "2", TTType = InvoiceNoRule.TT78,
+            EffDateStart = DateTime.Today.AddDays(-30), StartInvoiceNo = 1, EndInvoiceNo = 1000,
+            LastInvoiceNo = lastNo, QtyUsed = qtyUsed, TInvoiceStatus = TemplateStatus.Issued, FlagActive = true
+        };
+        db.InvoiceTemplates.Add(tpl); await db.SaveChangesAsync();
+        return tpl.Id;
+    }
+
+    [Fact]
+    public async Task AllocateNoTypeM_OnDraft_AssignsNoAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, invId) = await SetupTypeM(db, svc);
+            await AddTypeMTemplate(db, nntId, lastNo: "00000003", qtyUsed: 3);
+            var (ok, msg, no) = await svc.AllocateInvoiceNoTypeMAsync(invId, DateTime.Today, "kế toán");
+            Assert.True(ok);
+            Assert.Equal("00000004", no);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal("00000004", inv!.No);
+            Assert.Equal("1C2MAA", inv.Symbol);
+            Assert.Null(inv.TctCode);   // HĐ MTT không sinh mã tra cứu thông thường
+            Assert.Single(await svc.AllocLogsAsync(invId));
+        }
+    }
+
+    [Fact]
+    public async Task AllocateNoTypeM_NonTypeMTemplate_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, invId) = await SetupTypeM(db, svc);
+            await AddTemplate(db, nntId);   // mẫu 1C26TAA (không phải MTT)
+            var (ok, msg, _) = await svc.AllocateInvoiceNoTypeMAsync(invId, DateTime.Today, null);
+            Assert.False(ok);
+            Assert.Contains("máy tính tiền", msg);
+        }
+    }
+
+    [Fact]
+    public async Task AllocateNoTypeM_MissingMccqt_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, invId) = await SetupTypeM(db, svc, mccqt: null);
+            await AddTypeMTemplate(db, nntId);
+            var (ok, msg, _) = await svc.AllocateInvoiceNoTypeMAsync(invId, DateTime.Today, null);
+            Assert.False(ok);
+            Assert.Contains("MCCQT", msg);
+        }
+    }
+
+    [Fact]
+    public async Task GenMccqtMtt_OnDraftTypeM_Generates23CharCode()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, invId) = await SetupTypeM(db, svc);
+            await AddTypeMTemplate(db, nntId);
+            await svc.AllocateInvoiceNoTypeMAsync(invId, DateTime.Today, null);
+            var (ok, msg, code) = await svc.GenMccqtMttAsync(invId);
+            Assert.True(ok);
+            Assert.NotNull(code);
+            Assert.Equal(23, code!.Length);
+            Assert.StartsWith("M2-", code);
+            Assert.Contains("A1B2C", code);
+            Assert.Equal(code, (await svc.GetInvoiceAsync(invId))!.MCCQTMTT);
+        }
+    }
+
+    [Fact]
+    public async Task GenMccqtMtt_NonTypeM_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);   // HĐ 1C26TAA (không phải MTT)
+            var (ok, msg, _) = await svc.GenMccqtMttAsync(invId);
+            Assert.False(ok);
+            Assert.Contains("máy tính tiền", msg);
+        }
+    }
 }

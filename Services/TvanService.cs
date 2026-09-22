@@ -59,6 +59,8 @@ public interface ITvanService
     Task<List<TemplateRangeLog>> TemplateRangeLogsAsync(int? templateId);
     Task<(bool ok, string msg, string? invoiceNo)> AllocateInvoiceNoAsync(int invoiceId, DateTime invoiceDate, string? by);
     Task<List<InvoiceNoAllocLog>> AllocLogsAsync(int? invoiceId);
+    Task<(bool ok, string msg, string? mccqtmtt)> AllocateInvoiceNoTypeMAsync(int invoiceId, DateTime invoiceDate, string? by);
+    Task<(bool ok, string msg, string? mccqtmtt)> GenMccqtMttAsync(int invoiceId);
     Task<(bool ok, string msg)> ReceiveTctResultAsync(int invoiceId, TctMessageType mltDiep, string? maCQT, string? maLoi, string? lyDo);
     Task<List<TctReceiveLog>> TctReceiveLogsAsync(int? invoiceId);
     Task<(bool ok, string msg)> UpdateAfterAllocatedAsync(int invoiceId, string? buyerName, string? buyerMst, string? buyerAddress, PaymentMethod paymentMethod, decimal amount, decimal vatRate, DateTime invoiceDate, string? note, string? by);
@@ -998,6 +1000,107 @@ public class TvanService(AppDbContext db) : ITvanService
         if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
     }
+
+    // Cấp số hóa đơn khởi tạo từ MÁY TÍNH TIỀN (theo Invoice_Invoice_AllocatedInvoiceTypeM của TVAN gốc):
+    // chỉ áp dụng cho hóa đơn loại MTT (FormNo có ký tự thứ 4 = 'M'). Ràng buộc theo TVAN gốc:
+    //  - HĐ phải đang ở trạng thái chờ (Draft/PENDING) và CHƯA có số;
+    //  - Mẫu số phải là loại MTT (ký tự thứ 4 = 'M');
+    //  - NNT phải có Mã CQT cấp cho máy tính tiền (MCCQT) dài đúng 5 ký tự;
+    //  - ngày hóa đơn không được là ngày tương lai, không trước ngày hiệu lực mẫu và không trước ngày cấp số gần nhất.
+    // Khác với cấp số thường: KHÔNG sinh mã tra cứu CQT (TctCode) mà sinh "Mã của CQT trên hóa đơn MTT" (MCCQTMTT).
+    public async Task<(bool ok, string msg, string? mccqtmtt)> AllocateInvoiceNoTypeMAsync(int invoiceId, DateTime invoiceDate, string? by)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.", null);
+        if (inv.Status != InvoiceStatus.Draft) return (false, "Chỉ cấp số được cho hóa đơn đang ở trạng thái chờ (PENDING).", null);
+        if (!string.IsNullOrWhiteSpace(inv.No)) return (false, "Hóa đơn đã có số, không thể cấp số lại.", null);
+
+        var tpl = await db.InvoiceTemplates.FirstOrDefaultAsync(t => t.NntId == inv.NntId && t.FlagActive);
+        if (tpl == null) return (false, "NNT chưa có mẫu hóa đơn đang hoạt động để cấp số.", null);
+        if (!IsTypeM(tpl.FormNo)) return (false, "Mẫu hóa đơn không phải loại khởi tạo từ máy tính tiền (ký tự thứ 4 của mẫu số phải là 'M').", null);
+
+        var mccqt = (inv.Nnt?.MCCQT ?? "").Trim();
+        if (mccqt.Length != 5) return (false, "NNT chưa được CQT cấp mã máy tính tiền (MCCQT phải gồm 5 ký tự).", null);
+
+        var date = invoiceDate == default ? DateTime.Today : invoiceDate.Date;
+        if (date > DateTime.Today) return (false, "Ngày hóa đơn không được là ngày tương lai.", null);
+        if (date < tpl.EffDateStart.Date) return (false, $"Ngày hóa đơn phải sau ngày bắt đầu sử dụng mẫu ({tpl.EffDateStart:dd/MM/yyyy}).", null);
+        if (tpl.LastInvoiceDateUTC.HasValue && date < tpl.LastInvoiceDateUTC.Value.Date)
+            return (false, $"Ngày hóa đơn không được trước ngày cấp số gần nhất ({tpl.LastInvoiceDateUTC.Value:dd/MM/yyyy}).", null);
+        if (tpl.QtyUsed >= tpl.EndInvoiceNo - tpl.StartInvoiceNo + 1)
+            return (false, "Mẫu hóa đơn đã dùng hết dải số được cấp.", null);
+
+        int nextNo;
+        if (tpl.TTType == InvoiceNoRule.TT78)
+            nextNo = (int.TryParse(tpl.LastInvoiceNo, out var last) ? last : tpl.StartInvoiceNo - 1) + 1;
+        else
+            nextNo = tpl.StartInvoiceNo + tpl.QtyUsed;
+        var invoiceNo = nextNo.ToString("D8");
+
+        inv.No = invoiceNo;
+        inv.Symbol = string.IsNullOrWhiteSpace(tpl.FormNo) ? inv.Symbol : tpl.FormNo;
+        inv.IssuedDate = date;
+        inv.InvoiceNoDTimeUTC = DateTime.UtcNow;
+        inv.InvoiceNoBy = by;
+
+        tpl.LastInvoiceNo = invoiceNo;
+        tpl.LastInvoiceDateUTC = date;
+        tpl.QtyUsed += 1;
+
+        db.InvoiceNoAllocLogs.Add(new InvoiceNoAllocLog
+        {
+            InvoiceId = inv.Id, TemplateId = tpl.Id, FormNo = tpl.FormNo, Sign = tpl.Sign,
+            InvoiceNo = invoiceNo, InvoiceDate = date, By = by,
+        });
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Cấp số HĐ máy tính tiền {tpl.FormNo}-{invoiceNo} cho HĐ ngày {date:dd/MM/yyyy}{(string.IsNullOrWhiteSpace(by) ? "" : " bởi " + by.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã cấp số hóa đơn máy tính tiền {tpl.FormNo}-{invoiceNo}.", invoiceNo);
+    }
+
+    // Sinh "Mã của CQT trên hóa đơn khởi tạo từ máy tính tiền" (MCCQTMTT)
+    // (theo Invoice_Invoice_GenMCCQTMTTTypeM của TVAN gốc). Định dạng: M<C2>-<yy>-<MCCQT>-<MMdd><seq7>.
+    // Chỉ áp dụng cho hóa đơn loại MTT đang ở trạng thái chờ (Draft/PENDING) và đã có số.
+    public async Task<(bool ok, string msg, string? mccqtmtt)> GenMccqtMttAsync(int invoiceId)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.", null);
+        if (inv.Status != InvoiceStatus.Draft) return (false, "Chỉ sinh mã CQT máy tính tiền cho hóa đơn đang ở trạng thái chờ (PENDING).", null);
+        if (!IsTypeM(inv.Symbol)) return (false, "Hóa đơn không phải loại khởi tạo từ máy tính tiền (ký tự thứ 4 của mẫu số phải là 'M').", null);
+
+        var mccqt = (inv.Nnt?.MCCQT ?? "").Trim();
+        if (mccqt.Length != 5) return (false, "NNT chưa được CQT cấp mã máy tính tiền (MCCQT phải gồm 5 ký tự).", null);
+
+        // C2 = ký hiệu hóa đơn (Sign) của mẫu (theo Invoice_Invoice_GenMCCQTMTTTypeMX của TVAN gốc).
+        var tpl = await db.InvoiceTemplates.FirstOrDefaultAsync(t => t.NntId == inv.NntId && t.FormNo == inv.Symbol);
+        var sign = (tpl?.Sign ?? "").Trim();
+        if (sign.Length == 0) sign = inv.Symbol.Length >= 2 ? inv.Symbol.Substring(1, 1) : "1";
+        var year = DateTime.Now.ToString("yy");
+        var seq = await NextMccqtSeqAsync();
+        var seqPart = DateTime.Now.ToString("MMdd") + (seq % 10_000_000).ToString("D7");
+        var code = $"M{sign}-{year}-{mccqt}-{seqPart}";
+        if (code.Length != 23) return (false, "Không sinh được mã CQT máy tính tiền hợp lệ.", null);
+
+        inv.MCCQTMTT = code;
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Sinh mã CQT máy tính tiền cho HĐ {inv.Symbol}-{inv.No}: {code}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã sinh mã CQT máy tính tiền: {code}", code);
+    }
+
+    // Ký tự thứ 4 (C2) của Mẫu số = 'M' → hóa đơn khởi tạo từ máy tính tiền (theo Thông tư 32/2025/TT-BTC).
+    private static bool IsTypeM(string? formNo) =>
+        !string.IsNullOrWhiteSpace(formNo) && formNo.Length >= 4 && char.ToUpperInvariant(formNo[3]) == 'M';
+
+    // Số thứ tự tăng dần cho mã CQT máy tính tiền (theo Seq_Common_Raw("Seq_InvoiceMCCQTMTT") của TVAN gốc).
+    private async Task<long> NextMccqtSeqAsync() =>
+        await db.Invoices.IgnoreQueryFilters().CountAsync(i => i.MCCQTMTT != null) + 1;
 
     // Nhận kết quả phản hồi từ CQT cho hóa đơn đã gửi (theo Invoice_Invoice_TCTReceive của TVAN gốc):
     // CQT trả về mã loại thông điệp 202 (phát hành thành công, có mã CQT) hoặc 204 (phát hành thất bại).

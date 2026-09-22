@@ -197,4 +197,12 @@ public static class Ui
         Models.CancelAction.Cancel => ("Hủy hóa đơn", "dark"),
         _ => (a.ToString(), "secondary")
     };
+
+    // Loại hóa đơn theo ký tự thứ 4 của Mẫu số (theo Thông tư 32/2025/TT-BTC):
+    // 'M' → hóa đơn điện tử khởi tạo từ máy tính tiền (MTT).
+    public static (string text, string css) InvoiceType(InvoiceTypeM t) => t switch
+    {
+        InvoiceTypeM.Machine => ("HĐ máy tính tiền", "info"),
+        _ => ("HĐ thông thường", "secondary")
+    };
 }

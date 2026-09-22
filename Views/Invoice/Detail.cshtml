@@ -11,11 +11,13 @@
    var (srcText, srcCss) = Ui.Source(Model.SourceCode);
    var (cpText, cpCss) = Ui.ConvPrint(Model.FlagChange);
    var (hfText, hfCss) = Ui.Hotfix(Model.FlagHotfix);
+   var isTypeM = Model.Symbol.Length >= 4 && char.ToUpperInvariant(Model.Symbol[3]) == 'M';
+   var (mtText, mtCss) = Ui.InvoiceType(isTypeM ? InvoiceTypeM.Machine : InvoiceTypeM.Normal);
    var lookupUrl = $"{Context.Request.Scheme}://{Context.Request.Host}/Lookup/{Model.TctCode}"; }
 <div class="row g-3">
     <div class="col-lg-7"><div class="card"><div class="card-body">
         <div class="d-flex justify-content-between align-items-start mb-2">
-            <div><h5 class="fw-bold mb-1">Hóa đơn @Model.Symbol-@Model.No <span class="badge bg-@css ms-1">@st</span> <span class="badge bg-@srcCss ms-1">@srcText</span> <span class="badge bg-@cpCss ms-1">@cpText</span> <span class="badge bg-@hfCss ms-1">@hfText</span></h5>
+            <div><h5 class="fw-bold mb-1">Hóa đơn @Model.Symbol-@Model.No <span class="badge bg-@css ms-1">@st</span> <span class="badge bg-@srcCss ms-1">@srcText</span> <span class="badge bg-@cpCss ms-1">@cpText</span> <span class="badge bg-@hfCss ms-1">@hfText</span>@if (isTypeM) { <span class="badge bg-@mtCss ms-1">@mtText</span> }</h5>
                 <div class="text-muted small">Ngày @Model.IssuedDate.ToString("dd/MM/yyyy")@(Model.SentAt != null ? " · gửi " + Model.SentAt.Value.ToLocalTime().ToString("dd/MM HH:mm") : "")</div></div>
         </div>
         @if (Model.SourceCode != SourceInvoiceCode.Root)
@@ -26,6 +28,7 @@
             </div>
         }
         @if (Model.Status == InvoiceStatus.Accepted) { <div class="alert alert-success py-2 small mb-2"><i class="bi bi-patch-check me-1"></i>Mã tra cứu CQT: <b>@Model.TctCode</b></div> }
+        @if (!string.IsNullOrWhiteSpace(Model.MCCQTMTT)) { <div class="alert alert-info py-2 small mb-2"><i class="bi bi-upc-scan me-1"></i>Mã CQT trên HĐ máy tính tiền (MCCQTMTT): <b>@Model.MCCQTMTT</b></div> }
         @if (Model.Status == InvoiceStatus.Rejected) { <div class="alert alert-danger py-2 small mb-2"><i class="bi bi-x-octagon me-1"></i>TCT từ chối: @Model.RejectReason</div> }
         <div class="row g-2 small">
             <div class="col-6"><div class="text-muted">Người bán</div><b>@Model.Nnt?.Name</b><div>MST @Model.Nnt?.Mst</div></div>
@@ -80,6 +83,28 @@
                                 <div class="mb-2"><label class="form-label small mb-1">Ngày hóa đơn</label><input name="invoiceDate" type="date" value="@Model.IssuedDate.ToString("yyyy-MM-dd")" class="form-control form-control-sm" required /></div>
                                 <div class="mb-2"><label class="form-label small mb-1">Người cấp số</label><input name="by" class="form-control form-control-sm" placeholder="VD kế toán" /></div>
                                 <button class="btn btn-dark btn-sm w-100">Cấp số kế tiếp từ mẫu</button>
+                            </form>
+                        </div></div>
+                        @if (isTypeM)
+                        {
+                            <button class="btn btn-outline-info w-100" type="button" data-bs-toggle="collapse" data-bs-target="#allocNoTypeMForm"><i class="bi bi-cash-register me-1"></i>Cấp số HĐ máy tính tiền</button>
+                            <div class="collapse" id="allocNoTypeMForm"><div class="border rounded p-2">
+                                <div class="small text-muted mb-2">Hóa đơn khởi tạo từ máy tính tiền (mẫu số có ký tự thứ 4 = 'M'). Cấp số không sinh mã tra cứu thông thường.</div>
+                                <form asp-action="AllocateNoTypeM" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                                    <div class="mb-2"><label class="form-label small mb-1">Ngày hóa đơn</label><input name="invoiceDate" type="date" value="@Model.IssuedDate.ToString("yyyy-MM-dd")" class="form-control form-control-sm" required /></div>
+                                    <div class="mb-2"><label class="form-label small mb-1">Người cấp số</label><input name="by" class="form-control form-control-sm" placeholder="VD kế toán" /></div>
+                                    <button class="btn btn-info btn-sm w-100">Cấp số HĐ máy tính tiền</button>
+                                </form>
+                            </div></div>
+                        }
+                    }
+                    else if (isTypeM && string.IsNullOrWhiteSpace(Model.MCCQTMTT))
+                    {
+                        <button class="btn btn-outline-info w-100" type="button" data-bs-toggle="collapse" data-bs-target="#genMccqtForm"><i class="bi bi-upc-scan me-1"></i>Sinh mã CQT máy tính tiền</button>
+                        <div class="collapse" id="genMccqtForm"><div class="border rounded p-2">
+                            <div class="small text-muted mb-2">Sinh "Mã của CQT trên hóa đơn khởi tạo từ máy tính tiền" (MCCQTMTT) theo định dạng M&lt;C2&gt;-&lt;yy&gt;-&lt;MCCQT&gt;-&lt;MMdd&gt;&lt;seq&gt;.</div>
+                            <form asp-action="GenMccqtMtt" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                                <button class="btn btn-info btn-sm w-100">Sinh mã CQT máy tính tiền</button>
                             </form>
                         </div></div>
                     }

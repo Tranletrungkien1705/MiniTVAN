@@ -72,6 +72,11 @@ public enum PaymentMethod { Cash = 0, Transfer = 1, CashOrTransfer = 2 }
 // TT68 = số 8 chữ số liên tục; TT78 = số 7 chữ số, reset theo năm trên mẫu số.
 public enum InvoiceNoRule { TT68 = 0, TT78 = 1 }
 
+// Loại hóa đơn theo ký tự thứ 4 của Mẫu số (FormNo) — theo Thông tư 32/2025/TT-BTC:
+// ký tự C2 (vị trí thứ 4) = 'M' → hóa đơn điện tử khởi tạo từ MÁY TÍNH TIỀN (MTT).
+// Hóa đơn MTT khi cấp số KHÔNG sinh mã tra cứu thông thường mà sinh "Mã của CQT trên hóa đơn MTT" (MCCQTMTT).
+public enum InvoiceTypeM { Normal = 0, Machine = 1 }
+
 // Loại thao tác mở rộng dải số của mẫu hóa đơn (theo Invoice_TempInvoice_IncreaseEndInvoiceNo /
 // Invoice_TempInvoice_IncreaseQtyInvoiceNo của TVAN gốc):
 // IncreaseEndNo = tăng số hóa đơn cuối (mở rộng dải số được cấp phát).
@@ -96,6 +101,11 @@ public class Nnt : IOrgOwned
     public string? Email { get; set; }
     public RegStatus RegStatus { get; set; } = RegStatus.None;
     public DateTime? RegisteredAt { get; set; }
+
+    // Mã của CQT cấp cho Máy tính tiền (theo Mst_NNT.MCCQT của TVAN gốc):
+    // chuỗi 5 ký tự do CQT cấp, dùng để sinh mã CQT trên hóa đơn khởi tạo từ máy tính tiền (MCCQTMTT).
+    public string? MCCQT { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
@@ -186,6 +196,10 @@ public class Invoice : IOrgOwned
     // Phương thức thanh toán (theo Invoice_Invoice.PaymentMethodCode của TVAN gốc):
     // dùng cho cập nhật nội dung hóa đơn sau khi đã cấp số (Invoice_Invoice_UpdAfterAllocated).
     public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.CashOrTransfer;
+
+    // Mã của CQT trên hóa đơn khởi tạo từ máy tính tiền (theo Invoice_Invoice.MCCQTMTT của TVAN gốc):
+    // sinh khi cấp số cho hóa đơn loại MTT (FormNo có ký tự thứ 4 = 'M'), định dạng M<C2>-<yy>-<MCCQT>-<MMdd><seq7>.
+    public string? MCCQTMTT { get; set; }
 
     public decimal VatAmount => Math.Round(Amount * VatRate / 100m, 0);
     public decimal Total => Amount + VatAmount;

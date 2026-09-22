@@ -214,6 +214,24 @@ public class InvoiceController(ITvanService svc) : Controller
         return RedirectToAction(nameof(Detail), new { id });
     }
 
+    // Cấp số hóa đơn khởi tạo từ MÁY TÍNH TIỀN (theo Invoice_Invoice_AllocatedInvoiceTypeM của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AllocateNoTypeM(int id, DateTime invoiceDate, string? by)
+    {
+        var (ok, msg, _) = await svc.AllocateInvoiceNoTypeMAsync(id, invoiceDate, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Sinh mã CQT trên hóa đơn khởi tạo từ máy tính tiền (theo Invoice_Invoice_GenMCCQTMTTTypeM của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> GenMccqtMtt(int id)
+    {
+        var (ok, msg, _) = await svc.GenMccqtMttAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
     // Nhận kết quả phản hồi từ CQT (theo Invoice_Invoice_TCTReceive của TVAN gốc): 202 → Accepted, 204 → Rejected.
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> TctReceive(int id, TctMessageType mltDiep, string? maCQT, string? maLoi, string? lyDo)

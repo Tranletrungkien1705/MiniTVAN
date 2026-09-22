@@ -376,6 +376,21 @@ app.MapGet("/api/invoice-no-alloc-logs", async (int? invoiceId, ITvanService svc
     return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, l.FormNo, l.Sign, l.InvoiceNo, l.InvoiceDate, l.By, l.CreatedAt }));
 });
 
+// Cấp số hóa đơn khởi tạo từ MÁY TÍNH TIỀN (theo Invoice_Invoice_AllocatedInvoiceTypeM của TVAN gốc):
+// PENDING + chưa có số + mẫu loại MTT (FormNo ký tự thứ 4 = 'M') + NNT có MCCQT 5 ký tự → cấp số kế tiếp từ mẫu.
+app.MapPost("/api/invoices/{id:int}/allocate-no-type-m", async (int id, AllocateNoDto dto, ITvanService svc) =>
+{
+    var (ok, msg, invoiceNo) = await svc.AllocateInvoiceNoTypeMAsync(id, dto.InvoiceDate ?? DateTime.Today, dto.By);
+    return ok ? Results.Ok(new { id, invoiceNo, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Sinh mã CQT trên hóa đơn khởi tạo từ máy tính tiền (theo Invoice_Invoice_GenMCCQTMTTTypeM của TVAN gốc).
+app.MapPost("/api/invoices/{id:int}/gen-mccqt-mtt", async (int id, ITvanService svc) =>
+{
+    var (ok, msg, mccqtmtt) = await svc.GenMccqtMttAsync(id);
+    return ok ? Results.Ok(new { id, mccqtmtt, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 // Nhận kết quả phản hồi từ CQT cho hóa đơn đã gửi (theo Invoice_Invoice_TCTReceive của TVAN gốc):
 // 202 = phát hành thành công (có mã CQT), 204 = phát hành thất bại.
 app.MapPost("/api/invoices/{id:int}/tct-receive", async (int id, TctReceiveDto dto, ITvanService svc) =>

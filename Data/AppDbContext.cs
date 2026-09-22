@@ -47,6 +47,7 @@ public class AppDbContext : DbContext
             e.Ignore(x => x.VatAmount);
             e.Ignore(x => x.Total);
             e.HasIndex(x => x.TctCode).IsUnique();          // mã tra cứu GLOBAL (xuyên tenant)
+            e.HasIndex(x => x.MCCQTMTT).IsUnique();         // mã CQT trên HĐ MTT GLOBAL (xuyên tenant)
             e.HasIndex(x => new { x.OrgId, x.NntId });
             e.HasOne(x => x.Nnt).WithMany().HasForeignKey(x => x.NntId);
             e.HasOne(x => x.RefInvoice).WithMany().HasForeignKey(x => x.RefInvoiceId).OnDelete(DeleteBehavior.Restrict);
