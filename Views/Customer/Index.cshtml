@@ -1,0 +1,98 @@
+@model List<CustomerNnt>
+@{
+    ViewData["Title"] = "Danh mục khách hàng";
+    var mst = ViewBag.Mst as string;
+    var nnts = ViewBag.Nnts as List<Nnt> ?? new();
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-people me-1"></i>Danh mục khách hàng / người mua</h6>
+                <form method="get" action="/Customer" class="d-flex gap-2">
+                    <select name="mst" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">— Tất cả NNT —</option>
+                        @foreach (var n in nnts)
+                        {
+                            <option value="@n.Mst" selected="@(mst == n.Mst)">@n.Name (@n.Mst)</option>
+                        }
+                    </select>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã KH</th><th>Tên khách hàng</th><th>MST</th><th>Liên hệ</th><th>NNT</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var c in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@c.CustomerNNTCode</td>
+                        <td>@c.CustomerNNTName</td>
+                        <td class="small text-muted">@(string.IsNullOrWhiteSpace(c.CustomerMST) ? "—" : c.CustomerMST)</td>
+                        <td class="small text-muted">
+                            @if (!string.IsNullOrWhiteSpace(c.CustomerNNTPhone)) { <div><i class="bi bi-telephone me-1"></i>@c.CustomerNNTPhone</div> }
+                            @if (!string.IsNullOrWhiteSpace(c.CustomerNNTEmail)) { <div><i class="bi bi-envelope me-1"></i>@c.CustomerNNTEmail</div> }
+                            @if (string.IsNullOrWhiteSpace(c.CustomerNNTPhone) && string.IsNullOrWhiteSpace(c.CustomerNNTEmail)) { <span>—</span> }
+                        </td>
+                        <td class="small text-muted">@c.MST</td>
+                        <td>
+                            @if (c.FlagActive) { <span class="badge bg-success">Đang dùng</span> }
+                            else { <span class="badge bg-secondary">Ngừng dùng</span> }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/Customer/Delete" class="d-inline" onsubmit="return confirm('Xóa khách hàng @c.CustomerNNTCode?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@c.Id" />
+                                <input type="hidden" name="mst" value="@mst" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có khách hàng nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm / cập nhật khách hàng</h6>
+            <form method="post" action="/Customer/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">NNT (bên bán)</label>
+                    <select name="mst" class="form-select form-select-sm" required>
+                        @foreach (var n in nnts)
+                        {
+                            <option value="@n.Mst" selected="@(mst == n.Mst)">@n.Name (@n.Mst)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6"><label class="form-label small mb-1">Mã khách hàng</label><input name="code" class="form-control form-control-sm" placeholder="KH001" required /></div>
+                <div class="col-6"><label class="form-label small mb-1">MST khách hàng</label><input name="customerMst" class="form-control form-control-sm" placeholder="8012345678" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Tên khách hàng</label><input name="name" class="form-control form-control-sm" placeholder="Công ty TNHH ABC" required /></div>
+                <div class="col-6"><label class="form-label small mb-1">Loại khách hàng</label><input name="type" class="form-control form-control-sm" placeholder="Doanh nghiệp" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Ngày sinh</label><input name="dob" type="date" class="form-control form-control-sm" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Địa chỉ</label><input name="address" class="form-control form-control-sm" placeholder="Số 1, đường ABC" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Điện thoại</label><input name="phone" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Fax</label><input name="fax" class="form-control form-control-sm" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Email</label><input name="email" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Người liên hệ</label><input name="contactName" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">ĐT liên hệ</label><input name="contactPhone" class="form-control form-control-sm" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Email liên hệ</label><input name="contactEmail" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Mã tỉnh</label><input name="provinceCode" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Mã huyện</label><input name="districtCode" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Số tài khoản</label><input name="accNo" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Ngân hàng</label><input name="bankName" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Loại giấy tờ</label><input name="govIdType" class="form-control form-control-sm" placeholder="CCCD" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Số giấy tờ</label><input name="govId" class="form-control form-control-sm" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Ghi chú</label><input name="remark" class="form-control form-control-sm" /></div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="active" value="true" id="custActive" checked />
+                    <label class="form-check-label small" for="custActive">Đang dùng</label>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu khách hàng</button></div>
+            </form>
+        </div></div>
+    </div>
+</div>

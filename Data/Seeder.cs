@@ -383,6 +383,58 @@ public static class Seeder
                 db.InvoiceTempGroups.Add(grp); await db.SaveChangesAsync();
             }
         }
+
+        // Mẫu thông điệp/thông báo gửi CQT (theo Mst_MessageTemplate của TVAN gốc):
+        // tổ chức demo khai báo 2 mẫu thông điệp (100 đăng ký HĐĐT, 300 HĐĐT sai sót).
+        if (!await db.MessageTemplates.AnyAsync())
+        {
+            db.MessageTemplates.AddRange(
+                new MessageTemplate
+                {
+                    MessageTplCode = "TPL100", MessageTplName = "100 - Thông điệp gửi tờ khai đăng ký/thay đổi thông tin sử dụng hóa đơn điện tử",
+                    MessageTypeCode = MessageTypeCode.Register100,
+                    MessageTplContent = "{\"Title\":\"Tờ khai đăng ký sử dụng HĐĐT\",\"MST\":\"{MST}\",\"TenNNT\":\"{TenNNT}\"}",
+                    MessageTplFileName = "mau100.rtmpl", MessageTplFilePath = $"{DateTime.Today:yyyy-MM-dd}/mau100.rtmpl",
+                    FlagActive = true, UpdatedBy = "kế toán"
+                },
+                new MessageTemplate
+                {
+                    MessageTplCode = "TPL300", MessageTplName = "300 - Thông điệp thông báo về hóa đơn điện tử đã lập có sai sót",
+                    MessageTypeCode = MessageTypeCode.Error300,
+                    MessageTplContent = "{\"Title\":\"Thông báo HĐĐT sai sót\",\"SoHoaDon\":\"{SoHoaDon}\",\"LyDo\":\"{LyDo}\"}",
+                    FlagActive = true, UpdatedBy = "kế toán"
+                });
+            await db.SaveChangesAsync();
+        }
+
+        // Danh mục khách hàng / người mua (theo Mst_CustomerNNT của TVAN gốc):
+        // seller có 2 khách hàng demo để chọn nhanh khi lập hóa đơn.
+        if (!await db.CustomerNnts.AnyAsync())
+        {
+            var seller = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == "0101243150");
+            if (seller != null)
+            {
+                db.CustomerNnts.AddRange(
+                    new CustomerNnt
+                    {
+                        MST = seller.Mst, CustomerNNTCode = "KH001", CustomerNNTName = "Công ty TNHH Thương mại An Phát",
+                        CustomerMST = "8012345678", CustomerNNTType = "Doanh nghiệp", CustomerNNTAddress = "Số 12 Lê Lợi, Hà Nội",
+                        CustomerNNTEmail = "ketoan@anphat.vn", CustomerNNTPhone = "024 3933 1122", ContactName = "Nguyễn Văn A",
+                        ContactPhone = "0912 345 678", ContactEmail = "a.nguyen@anphat.vn", ProvinceCode = "01", DistrictCode = "0101",
+                        AccNo = "1234567890", BankName = "Vietcombank - CN Hà Nội", GovIDType = "CCCD", GovID = "001090012345",
+                        Remark = "Khách hàng thân thiết", FlagActive = true, UpdatedBy = "kế toán"
+                    },
+                    new CustomerNnt
+                    {
+                        MST = seller.Mst, CustomerNNTCode = "KH002", CustomerNNTName = "Công ty CP Dịch vụ Miền Nam",
+                        CustomerMST = "0312345678", CustomerNNTType = "Doanh nghiệp", CustomerNNTAddress = "Số 45 Nguyễn Huệ, TP.HCM",
+                        CustomerNNTEmail = "info@miennam.vn", CustomerNNTPhone = "028 3822 3344", ContactName = "Trần Thị B",
+                        ContactPhone = "0987 654 321", ProvinceCode = "79", DistrictCode = "7901",
+                        AccNo = "9876543210", BankName = "BIDV - CN Sài Gòn", FlagActive = true, UpdatedBy = "kế toán"
+                    });
+                await db.SaveChangesAsync();
+            }
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

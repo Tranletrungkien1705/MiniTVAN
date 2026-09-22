@@ -35,6 +35,7 @@ public interface ITvanService
     Task<GuiTongHop?> GetGuiTongHopAsync(int id);
     Task<(bool ok, string msg, int id)> CreateGuiTongHopAsync(int nntId, PeriodType lkdlieu, string kdlieu, int bslthu, string? note);
     Task<(bool ok, string msg)> SendGuiTongHopAsync(int id);
+    Task<List<InvoiceGthRow>> BthRowsAsync(PeriodType lkdlieu, string kdlieu);
     Task<List<TaxOffice>> TaxOfficesAsync();
     Task<List<NntLookupLog>> NntLookupLogsAsync(string? mst);
     Task<(bool ok, string msg, NntLookupLog? log)> LookupNntByMstAsync(string mst);
@@ -91,6 +92,13 @@ public interface ITvanService
     Task<InvoiceTempGroup?> GetTempGroupAsync(int id);
     Task<(bool ok, string msg, int id)> SaveTempGroupAsync(int? id, string code, string mst, VATType vatType, string name, string? body, string? thumbnail, SpecPrdType specPrdType, bool active, List<(string fieldName, string tcfType)> fields, string? by);
     Task<(bool ok, string msg)> DeleteTempGroupAsync(int id);
+    Task<List<MessageTemplate>> MessageTemplatesAsync(MessageTypeCode? type);
+    Task<(bool ok, string msg, int id)> SaveMessageTemplateAsync(string code, string name, MessageTypeCode type, string content, string? fileName, string? fileSpec, string? by);
+    Task<(bool ok, string msg)> DeleteMessageTemplateAsync(string code);
+    Task<List<CustomerNnt>> CustomerNntsAsync(string? mst);
+    Task<CustomerNnt?> GetCustomerNntAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveCustomerNntAsync(int? id, string mst, string code, string name, string? customerMst, string? type, string? address, string? email, string? phone, string? fax, string? contactName, string? contactPhone, string? contactEmail, DateTime? dob, string? provinceCode, string? districtCode, string? accNo, string? bankName, string? govIdType, string? govId, string? remark, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteCustomerNntAsync(int id);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -548,6 +556,52 @@ public class TvanService(AppDbContext db) : ITvanService
         db.Messages.Add(new TranMessage { NntId = gth.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "204", Text = $"CQT từ chối bảng tổng hợp: {reject}" });
         await db.SaveChangesAsync();
         return (false, $"CQT từ chối: {reject}");
+    }
+
+    // Bảng tổng hợp hóa đơn (BTH) — theo Invoice_Invoice_BTHGet / Invoice_Invoice_BTHGetX của TVAN gốc:
+    // liệt kê các hóa đơn đã phát hành (ISSUED) hoặc đã hủy (DELETED) trong một kỳ (ngày/tháng/quý),
+    // kèm trạng thái TThai suy ra từ SourceInvoiceCode + InvoiceStatus và thông tin hóa đơn gốc
+    // bị điều chỉnh/thay thế. Dùng để đối chiếu trước khi lập bảng tổng hợp gửi CQT.
+    public async Task<List<InvoiceGthRow>> BthRowsAsync(PeriodType lkdlieu, string kdlieu)
+    {
+        kdlieu = (kdlieu ?? "").Trim();
+        if (kdlieu.Length == 0) return new();
+        var (from, to) = PeriodRange(lkdlieu, kdlieu);
+
+        var invs = await db.Invoices.Include(i => i.Nnt)
+            .Where(i => (i.Status == InvoiceStatus.Accepted || i.Status == InvoiceStatus.Deleted)
+                        && i.IssuedDate >= from && i.IssuedDate < to)
+            .OrderBy(i => i.IssuedDate).ThenBy(i => i.Id).ToListAsync();
+
+        // Nạp hóa đơn gốc (bị điều chỉnh/thay thế) để hiển thị ký hiệu/mẫu số/số hóa đơn gốc.
+        var refIds = invs.Where(i => i.RefInvoiceId.HasValue).Select(i => i.RefInvoiceId!.Value).Distinct().ToList();
+        var refs = refIds.Count == 0
+            ? new Dictionary<int, Invoice>()
+            : await db.Invoices.Where(i => refIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id);
+
+        var rows = new List<InvoiceGthRow>();
+        foreach (var i in invs)
+        {
+            // TThai theo Invoice_Invoice_BTHGetX: DELETED luôn là Huỷ; ISSUED theo nguồn gốc hóa đơn.
+            var tthai = i.Status == InvoiceStatus.Deleted
+                ? TThai.Huy
+                : i.SourceCode switch
+                {
+                    SourceInvoiceCode.Adjust => TThai.DieuChinh,
+                    SourceInvoiceCode.Replace => TThai.ThayThe,
+                    _ => TThai.Moi
+                };
+            refs.TryGetValue(i.RefInvoiceId ?? 0, out var refInv);
+            rows.Add(new InvoiceGthRow
+            {
+                InvoiceCode = i.TctCode ?? "", Sign = i.Symbol, FormNo = i.Symbol, InvoiceNo = i.No,
+                InvoiceDate = i.IssuedDate, BuyerName = i.BuyerName, BuyerMst = i.BuyerMst,
+                Amount = i.Amount, VatRate = i.VatRate, VatAmount = i.VatAmount, Total = i.Total,
+                TThai = tthai,
+                RefSign = refInv?.Symbol, RefFormNo = refInv?.Symbol, RefInvoiceNo = refInv?.No
+            });
+        }
+        return rows;
     }
 
     // Danh mục cơ quan thuế (theo Mst_GovTaxID của TVAN gốc).
@@ -1864,6 +1918,145 @@ public class TvanService(AppDbContext db) : ITvanService
         db.InvoiceTempGroups.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa nhóm mẫu hóa đơn {code}.");
+    }
+
+    // Mẫu thông điệp/thông báo gửi CQT (theo Mst_MessageTemplate của TVAN gốc):
+    // danh sách mẫu thông điệp của tổ chức, lọc theo loại thông điệp nếu có.
+    public Task<List<MessageTemplate>> MessageTemplatesAsync(MessageTypeCode? type)
+    {
+        var q = db.MessageTemplates.AsQueryable();
+        if (type.HasValue) q = q.Where(m => m.MessageTypeCode == type.Value);
+        return q.OrderBy(m => m.MessageTypeCode).ThenBy(m => m.MessageTplCode).ToListAsync();
+    }
+
+    // Lưu (tạo mới/cập nhật) mẫu thông điệp theo mã (theo Mst_MessageTemplate_Create/Update của TVAN gốc):
+    // lưu lần đầu = tạo (chặn trùng mã), lưu lại = cập nhật; chặn thiếu mã/tên/nội dung.
+    public async Task<(bool ok, string msg, int id)> SaveMessageTemplateAsync(string code, string name, MessageTypeCode type, string content, string? fileName, string? fileSpec, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        content = (content ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã mẫu thông điệp.", 0);
+        if (name.Length == 0) return (false, "Cần tên mẫu thông điệp.", 0);
+        if (content.Length == 0) return (false, "Cần nội dung mẫu thông điệp.", 0);
+
+        var e = await db.MessageTemplates.FirstOrDefaultAsync(m => m.MessageTplCode == code);
+        var created = e == null;
+        if (e == null) { e = new MessageTemplate { MessageTplCode = code }; db.MessageTemplates.Add(e); }
+        e.MessageTplName = name;
+        e.MessageTypeCode = type;
+        e.MessageTplContent = content;
+        if (!string.IsNullOrWhiteSpace(fileName)) e.MessageTplFileName = fileName.Trim();
+        if (!string.IsNullOrWhiteSpace(fileSpec))
+        {
+            e.MessageTplFileSpec = fileSpec.Trim();
+            e.MessageTplFilePath = $"{DateTime.Now:yyyy-MM-dd}/{e.MessageTplFileName ?? code + ".rtmpl"}";
+        }
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã {(created ? "tạo" : "cập nhật")} mẫu thông điệp {code}.", e.Id);
+    }
+
+    // Xóa mẫu thông điệp theo mã (theo Mst_MessageTemplate_Delete của TVAN gốc): chặn khi mã không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteMessageTemplateAsync(string code)
+    {
+        code = (code ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã mẫu thông điệp.");
+        var e = await db.MessageTemplates.FirstOrDefaultAsync(m => m.MessageTplCode == code);
+        if (e == null) return (false, "Không tìm thấy mẫu thông điệp với mã này.");
+        db.MessageTemplates.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa mẫu thông điệp {code}.");
+    }
+
+    // Danh mục khách hàng / người mua (theo Mst_CustomerNNT của TVAN gốc):
+    // danh sách khách hàng của một NNT (lọc theo MST nếu có).
+    public Task<List<CustomerNnt>> CustomerNntsAsync(string? mst)
+    {
+        var q = db.CustomerNnts.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(mst)) q = q.Where(c => c.MST == mst.Trim());
+        return q.OrderBy(c => c.CustomerNNTCode).ToListAsync();
+    }
+
+    public Task<CustomerNnt?> GetCustomerNntAsync(int id) =>
+        db.CustomerNnts.FirstOrDefaultAsync(c => c.Id == id);
+
+    // Lưu (tạo mới/cập nhật) khách hàng theo khóa nghiệp vụ (MST, CustomerNNTCode)
+    // (theo Mst_CustomerNNT_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã khách hàng + tên khách hàng;
+    //  - MST phải là NNT đã tồn tại (bên bán sở hữu danh mục);
+    //  - khi tạo: mã khách hàng chưa tồn tại trong phạm vi NNT;
+    //  - CustomerMST (nếu khai báo) không được trùng với khách hàng khác của cùng NNT.
+    public async Task<(bool ok, string msg, int id)> SaveCustomerNntAsync(int? id, string mst, string code, string name, string? customerMst, string? type, string? address, string? email, string? phone, string? fax, string? contactName, string? contactPhone, string? contactEmail, DateTime? dob, string? provinceCode, string? districtCode, string? accNo, string? bankName, string? govIdType, string? govId, string? remark, bool active, string? by)
+    {
+        mst = (mst ?? "").Trim();
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        customerMst = string.IsNullOrWhiteSpace(customerMst) ? null : customerMst.Trim();
+        if (code.Length == 0) return (false, "Cần mã khách hàng.", 0);
+        if (name.Length == 0) return (false, "Cần tên khách hàng.", 0);
+        if (mst.Length == 0) return (false, "Cần MST người nộp thuế.", 0);
+        if (!await db.Nnts.AnyAsync(n => n.Mst == mst)) return (false, "Không tìm thấy NNT với MST này.", 0);
+
+        CustomerNnt? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.CustomerNnts.FirstOrDefaultAsync(c => c.Id == id.Value);
+        else e = await db.CustomerNnts.FirstOrDefaultAsync(c => c.MST == mst && c.CustomerNNTCode == code);
+
+        if (e == null)
+        {
+            if (await db.CustomerNnts.AnyAsync(c => c.MST == mst && c.CustomerNNTCode == code))
+                return (false, "Mã khách hàng đã tồn tại cho NNT này.", 0);
+            e = new CustomerNnt { MST = mst, CustomerNNTCode = code };
+            db.CustomerNnts.Add(e);
+        }
+        else
+        {
+            // Đổi mã khách hàng: chặn trùng với khách hàng khác của cùng NNT.
+            if (!string.Equals(e.CustomerNNTCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.CustomerNnts.AnyAsync(c => c.MST == mst && c.CustomerNNTCode == code && c.Id != e.Id))
+                return (false, "Mã khách hàng đã tồn tại cho NNT này.", 0);
+            e.CustomerNNTCode = code;
+        }
+
+        // CustomerMST duy nhất trong phạm vi một NNT (theo Mst_CustomerNNT_CheckMST của TVAN gốc).
+        if (customerMst != null && await db.CustomerNnts.AnyAsync(c => c.MST == mst && c.CustomerMST == customerMst && c.Id != e.Id))
+            return (false, "MST khách hàng đã tồn tại cho NNT này.", 0);
+
+        e.CustomerNNTName = name;
+        e.CustomerMST = customerMst;
+        e.CustomerNNTType = type;
+        e.CustomerNNTAddress = address;
+        e.CustomerNNTEmail = email;
+        e.CustomerNNTPhone = phone;
+        e.CustomerNNTFax = fax;
+        e.ContactName = contactName;
+        e.ContactPhone = contactPhone;
+        e.ContactEmail = contactEmail;
+        e.CustomerNNTDOB = dob;
+        e.ProvinceCode = provinceCode;
+        e.DistrictCode = districtCode;
+        e.AccNo = accNo;
+        e.BankName = bankName;
+        e.GovIDType = govIdType;
+        e.GovID = govId;
+        e.Remark = remark;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu khách hàng {code} — {name}.", e.Id);
+    }
+
+    // Xóa khách hàng theo id (theo Mst_CustomerNNT_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteCustomerNntAsync(int id)
+    {
+        var e = await db.CustomerNnts.FirstOrDefaultAsync(c => c.Id == id);
+        if (e == null) return (false, "Không tìm thấy khách hàng.");
+        var code = e.CustomerNNTCode;
+        db.CustomerNnts.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa khách hàng {code}.");
     }
 
     // Khoảng thời gian [from, to) của kỳ dữ liệu theo loại kỳ (LKDLieu).

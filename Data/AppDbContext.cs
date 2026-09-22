@@ -10,6 +10,7 @@ public class AppDbContext : DbContext
 
     public DbSet<Org> Orgs => Set<Org>();
     public DbSet<Nnt> Nnts => Set<Nnt>();
+    public DbSet<CustomerNnt> CustomerNnts => Set<CustomerNnt>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<TranMessage> Messages => Set<TranMessage>();
     public DbSet<InvoiceLicense> Licenses => Set<InvoiceLicense>();
@@ -38,6 +39,7 @@ public class AppDbContext : DbContext
     public DbSet<InvoiceDtlCustomField> InvoiceDtlCustomFields => Set<InvoiceDtlCustomField>();
     public DbSet<InvoiceTempGroup> InvoiceTempGroups => Set<InvoiceTempGroup>();
     public DbSet<InvoiceTempGroupField> InvoiceTempGroupFields => Set<InvoiceTempGroupField>();
+    public DbSet<MessageTemplate> MessageTemplates => Set<MessageTemplate>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -46,6 +48,11 @@ public class AppDbContext : DbContext
         b.Entity<Nnt>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.Mst }).IsUnique();
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CustomerNnt>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.MST, x.CustomerNNTCode }).IsUnique();   // mỗi NNT một mã khách hàng
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<Invoice>(e =>
@@ -224,6 +231,11 @@ public class AppDbContext : DbContext
         b.Entity<InvoiceTempGroupField>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.InvoiceTempGroupId });
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<MessageTemplate>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.MessageTplCode }).IsUnique();   // mỗi tổ chức một mã mẫu thông điệp
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

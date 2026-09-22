@@ -654,6 +654,62 @@ public class TempGroupController(ITvanService svc) : Controller
     }
 }
 
+// Mẫu thông điệp/thông báo gửi CQT (theo Mst_MessageTemplate của TVAN gốc):
+// mỗi tổ chức khai báo mẫu nội dung thông điệp theo loại thông điệp (100/204/300/301),
+// kèm file mẫu (.rtmpl) lưu base64 + đường dẫn file đã lưu.
+public class MessageTemplateController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(MessageTypeCode? type)
+    {
+        ViewBag.Type = type;
+        return View(await svc.MessageTemplatesAsync(type));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(string code, string name, MessageTypeCode type, string content, string? fileName, string? fileSpec, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveMessageTemplateAsync(code, name, type, content, fileName, fileSpec, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(string code)
+    {
+        var (ok, msg) = await svc.DeleteMessageTemplateAsync(code);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
+// Danh mục khách hàng / người mua (theo Mst_CustomerNNT của TVAN gốc):
+// mỗi NNT (bên bán) quản lý danh sách khách hàng của mình để chọn nhanh khi lập hóa đơn.
+public class CustomerController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? mst)
+    {
+        ViewBag.Mst = mst;
+        ViewBag.Nnts = await svc.NntsAsync();
+        return View(await svc.CustomerNntsAsync(mst));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string mst, string code, string name, string? customerMst, string? type, string? address, string? email, string? phone, string? fax, string? contactName, string? contactPhone, string? contactEmail, DateTime? dob, string? provinceCode, string? districtCode, string? accNo, string? bankName, string? govIdType, string? govId, string? remark, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveCustomerNntAsync(id, mst, code, name, customerMst, type, address, email, phone, fax, contactName, contactPhone, contactEmail, dob, provinceCode, districtCode, accNo, bankName, govIdType, govId, remark, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index), new { mst });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id, string? mst)
+    {
+        var (ok, msg) = await svc.DeleteCustomerNntAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index), new { mst });
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

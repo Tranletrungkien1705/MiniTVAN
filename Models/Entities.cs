@@ -105,6 +105,14 @@ public enum BulkFixAction { FixByTemplate = 0 }
 // Giao diện gốc luôn gửi "TEXT" (xem invoice_CustomField.js: DBPhysicalType = "TEXT").
 public enum DBPhysicalType { Text = 0, Number = 1, Date = 2 }
 
+// Trạng thái hóa đơn trong Bảng tổng hợp hóa đơn (BTH) — theo cột TThai của
+// Invoice_Invoice_BTHGetX (TVAN gốc): 0=Mới, 1=Huỷ, 2=Điều chỉnh, 3=Thay thế.
+// Suy ra từ SourceInvoiceCode + InvoiceStatus:
+//   ROOT + ISSUED → Moi; ROOT + DELETED → Huy;
+//   REPLACE + ISSUED → ThayThe; REPLACE + DELETED → Huy;
+//   ADJ + ISSUED → DieuChinh; ADJ + DELETED → Huy.
+public enum TThai { Moi = 0, Huy = 1, DieuChinh = 2, ThayThe = 3 }
+
 // Loại thuế suất của nhóm mẫu hóa đơn (theo TConst.Client_VATType của TVAN gốc):
 // 1VAT = mẫu có 1 thuế suất, NVAT = mẫu nhiều thuế suất.
 public enum VATType { OneVat = 0, NVat = 1 }
@@ -138,6 +146,40 @@ public class Nnt : IOrgOwned
     public string? MCCQT { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Danh mục khách hàng / người mua (theo bảng Mst_CustomerNNT của TVAN gốc):
+// mỗi NNT (bên bán, xác định bởi MST) quản lý danh sách khách hàng của mình để chọn nhanh khi lập hóa đơn.
+// Khóa nghiệp vụ: (OrgId, MST, CustomerNNTCode) — MST là mã số thuế của NNT sở hữu danh mục.
+// CustomerMST (MST của khách hàng) là duy nhất trong phạm vi một NNT nếu có khai báo.
+public class CustomerNnt : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string MST { get; set; } = "";                 // MST của NNT (bên bán) sở hữu danh mục
+    public string CustomerNNTCode { get; set; } = "";      // Mã khách hàng
+    public string CustomerNNTName { get; set; } = "";      // Tên khách hàng
+    public string? CustomerNNTType { get; set; }            // Loại khách hàng
+    public string? CustomerNNTAddress { get; set; }         // Địa chỉ
+    public string? CustomerNNTEmail { get; set; }           // Email
+    public string? CustomerNNTPhone { get; set; }           // Số điện thoại
+    public string? CustomerNNTFax { get; set; }             // Số Fax
+    public string? ContactName { get; set; }                // Tên người liên hệ
+    public string? ContactPhone { get; set; }               // Số điện thoại người liên hệ
+    public string? ContactEmail { get; set; }               // Email người liên hệ
+    public DateTime? CustomerNNTDOB { get; set; }           // Ngày sinh
+    public string? CustomerMST { get; set; }                // MST của khách hàng
+    public string? ProvinceCode { get; set; }               // Mã tỉnh
+    public string? DistrictCode { get; set; }               // Mã huyện
+    public string? AccNo { get; set; }                      // Số tài khoản
+    public string? BankName { get; set; }                   // Tên ngân hàng
+    public string? GovIDType { get; set; }                  // Loại giấy tờ
+    public string? GovID { get; set; }                      // Số giấy tờ
+    public string? Remark { get; set; }
+    public bool FlagActive { get; set; } = true;            // Đang dùng / ngừng dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
 }
 
 public class Invoice : IOrgOwned
@@ -730,6 +772,29 @@ public class InvoiceTempGroup : IOrgOwned
     public List<InvoiceTempGroupField> Fields { get; set; } = new();
 }
 
+// Dòng dữ liệu Bảng tổng hợp hóa đơn (BTH) — theo model InvoiceGTH của TVAN gốc
+// (idN.TVAN.Common/Models/TDiepTCT/InvoiceGTH.cs). Đây là bản xem trước danh sách hóa đơn
+// đã phát hành/đã hủy trong một kỳ (ngày/tháng/quý) kèm trạng thái (TThai) và thông tin
+// hóa đơn gốc bị điều chỉnh/thay thế — dùng để đối chiếu trước khi lập bảng tổng hợp gửi CQT.
+public class InvoiceGthRow
+{
+    public string InvoiceCode { get; set; } = "";        // Mã tra cứu hóa đơn
+    public string Sign { get; set; } = "";               // Ký hiệu
+    public string FormNo { get; set; } = "";             // Mẫu số
+    public string InvoiceNo { get; set; } = "";          // Số hóa đơn
+    public DateTime InvoiceDate { get; set; }             // Ngày hóa đơn
+    public string BuyerName { get; set; } = "";          // Tên người mua
+    public string? BuyerMst { get; set; }                 // MST người mua
+    public decimal Amount { get; set; }                   // Tổng tiền hàng (chưa thuế)
+    public decimal VatRate { get; set; }                  // Thuế suất
+    public decimal VatAmount { get; set; }                // Tổng tiền thuế
+    public decimal Total { get; set; }                    // Tổng tiền thanh toán
+    public TThai TThai { get; set; }                      // Trạng thái (Mới/Huỷ/Điều chỉnh/Thay thế)
+    public string? RefSign { get; set; }                  // Ký hiệu hóa đơn gốc (bị điều chỉnh/thay thế)
+    public string? RefFormNo { get; set; }                // Mẫu số hóa đơn gốc
+    public string? RefInvoiceNo { get; set; }             // Số hóa đơn gốc
+}
+
 // Trường động của nhóm mẫu hóa đơn (theo bảng Invoice_TempGroupField của TVAN gốc):
 // mỗi nhóm mẫu khai báo danh sách trường động (DBFieldName) + kiểu trường (TCFType).
 // Khóa nghiệp vụ: (OrgId, InvoiceTGroupCode, DBFieldName).
@@ -743,4 +808,31 @@ public class InvoiceTempGroupField : IOrgOwned
     public string TCFType { get; set; } = "";       // Kiểu trường (VD TEXT)
     public bool FlagActive { get; set; } = true;     // Trường đang dùng
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Mã loại thông điệp trao đổi với CQT (theo Mst_MessageTemplate.MessageTypeCode của TVAN gốc):
+// 100 = gửi tờ khai đăng ký/thay đổi thông tin sử dụng HĐĐT;
+// 204 = thông báo mẫu số 01/TB-KTDL về kết quả kiểm tra dữ liệu HĐĐT;
+// 300 = thông báo về hóa đơn điện tử đã lập có sai sót;
+// 301 = thông báo về việc tiếp nhận và kết quả xử lý hóa đơn đã lập có sai sót.
+public enum MessageTypeCode { Register100 = 100, Check204 = 204, Error300 = 300, ErrorReply301 = 301 }
+
+// Mẫu thông điệp/thông báo gửi CQT (theo bảng Mst_MessageTemplate của TVAN gốc):
+// mỗi tổ chức khai báo mẫu nội dung thông điệp theo loại thông điệp (MessageTypeCode),
+// kèm file mẫu (.rtmpl) lưu base64 + đường dẫn file đã lưu. Khóa nghiệp vụ: (OrgId, MessageTplCode).
+public class MessageTemplate : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string MessageTplCode { get; set; } = "";        // Mã mẫu thông điệp
+    public string MessageTplName { get; set; } = "";        // Tên mẫu thông điệp
+    public MessageTypeCode MessageTypeCode { get; set; } = MessageTypeCode.Register100;   // Mã loại thông điệp
+    public string MessageTplContent { get; set; } = "";     // Nội dung mẫu (JSON/HTML)
+    public string? MessageTplFileName { get; set; }          // Tên file mẫu (.rtmpl)
+    public string? MessageTplFileSpec { get; set; }          // Nội dung file mẫu (base64)
+    public string? MessageTplFilePath { get; set; }          // Đường dẫn file mẫu đã lưu
+    public bool FlagActive { get; set; } = true;             // Mẫu đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
 }

@@ -597,6 +597,48 @@ app.MapDelete("/api/temp-groups/{id:int}", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Mẫu thông điệp/thông báo gửi CQT (theo Mst_MessageTemplate của TVAN gốc): danh sách (lọc theo loại thông điệp nếu có).
+app.MapGet("/api/message-templates", async (MessageTypeCode? type, ITvanService svc) =>
+{
+    var ls = await svc.MessageTemplatesAsync(type);
+    return Results.Ok(ls.Select(m => new { m.MessageTplCode, m.MessageTplName, type = (int)m.MessageTypeCode, typeText = Ui.MessageType(m.MessageTypeCode), m.MessageTplFileName, m.MessageTplFilePath, m.FlagActive, m.UpdatedAt, m.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) mẫu thông điệp theo mã (theo Mst_MessageTemplate_Create/Update của TVAN gốc).
+app.MapPost("/api/message-templates", async (MessageTemplateDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveMessageTemplateAsync(dto.Code ?? "", dto.Name ?? "", dto.Type, dto.Content ?? "", dto.FileName, dto.FileSpec, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa mẫu thông điệp theo mã (theo Mst_MessageTemplate_Delete của TVAN gốc).
+app.MapDelete("/api/message-templates/{code}", async (string code, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteMessageTemplateAsync(code);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
+// Danh mục khách hàng / người mua (theo Mst_CustomerNNT của TVAN gốc): danh sách (lọc theo MST nếu có).
+app.MapGet("/api/customers", async (string? mst, ITvanService svc) =>
+{
+    var ls = await svc.CustomerNntsAsync(mst);
+    return Results.Ok(ls.Select(c => new { c.Id, c.MST, c.CustomerNNTCode, c.CustomerNNTName, c.CustomerMST, c.CustomerNNTType, c.CustomerNNTAddress, c.CustomerNNTEmail, c.CustomerNNTPhone, c.ContactName, c.AccNo, c.BankName, c.FlagActive, c.UpdatedAt, c.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) khách hàng theo khóa (MST, CustomerNNTCode) (theo Mst_CustomerNNT_Create/Update của TVAN gốc).
+app.MapPost("/api/customers", async (CustomerNntDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveCustomerNntAsync(dto.Id, dto.Mst ?? "", dto.Code ?? "", dto.Name ?? "", dto.CustomerMst, dto.Type, dto.Address, dto.Email, dto.Phone, dto.Fax, dto.ContactName, dto.ContactPhone, dto.ContactEmail, dto.Dob, dto.ProvinceCode, dto.DistrictCode, dto.AccNo, dto.BankName, dto.GovIdType, dto.GovId, dto.Remark, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa khách hàng theo id (theo Mst_CustomerNNT_Delete của TVAN gốc).
+app.MapDelete("/api/customers/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteCustomerNntAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -638,3 +680,5 @@ record TemplateContactDto(string? NntName, string? NntAddress, string? NntPhone,
 record TemplateBankDto(string? NntAccNo, string? NntBankName, string? By);
 record TempGroupFieldDto(string? FieldName, string? TcfType);
 record TempGroupDto(int? Id, string? Code, string? Mst, VATType VatType, string? Name, string? Body, string? Thumbnail, SpecPrdType SpecPrdType, bool Active, List<TempGroupFieldDto>? Fields, string? By);
+record MessageTemplateDto(string? Code, string? Name, MessageTypeCode Type, string? Content, string? FileName, string? FileSpec, string? By);
+record CustomerNntDto(int? Id, string? Mst, string? Code, string? Name, string? CustomerMst, string? Type, string? Address, string? Email, string? Phone, string? Fax, string? ContactName, string? ContactPhone, string? ContactEmail, DateTime? Dob, string? ProvinceCode, string? DistrictCode, string? AccNo, string? BankName, string? GovIdType, string? GovId, string? Remark, bool Active, string? By);

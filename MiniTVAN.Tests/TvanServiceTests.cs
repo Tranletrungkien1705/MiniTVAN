@@ -2345,4 +2345,75 @@ public class TvanServiceTests
             Assert.Empty(rows);
         }
     }
+
+    // Danh mục khách hàng / người mua (theo Mst_CustomerNNT của TVAN gốc).
+    [Fact]
+    public async Task Customer_Save_CreatesAndLists()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            var (ok, _, id) = await svc.SaveCustomerNntAsync(null, "0101243150", "KH001", "Cty Mua A", "8012345678", "Doanh nghiệp", "Hà Nội", "a@x.vn", "0912", null, null, null, null, null, null, null, null, null, null, null, null, true, "kế toán");
+            Assert.True(ok);
+            var list = await svc.CustomerNntsAsync("0101243150");
+            Assert.Single(list);
+            Assert.Equal("KH001", list[0].CustomerNNTCode);
+            Assert.Equal("Cty Mua A", list[0].CustomerNNTName);
+            Assert.True(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task Customer_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            var (_, _, id) = await svc.SaveCustomerNntAsync(null, "0101243150", "KH001", "Cty Mua A", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, true, null);
+            // Lưu lại cùng mã khách hàng = cập nhật (không tạo mới).
+            var (ok, _, id2) = await svc.SaveCustomerNntAsync(null, "0101243150", "KH001", "Cty Mua B", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, true, null);
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            var list = await svc.CustomerNntsAsync("0101243150");
+            Assert.Single(list);
+            Assert.Equal("Cty Mua B", list[0].CustomerNNTName);
+        }
+    }
+
+    [Fact]
+    public async Task Customer_Save_DuplicateCustomerMst_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            await svc.SaveCustomerNntAsync(null, "0101243150", "KH001", "Cty Mua A", "8012345678", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, true, null);
+            var (ok, msg, _) = await svc.SaveCustomerNntAsync(null, "0101243150", "KH002", "Cty Mua B", "8012345678", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, true, null);
+            Assert.False(ok);
+            Assert.Contains("MST khách hàng", msg);
+        }
+    }
+
+    [Fact]
+    public async Task Customer_Save_UnknownNnt_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveCustomerNntAsync(null, "9999999999", "KH001", "Cty Mua A", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, true, null);
+            Assert.False(ok);
+            Assert.Contains("NNT", msg);
+        }
+    }
+
+    [Fact]
+    public async Task Customer_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            var (_, _, id) = await svc.SaveCustomerNntAsync(null, "0101243150", "KH001", "Cty Mua A", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, true, null);
+            var (ok, _) = await svc.DeleteCustomerNntAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.CustomerNntsAsync("0101243150"));
+        }
+    }
 }
