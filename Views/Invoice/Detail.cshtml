@@ -100,7 +100,20 @@
                 </div></div>
             }
             else if (Model.Status == InvoiceStatus.Sent) { <div class="text-muted small">Đang chờ phản hồi TCT...</div> }
-            else { <div class="text-muted small">Hóa đơn đã hủy.</div> }
+            else
+            {
+                <div class="text-muted small mb-2">Hóa đơn đã hủy.</div>
+                @if (!string.IsNullOrWhiteSpace(Model.TctCode))
+                {
+                    <button class="btn btn-outline-success w-100" type="button" data-bs-toggle="collapse" data-bs-target="#restoreForm"><i class="bi bi-arrow-counterclockwise me-1"></i>Khôi phục về đã phát hành</button>
+                    <div class="collapse" id="restoreForm"><div class="border rounded p-2">
+                        <form asp-action="Restore" method="post" onsubmit="return confirm('Khôi phục hóa đơn đã hủy về trạng thái đã phát hành (giữ nguyên mã tra cứu)?')">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                            <div class="mb-2"><label class="form-label small mb-1">Lý do (tùy chọn)</label><input name="reason" class="form-control form-control-sm" placeholder="VD làm thông báo sai sót" /></div>
+                            <button class="btn btn-success btn-sm w-100">Khôi phục (DELETED → ISSUED)</button>
+                        </form>
+                    </div></div>
+                }
+            }
         </div>
         @if (Model.Status == InvoiceStatus.Accepted)
         {

@@ -107,6 +107,16 @@ public class InvoiceController(ITvanService svc) : Controller
         return RedirectToAction(nameof(Detail), new { id });
     }
 
+    // Khôi phục hóa đơn đã hủy (DELETED) về trạng thái đã phát hành (ISSUED) để làm thông báo sai sót
+    // (theo Invoice_Invoice_Support_BackInvoiceStatus của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Restore(int id, string? reason)
+    {
+        var (ok, msg) = await svc.RestoreInvoiceAsync(id, reason);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
     // Gửi/gửi lại email hóa đơn đã phát hành cho người mua (theo Invoice_Invoice_Support_SendMail của TVAN gốc).
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> SendEmail(int id, string? toEmail, string? sentBy)

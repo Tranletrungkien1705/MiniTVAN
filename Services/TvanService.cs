@@ -21,6 +21,7 @@ public interface ITvanService
     Task<(bool ok, string msg, int id)> AdjustAsync(int invoiceId, InvoiceAdjType adjType, decimal amount, decimal vatRate, string? reason);
     Task<(bool ok, string msg, int id)> ReplaceAsync(int invoiceId, decimal amount, decimal vatRate, string? reason);
     Task<(bool ok, string msg)> ResetToPendingAsync(int invoiceId, string? reason);
+    Task<(bool ok, string msg)> RestoreInvoiceAsync(int invoiceId, string? reason);
     Task<List<TranMessage>> MessagesAsync(int invoiceId);
     Task<Invoice?> LookupByCodeAsync(string tctCode);
     Task<TvanDash> DashboardAsync();
@@ -266,6 +267,27 @@ public class TvanService(AppDbContext db) : ITvanService
         });
         await db.SaveChangesAsync();
         return (true, $"Đã chuyển HĐ {inv.Symbol}-{inv.No} về trạng thái chờ (giữ nguyên số).");
+    }
+
+    // Khôi phục hóa đơn đã hủy (DELETED) về trạng thái đã phát hành (ISSUED) để làm thông báo sai sót
+    // (theo Invoice_Invoice_Support_BackInvoiceStatus của TVAN gốc: chỉ nhận HĐ ở trạng thái ISSUED/DELETED,
+    // giữ nguyên mã xác thực CQT nếu đầu vào không truyền mã mới).
+    public async Task<(bool ok, string msg)> RestoreInvoiceAsync(int invoiceId, string? reason)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.");
+        if (inv.Status != InvoiceStatus.Cancelled) return (false, "Chỉ khôi phục được hóa đơn đã hủy (DELETED).");
+        if (string.IsNullOrWhiteSpace(inv.TctCode)) return (false, "Hóa đơn không có mã tra cứu CQT để khôi phục.");
+
+        inv.Status = InvoiceStatus.Accepted;
+        inv.RejectReason = null;
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Khôi phục HĐ {inv.Symbol}-{inv.No} từ DELETED về ISSUED (mã tra cứu {inv.TctCode}){(string.IsNullOrWhiteSpace(reason) ? "" : ": " + reason.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã khôi phục HĐ {inv.Symbol}-{inv.No} về trạng thái đã phát hành (giữ nguyên mã tra cứu).");
     }
 
     public Task<Invoice?> LookupByCodeAsync(string tctCode) =>

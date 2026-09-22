@@ -475,4 +475,45 @@ public class TvanServiceTests
             Assert.Contains("Không tìm thấy", msg);
         }
     }
+
+    [Fact]
+    public async Task Restore_OnCancelled_BackToAccepted_KeepsTctCode()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);   // Accepted, có TctCode
+            var code = (await svc.GetInvoiceAsync(invId))!.TctCode;
+            await svc.CancelAsync(invId);     // Cancelled (DELETED)
+            var (ok, msg) = await svc.RestoreInvoiceAsync(invId, "làm thông báo sai sót");
+            Assert.True(ok);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(InvoiceStatus.Accepted, inv!.Status);
+            Assert.Equal(code, inv.TctCode);   // giữ nguyên mã tra cứu
+        }
+    }
+
+    [Fact]
+    public async Task Restore_OnAccepted_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);   // Accepted, chưa hủy
+            var (ok, msg) = await svc.RestoreInvoiceAsync(invId, null);
+            Assert.False(ok);
+            Assert.Contains("đã hủy", msg);
+        }
+    }
+
+    [Fact]
+    public async Task Restore_UnknownInvoice_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.RestoreInvoiceAsync(9999, null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
 }

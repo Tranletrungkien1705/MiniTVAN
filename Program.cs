@@ -155,6 +155,14 @@ app.MapPost("/api/invoices/{id:int}/to-pending", async (int id, ToPendingDto dto
     return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
 });
 
+// Khôi phục hóa đơn đã hủy (DELETED) về trạng thái đã phát hành (ISSUED) để làm thông báo sai sót
+// (theo Invoice_Invoice_Support_BackInvoiceStatus của TVAN gốc).
+app.MapPost("/api/invoices/{id:int}/restore", async (int id, RestoreDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.RestoreInvoiceAsync(id, dto.Reason);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 // Hạn mức hóa đơn (theo Invoice_license của TVAN gốc): xem hạn mức + lịch sử cấp/điều chỉnh.
 app.MapGet("/api/licenses", async (ITvanService svc) =>
 {
@@ -230,6 +238,7 @@ record ImportInvDto(string? SellerMst, string? Symbol, string? No, string? Buyer
 record AdjustDto(InvoiceAdjType AdjType, decimal Amount, decimal VatRate, string? Reason);
 record ReplaceDto(decimal Amount, decimal VatRate, string? Reason);
 record ToPendingDto(string? Reason);
+record RestoreDto(string? Reason);
 record LicenseIncreaseDto(int NntId, int Qty, string? Note);
 record GuiTongHopDto(int NntId, PeriodType LKDLieu, string? KDLieu, int BSLThu, string? Note);
 record SendEmailDto(string? ToEmail, string? SentBy);
