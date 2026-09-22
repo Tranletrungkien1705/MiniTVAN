@@ -2596,4 +2596,59 @@ public class TvanServiceTests
             Assert.Empty(await svc.DistrictsAsync(null, null));
         }
     }
+
+    // Danh mục Quốc gia (theo Mst_Country của TVAN gốc).
+    [Fact]
+    public async Task Country_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveCountryAsync(null, "VN", "Việt Nam", true, "kế toán");
+            Assert.True(ok);
+            var list = await svc.CountriesAsync(null);
+            Assert.Single(list);
+            Assert.Equal("Việt Nam", list[0].CountryName);
+            Assert.True(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task Country_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveCountryAsync(null, "VN", "Việt Nam", true, null);
+            // Lưu lại cùng mã quốc gia = cập nhật (không tạo mới).
+            var (ok, _, id2) = await svc.SaveCountryAsync(null, "VN", "Cộng hòa XHCN Việt Nam", false, null);
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            var list = await svc.CountriesAsync(null);
+            Assert.Single(list);
+            Assert.Equal("Cộng hòa XHCN Việt Nam", list[0].CountryName);
+            Assert.False(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task Country_Save_MissingName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveCountryAsync(null, "VN", "  ", true, null);
+            Assert.False(ok);
+            Assert.Contains("tên", msg);
+        }
+    }
+
+    [Fact]
+    public async Task Country_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveCountryAsync(null, "JP", "Nhật Bản", true, null);
+            var (ok, _) = await svc.DeleteCountryAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.CountriesAsync(null));
+        }
+    }
 }

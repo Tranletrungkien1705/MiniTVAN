@@ -793,6 +793,33 @@ public class DistrictController(ITvanService svc) : Controller
     }
 }
 
+// Danh mục Quốc gia (theo Mst_Country của TVAN gốc):
+// danh mục quốc tịch/quốc gia dùng khi khai báo thông tin NNT/khách hàng nước ngoài.
+public class CountryController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.CountriesAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string name, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveCountryAsync(id, code, name, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteCountryAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

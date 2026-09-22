@@ -469,6 +469,17 @@ public static class Seeder
                 new District { ProvinceCode = "48", DistrictCode = "4801", DistrictName = "Quận Hải Châu", FlagActive = true, UpdatedBy = "kế toán" });
             await db.SaveChangesAsync();
         }
+
+        // Danh mục Quốc gia (theo Mst_Country của TVAN gốc):
+        // các quốc gia demo dùng khi khai báo thông tin NNT/khách hàng nước ngoài.
+        if (!await db.Countries.AnyAsync())
+        {
+            db.Countries.AddRange(
+                new Country { CountryCode = "VN", CountryName = "Việt Nam", FlagActive = true, UpdatedBy = "kế toán" },
+                new Country { CountryCode = "US", CountryName = "Hoa Kỳ", FlagActive = true, UpdatedBy = "kế toán" },
+                new Country { CountryCode = "JP", CountryName = "Nhật Bản", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

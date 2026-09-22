@@ -229,6 +229,21 @@ public class District : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Danh mục Quốc gia (theo bảng Mst_Country của TVAN gốc): danh mục quốc tịch/quốc gia
+// dùng khi khai báo thông tin NNT/khách hàng nước ngoài.
+// Khóa nghiệp vụ: (OrgId, CountryCode). FlagActive = quốc gia đang dùng hay không.
+public class Country : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string CountryCode { get; set; } = "";      // Mã quốc gia (VD VN)
+    public string CountryName { get; set; } = "";      // Tên quốc gia (VD Việt Nam)
+    public bool FlagActive { get; set; } = true;         // Quốc gia đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 public class Invoice : IOrgOwned
 {
     public int Id { get; set; }

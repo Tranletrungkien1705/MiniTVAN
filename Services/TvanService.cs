@@ -111,6 +111,10 @@ public interface ITvanService
     Task<District?> GetDistrictAsync(int id);
     Task<(bool ok, string msg, int id)> SaveDistrictAsync(int? id, string provinceCode, string code, string name, bool active, string? by);
     Task<(bool ok, string msg)> DeleteDistrictAsync(int id);
+    Task<List<Country>> CountriesAsync(string? keyword);
+    Task<Country?> GetCountryAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveCountryAsync(int? id, string code, string name, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteCountryAsync(int id);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -2281,6 +2285,72 @@ public class TvanService(AppDbContext db) : ITvanService
         db.Districts.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa quận/huyện {code}.");
+    }
+
+    // Danh mục Quốc gia (theo Mst_Country của TVAN gốc):
+    // danh sách quốc gia (lọc theo từ khóa mã/tên nếu có).
+    public Task<List<Country>> CountriesAsync(string? keyword)
+    {
+        var q = db.Countries.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(c => c.CountryCode.Contains(k) || c.CountryName.Contains(k));
+        }
+        return q.OrderBy(c => c.CountryCode).ToListAsync();
+    }
+
+    public Task<Country?> GetCountryAsync(int id) =>
+        db.Countries.FirstOrDefaultAsync(c => c.Id == id);
+
+    // Lưu (tạo mới/cập nhật) quốc gia theo khóa nghiệp vụ (OrgId, CountryCode)
+    // (theo Mst_Country_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã quốc gia + tên quốc gia;
+    //  - khi tạo: mã quốc gia chưa tồn tại trong tổ chức (Mst_Country_CheckDB_CountryExist).
+    public async Task<(bool ok, string msg, int id)> SaveCountryAsync(int? id, string code, string name, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã quốc gia.", 0);
+        if (name.Length == 0) return (false, "Cần tên quốc gia.", 0);
+
+        Country? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.Countries.FirstOrDefaultAsync(c => c.Id == id.Value);
+        else e = await db.Countries.FirstOrDefaultAsync(c => c.CountryCode == code);
+
+        if (e == null)
+        {
+            if (await db.Countries.AnyAsync(c => c.CountryCode == code))
+                return (false, "Mã quốc gia đã tồn tại.", 0);
+            e = new Country { CountryCode = code };
+            db.Countries.Add(e);
+        }
+        else
+        {
+            // Đổi mã quốc gia: chặn trùng với quốc gia khác.
+            if (!string.Equals(e.CountryCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.Countries.AnyAsync(c => c.CountryCode == code && c.Id != e.Id))
+                return (false, "Mã quốc gia đã tồn tại.", 0);
+            e.CountryCode = code;
+        }
+
+        e.CountryName = name;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu quốc gia {code} — {name}.", e.Id);
+    }
+
+    // Xóa quốc gia theo id (theo Mst_Country_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteCountryAsync(int id)
+    {
+        var e = await db.Countries.FirstOrDefaultAsync(c => c.Id == id);
+        if (e == null) return (false, "Không tìm thấy quốc gia.");
+        var code = e.CountryCode;
+        db.Countries.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa quốc gia {code}.");
     }
 
     // Khoảng thời gian [from, to) của kỳ dữ liệu theo loại kỳ (LKDLieu).
