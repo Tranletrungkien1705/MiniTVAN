@@ -36,6 +36,10 @@ public static class Seeder
                 Message = "Đã gửi email hóa đơn tới nguyenvana@congty.vn.", CreatedAt = DateTime.UtcNow.AddDays(-5)
             });
             await db.SaveChangesAsync();
+            // Xóa hóa đơn đã phát hành (theo Invoice_Invoice_Deleted của TVAN gốc):
+            // inv4 đã phát hành nhưng bị xóa (DELETED) kèm lý do & người xóa.
+            var inv4 = new Invoice { NntId = seller.Id, Symbol = "1C26TAA", No = "00000004", BuyerName = "Lê Văn C", BuyerAddress = "Đà Nẵng", Amount = 8_000_000, VatRate = 10, IssuedDate = DateTime.Today.AddDays(-3), Status = InvoiceStatus.Deleted, TctCode = "0026082712345680", SentAt = DateTime.UtcNow.AddDays(-3), DeleteDTimeUTC = DateTime.UtcNow.AddDays(-2), DeleteBy = "kế toán", Remark = "Lập sai thông tin người mua" };
+            db.Invoices.Add(inv4); await db.SaveChangesAsync();
             // In chuyển đổi hóa đơn (theo Invoice_Invoice.FlagChange của TVAN gốc):
             // inv1 đã được in ở dạng chuyển đổi cho người mua.
             inv1.FlagChange = ConversionPrintFlag.Printed;

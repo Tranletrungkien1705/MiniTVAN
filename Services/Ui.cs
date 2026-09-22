@@ -12,6 +12,7 @@ public static class Ui
         InvoiceStatus.Accepted  => ("CQT chấp nhận", "success"),
         InvoiceStatus.Rejected  => ("CQT từ chối", "danger"),
         InvoiceStatus.Cancelled => ("Đã hủy", "dark"),
+        InvoiceStatus.Deleted   => ("Đã xóa", "danger"),
         _ => (s.ToString(), "secondary")
     };
 

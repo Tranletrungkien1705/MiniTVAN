@@ -127,6 +127,15 @@ public class InvoiceController(ITvanService svc) : Controller
         return ok ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Detail), new { id });
     }
 
+    // Xóa hóa đơn đã phát hành (theo Invoice_Invoice_Deleted của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id, string? remark, string? by)
+    {
+        var (ok, msg) = await svc.DeleteInvoiceAsync(id, remark, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
     // Gửi/gửi lại email hóa đơn đã phát hành cho người mua (theo Invoice_Invoice_Support_SendMail của TVAN gốc).
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> SendEmail(int id, string? toEmail, string? sentBy)

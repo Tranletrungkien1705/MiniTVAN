@@ -4,7 +4,8 @@ public interface IOrgOwned { Guid OrgId { get; set; } }
 
 public enum RegStatus { None = 0, Pending = 1, Registered = 2, Rejected = 3 }
 // Vòng đời hóa đơn khi truyền tới cơ quan thuế
-public enum InvoiceStatus { Draft = 0, Sent = 1, Accepted = 2, Rejected = 3, Cancelled = 4 }
+// Deleted = xóa hóa đơn đã phát hành (theo TConst.InvoiceStatus.Deleted của TVAN gốc)
+public enum InvoiceStatus { Draft = 0, Sent = 1, Accepted = 2, Rejected = 3, Cancelled = 4, Deleted = 5 }
 public enum MsgType { RegisterNnt = 0, SendInvoice = 1, CancelInvoice = 2, AdjustInvoice = 3, ReplaceInvoice = 4 }
 public enum MsgDir { Out = 0, In = 1 }   // Out = gửi tới TCT, In = TCT phản hồi
 
@@ -91,6 +92,12 @@ public class Invoice : IOrgOwned
     // Cờ in chuyển đổi (theo Invoice_Invoice.FlagChange của TVAN gốc):
     // NotPrinted = chưa in chuyển đổi (mặc định), Printed = đã in chuyển đổi.
     public ConversionPrintFlag FlagChange { get; set; } = ConversionPrintFlag.NotPrinted;
+
+    // Xóa hóa đơn đã phát hành (theo Invoice_Invoice_Deleted của TVAN gốc):
+    // DeleteDTimeUTC/DeleteBy = thời điểm & người xóa; Remark = lý do xóa.
+    public DateTime? DeleteDTimeUTC { get; set; }
+    public string? DeleteBy { get; set; }
+    public string? Remark { get; set; }
 
     public decimal VatAmount => Math.Round(Amount * VatRate / 100m, 0);
     public decimal Total => Amount + VatAmount;

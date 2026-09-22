@@ -23,6 +23,7 @@ public interface ITvanService
     Task<(bool ok, string msg)> ResetToPendingAsync(int invoiceId, string? reason);
     Task<(bool ok, string msg)> RestoreInvoiceAsync(int invoiceId, string? reason);
     Task<(bool ok, string msg)> DeleteAdjustReplaceAsync(int invoiceId, string? reason);
+    Task<(bool ok, string msg)> DeleteInvoiceAsync(int invoiceId, string? remark, string? by);
     Task<List<TranMessage>> MessagesAsync(int invoiceId);
     Task<Invoice?> LookupByCodeAsync(string tctCode);
     Task<TvanDash> DashboardAsync();
@@ -317,6 +318,28 @@ public class TvanService(AppDbContext db) : ITvanService
         });
         await db.SaveChangesAsync();
         return (true, $"Đã xóa hóa đơn {label} chưa phát hành {symbol}-{no}.");
+    }
+
+    // Xóa hóa đơn đã phát hành (theo Invoice_Invoice_Deleted của TVAN gốc):
+    // Chỉ xóa được HĐ đang ở trạng thái đã phát hành (Accepted/ISSUED); đưa về DELETED,
+    // ghi lại thời điểm xóa (DeleteDTimeUTC), người xóa (DeleteBy) và lý do (Remark).
+    public async Task<(bool ok, string msg)> DeleteInvoiceAsync(int invoiceId, string? remark, string? by)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.");
+        if (inv.Status != InvoiceStatus.Accepted) return (false, "Chỉ xóa được hóa đơn đã phát hành (ISSUED).");
+
+        inv.Status = InvoiceStatus.Deleted;
+        inv.DeleteDTimeUTC = DateTime.UtcNow;
+        inv.DeleteBy = by;
+        inv.Remark = remark;
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Xóa hóa đơn đã phát hành {inv.Symbol}-{inv.No}{(string.IsNullOrWhiteSpace(remark) ? "" : ": " + remark.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa hóa đơn {inv.Symbol}-{inv.No} (DELETED).");
     }
 
     public Task<Invoice?> LookupByCodeAsync(string tctCode) =>

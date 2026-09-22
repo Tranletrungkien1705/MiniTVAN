@@ -664,4 +664,44 @@ public class TvanServiceTests
             Assert.Contains("Không tìm thấy", msg);
         }
     }
+
+    [Fact]
+    public async Task Delete_OnAccepted_SetsDeletedWithTracking()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);   // Accepted (ISSUED)
+            var (ok, msg) = await svc.DeleteInvoiceAsync(invId, "lập sai", "kế toán");
+            Assert.True(ok);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(InvoiceStatus.Deleted, inv!.Status);
+            Assert.NotNull(inv.DeleteDTimeUTC);
+            Assert.Equal("kế toán", inv.DeleteBy);
+            Assert.Equal("lập sai", inv.Remark);
+        }
+    }
+
+    [Fact]
+    public async Task Delete_OnDraft_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);   // Draft, chưa truyền
+            var (ok, msg) = await svc.DeleteInvoiceAsync(invId, null, null);
+            Assert.False(ok);
+            Assert.Contains("đã phát hành", msg);
+        }
+    }
+
+    [Fact]
+    public async Task Delete_UnknownInvoice_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.DeleteInvoiceAsync(9999, null, null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
 }
