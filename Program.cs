@@ -262,6 +262,20 @@ app.MapGet("/api/conversion-print-logs", async (int? invoiceId, ITvanService svc
     return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, action = l.Action.ToString(), l.Note, l.By, l.CreatedAt }));
 });
 
+// Ký lại hóa đơn đã phát hành (theo Invoice_Invoice_ReSign của TVAN gốc): cập nhật nội dung đã ký + đánh dấu FlagHotfix.
+app.MapPost("/api/invoices/{id:int}/re-sign", async (int id, ReSignDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.ReSignAsync(id, dto.FileSpec, dto.Note, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Nhật ký ký lại hóa đơn (lọc theo hóa đơn nếu có).
+app.MapGet("/api/re-sign-logs", async (int? invoiceId, ITvanService svc) =>
+{
+    var ls = await svc.ReSignLogsAsync(invoiceId);
+    return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, l.FilePath, l.Note, l.By, l.CreatedAt }));
+});
+
 // Cấu hình hệ thống: trạng thái kiểm tra ký quá 60 ngày (theo Invoice_Invoice_Support_Sign60Day của TVAN gốc).
 app.MapGet("/api/settings/sign60day", async (ITvanService svc) =>
 {
@@ -294,4 +308,5 @@ record LicenseIncreaseDto(int NntId, int Qty, string? Note);
 record GuiTongHopDto(int NntId, PeriodType LKDLieu, string? KDLieu, int BSLThu, string? Note);
 record SendEmailDto(string? ToEmail, string? SentBy);
 record ConversionPrintDto(string? Note, string? By);
+record ReSignDto(string? FileSpec, string? Note, string? By);
 record Sign60DayDto(Sign60DayFlag Flag, string? Note);

@@ -775,4 +775,76 @@ public class TvanServiceTests
             Assert.Equal("theo yêu cầu", s.Note);
         }
     }
+
+    [Fact]
+    public async Task ReSign_OnAccepted_StampsHotfixAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);   // Accepted (ISSUED)
+            var (ok, msg) = await svc.ReSignAsync(invId, "PD94bWwgdmVyc2lvbj0iMS4wIj8+", "lỗi chữ ký", "kế toán");
+            Assert.True(ok);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(HotfixFlag.Hotfixed, inv!.FlagHotfix);
+            Assert.Equal("PD94bWwgdmVyc2lvbj0iMS4wIj8+", inv.InvoiceFileSpec);
+            Assert.False(string.IsNullOrWhiteSpace(inv.InvoiceFilePath));
+            Assert.NotNull(inv.ApprDTimeUTC);
+            Assert.Equal("kế toán", inv.ApprBy);
+            var logs = await svc.ReSignLogsAsync(invId);
+            Assert.Single(logs);
+            Assert.Equal("kế toán", logs[0].By);
+        }
+    }
+
+    [Fact]
+    public async Task ReSign_OnDraft_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);   // Draft, chưa truyền
+            var (ok, msg) = await svc.ReSignAsync(invId, "abc", null, null);
+            Assert.False(ok);
+            Assert.Contains("đã phát hành", msg);
+            Assert.Empty(await svc.ReSignLogsAsync(invId));
+        }
+    }
+
+    [Fact]
+    public async Task ReSign_AlreadyHotfixed_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);
+            await svc.ReSignAsync(invId, "abc", null, null);
+            var (ok, msg) = await svc.ReSignAsync(invId, "def", null, null);
+            Assert.False(ok);
+            Assert.Contains("đã được ký lại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task ReSign_EmptyFileSpec_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);
+            var (ok, msg) = await svc.ReSignAsync(invId, "  ", null, null);
+            Assert.False(ok);
+            Assert.Contains("Cần nội dung", msg);
+        }
+    }
+
+    [Fact]
+    public async Task ReSign_UnknownInvoice_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.ReSignAsync(9999, "abc", null, null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
 }

@@ -38,6 +38,10 @@ public enum ConversionPrintAction { Print = 0, Reset = 1 }
 // Check = bật kiểm tra (mặc định), Uncheck = bỏ kiểm tra ký >60 ngày.
 public enum Sign60DayFlag { Check = 1, Uncheck = 0 }
 
+// Cờ đánh dấu hóa đơn đã được ký lại (theo Invoice_Invoice.FlagHotfix của TVAN gốc):
+// None = chưa ký lại (FlagHotfix is null), Hotfixed = đã ký lại (FlagHotfix = '1').
+public enum HotfixFlag { None = 0, Hotfixed = 1 }
+
 public class Org
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -99,6 +103,15 @@ public class Invoice : IOrgOwned
 
     // Ngày ký hóa đơn (theo Invoice_Invoice.SignedDate của TVAN gốc) — dùng cho kiểm tra ký quá 60 ngày.
     public DateTime? SignedDate { get; set; }
+
+    // Ký lại hóa đơn (theo Invoice_Invoice_ReSign của TVAN gốc):
+    // InvoiceFileSpec = nội dung hóa đơn đã ký (base64 XML), InvoiceFilePath = đường dẫn file XML đã lưu,
+    // FlagHotfix = '1' khi đã ký lại, ApprDTimeUTC/ApprBy = thời điểm & người duyệt (ký lại).
+    public string? InvoiceFileSpec { get; set; }
+    public string? InvoiceFilePath { get; set; }
+    public HotfixFlag FlagHotfix { get; set; } = HotfixFlag.None;
+    public DateTime? ApprDTimeUTC { get; set; }
+    public string? ApprBy { get; set; }
 
     // Xóa hóa đơn đã phát hành (theo Invoice_Invoice_Deleted của TVAN gốc):
     // DeleteDTimeUTC/DeleteBy = thời điểm & người xóa; Remark = lý do xóa.
@@ -252,6 +265,20 @@ public class ConversionPrintLog : IOrgOwned
     public Invoice? Invoice { get; set; }
     public ConversionPrintAction Action { get; set; }   // Print = in chuyển đổi, Reset = bỏ cờ in chuyển đổi
     public string? Note { get; set; }                  // Ghi chú / lý do
+    public string? By { get; set; }                    // Người thực hiện
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Nhật ký ký lại hóa đơn (theo Invoice_Invoice_ReSign của TVAN gốc).
+// Mỗi lần ký lại hóa đơn đã phát hành ghi lại để đối soát.
+public class ReSignLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InvoiceId { get; set; }
+    public Invoice? Invoice { get; set; }
+    public string? FilePath { get; set; }              // Đường dẫn file XML đã ký lại
+    public string? Note { get; set; }                  // Ghi chú / lý do ký lại
     public string? By { get; set; }                    // Người thực hiện
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -43,6 +43,8 @@ public interface ITvanService
     Task<(bool ok, string msg)> MarkConversionPrintedAsync(int invoiceId, string? note, string? by);
     Task<(bool ok, string msg)> ResetConversionPrintAsync(int invoiceId, string? note, string? by);
     Task<List<ConversionPrintLog>> ConversionPrintLogsAsync(int? invoiceId);
+    Task<(bool ok, string msg)> ReSignAsync(int invoiceId, string? fileSpec, string? note, string? by);
+    Task<List<ReSignLog>> ReSignLogsAsync(int? invoiceId);
     Task<SystemSetting> GetSettingAsync();
     Task<(bool ok, string msg)> SetSign60DayAsync(Sign60DayFlag flag, string? note);
 }
@@ -635,6 +637,45 @@ public class TvanService(AppDbContext db) : ITvanService
     public Task<List<ConversionPrintLog>> ConversionPrintLogsAsync(int? invoiceId)
     {
         var q = db.ConversionPrintLogs.Include(l => l.Invoice).AsQueryable();
+        if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
+        return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
+
+    // Ký lại hóa đơn (theo Invoice_Invoice_ReSign của TVAN gốc):
+    // chỉ ký lại được hóa đơn đã phát hành (Accepted/ISSUED) và CHƯA ký lại (FlagHotfix is null).
+    // Cập nhật nội dung hóa đơn đã ký (InvoiceFileSpec), đường dẫn file XML (InvoiceFilePath),
+    // đánh dấu FlagHotfix = Hotfixed, ghi thời điểm & người duyệt (ApprDTimeUTC/ApprBy) và ghi nhật ký.
+    public async Task<(bool ok, string msg)> ReSignAsync(int invoiceId, string? fileSpec, string? note, string? by)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.");
+        if (inv.Status != InvoiceStatus.Accepted) return (false, "Chỉ ký lại được hóa đơn đã phát hành (ISSUED).");
+        if (inv.FlagHotfix == HotfixFlag.Hotfixed) return (false, "Hóa đơn đã được ký lại, không ký lại tiếp.");
+        if (string.IsNullOrWhiteSpace(fileSpec)) return (false, "Cần nội dung hóa đơn đã ký (base64 XML).");
+
+        var subFolder = DateTime.Now.ToString("yyyy-MM-dd");
+        var fileName = $"{DateTime.Now:yyyyMMdd.HHmmss}.{inv.Id}.KyLaiHoaDon.xml";
+        inv.InvoiceFileSpec = fileSpec.Trim();
+        inv.InvoiceFilePath = $"{subFolder}/{fileName}";
+        inv.FlagHotfix = HotfixFlag.Hotfixed;
+        inv.ApprDTimeUTC = DateTime.UtcNow;
+        inv.ApprBy = by;
+        db.ReSignLogs.Add(new ReSignLog
+        {
+            InvoiceId = inv.Id, FilePath = inv.InvoiceFilePath, Note = note, By = by,
+        });
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Ký lại HĐ {inv.Symbol}-{inv.No}{(string.IsNullOrWhiteSpace(note) ? "" : ": " + note.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã ký lại HĐ {inv.Symbol}-{inv.No} (FlagHotfix=1).");
+    }
+
+    public Task<List<ReSignLog>> ReSignLogsAsync(int? invoiceId)
+    {
+        var q = db.ReSignLogs.Include(l => l.Invoice).AsQueryable();
         if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
     }

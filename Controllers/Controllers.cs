@@ -66,6 +66,7 @@ public class InvoiceController(ITvanService svc) : Controller
         ViewBag.Messages = await svc.MessagesAsync(id);
         ViewBag.EmailLogs = await svc.EmailLogsAsync(id);
         ViewBag.ConvLogs = await svc.ConversionPrintLogsAsync(id);
+        ViewBag.ReSignLogs = await svc.ReSignLogsAsync(id);
         return View(inv);
     }
 
@@ -159,6 +160,15 @@ public class InvoiceController(ITvanService svc) : Controller
     public async Task<IActionResult> ResetConversionPrint(int id, string? note, string? by)
     {
         var (ok, msg) = await svc.ResetConversionPrintAsync(id, note, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Ký lại hóa đơn đã phát hành (theo Invoice_Invoice_ReSign của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReSign(int id, string? fileSpec, string? note, string? by)
+    {
+        var (ok, msg) = await svc.ReSignAsync(id, fileSpec, note, by);
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Detail), new { id });
     }
@@ -263,6 +273,16 @@ public class ConversionPrintLogController(ITvanService svc) : Controller
     {
         ViewBag.InvoiceId = invoiceId;
         return View(await svc.ConversionPrintLogsAsync(invoiceId));
+    }
+}
+
+// Nhật ký ký lại hóa đơn (theo Invoice_Invoice_ReSign của TVAN gốc).
+public class ReSignLogController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? invoiceId)
+    {
+        ViewBag.InvoiceId = invoiceId;
+        return View(await svc.ReSignLogsAsync(invoiceId));
     }
 }
 

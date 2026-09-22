@@ -113,4 +113,11 @@ public static class Ui
         Sign60DayFlag.Uncheck => ("Bỏ kiểm tra", "warning"),
         _ => (f.ToString(), "secondary")
     };
+
+    public static (string text, string css) Hotfix(HotfixFlag f) => f switch
+    {
+        HotfixFlag.Hotfixed => ("Đã ký lại", "primary"),
+        HotfixFlag.None     => ("Chưa ký lại", "secondary"),
+        _ => (f.ToString(), "secondary")
+    };
 }

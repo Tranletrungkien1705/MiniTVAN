@@ -52,6 +52,18 @@ public static class Seeder
             // Ngày ký hóa đơn (theo Invoice_Invoice.SignedDate của TVAN gốc): inv1 ký trong hạn 60 ngày.
             inv1.SignedDate = DateTime.UtcNow.AddDays(-5);
             await db.SaveChangesAsync();
+            // Ký lại hóa đơn (theo Invoice_Invoice_ReSign của TVAN gốc): inv1 đã được ký lại.
+            inv1.InvoiceFileSpec = "PD94bWwgdmVyc2lvbj0iMS4wIj8+PEhEPg==";
+            inv1.InvoiceFilePath = $"{DateTime.Today:yyyy-MM-dd}/demo.KyLaiHoaDon.xml";
+            inv1.FlagHotfix = HotfixFlag.Hotfixed;
+            inv1.ApprDTimeUTC = DateTime.UtcNow.AddDays(-4);
+            inv1.ApprBy = "kế toán";
+            db.ReSignLogs.Add(new ReSignLog
+            {
+                InvoiceId = inv1.Id, FilePath = inv1.InvoiceFilePath, By = "kế toán",
+                Note = "Ký lại do lỗi chữ ký", CreatedAt = DateTime.UtcNow.AddDays(-4)
+            });
+            await db.SaveChangesAsync();
             db.Messages.AddRange(
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300", Text = "Gửi HĐ 1C26TAA-00000001", CreatedAt = DateTime.UtcNow.AddDays(-5) },
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "202", Text = "TCT cấp mã: 0026082512345678", CreatedAt = DateTime.UtcNow.AddDays(-5) },

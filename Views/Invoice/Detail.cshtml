@@ -2,13 +2,15 @@
 @{ ViewData["Title"] = $"HĐ {Model.Symbol}-{Model.No}"; var msgs = (List<TranMessage>)ViewBag.Messages; var (st, css) = Ui.Inv(Model.Status);
    var emailLogs = (List<InvoiceEmailLog>)ViewBag.EmailLogs;
    var convLogs = (List<ConversionPrintLog>)ViewBag.ConvLogs;
+   var reSignLogs = (List<ReSignLog>)ViewBag.ReSignLogs;
    var (srcText, srcCss) = Ui.Source(Model.SourceCode);
    var (cpText, cpCss) = Ui.ConvPrint(Model.FlagChange);
+   var (hfText, hfCss) = Ui.Hotfix(Model.FlagHotfix);
    var lookupUrl = $"{Context.Request.Scheme}://{Context.Request.Host}/Lookup/{Model.TctCode}"; }
 <div class="row g-3">
     <div class="col-lg-7"><div class="card"><div class="card-body">
         <div class="d-flex justify-content-between align-items-start mb-2">
-            <div><h5 class="fw-bold mb-1">Hóa đơn @Model.Symbol-@Model.No <span class="badge bg-@css ms-1">@st</span> <span class="badge bg-@srcCss ms-1">@srcText</span> <span class="badge bg-@cpCss ms-1">@cpText</span></h5>
+            <div><h5 class="fw-bold mb-1">Hóa đơn @Model.Symbol-@Model.No <span class="badge bg-@css ms-1">@st</span> <span class="badge bg-@srcCss ms-1">@srcText</span> <span class="badge bg-@cpCss ms-1">@cpText</span> <span class="badge bg-@hfCss ms-1">@hfText</span></h5>
                 <div class="text-muted small">Ngày @Model.IssuedDate.ToString("dd/MM/yyyy")@(Model.SentAt != null ? " · gửi " + Model.SentAt.Value.ToLocalTime().ToString("dd/MM HH:mm") : "")</div></div>
         </div>
         @if (Model.SourceCode != SourceInvoiceCode.Root)
@@ -140,6 +142,22 @@
                         </form>
                     </div></div>
                 }
+                @if (Model.FlagHotfix == HotfixFlag.None)
+                {
+                    <button class="btn btn-outline-primary w-100" type="button" data-bs-toggle="collapse" data-bs-target="#reSignForm"><i class="bi bi-vector-pen me-1"></i>Ký lại hóa đơn</button>
+                    <div class="collapse" id="reSignForm"><div class="border rounded p-2">
+                        <form asp-action="ReSign" method="post" onsubmit="return confirm('Ký lại hóa đơn đã phát hành? Nội dung đã ký sẽ được cập nhật.')">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                            <div class="mb-2"><label class="form-label small mb-1">Nội dung hóa đơn đã ký (base64 XML)</label><textarea name="fileSpec" rows="3" class="form-control form-control-sm" placeholder="Dán nội dung XML đã ký (base64)" required></textarea></div>
+                            <div class="mb-2"><label class="form-label small mb-1">Ghi chú / lý do (tùy chọn)</label><input name="note" class="form-control form-control-sm" placeholder="VD ký lại do lỗi chữ ký" /></div>
+                            <div class="mb-2"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="VD kế toán" /></div>
+                            <button class="btn btn-primary btn-sm w-100">Ký lại hóa đơn</button>
+                        </form>
+                    </div></div>
+                }
+                else
+                {
+                    <div class="alert alert-primary py-2 small mb-0"><i class="bi bi-vector-pen me-1"></i>Đã ký lại@(Model.ApprDTimeUTC != null ? " lúc " + Model.ApprDTimeUTC.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm") : "")@(string.IsNullOrWhiteSpace(Model.ApprBy) ? "" : " bởi " + Model.ApprBy)</div>
+                }
             }
             else if (Model.Status == InvoiceStatus.Sent) { <div class="text-muted small">Đang chờ phản hồi TCT...</div> }
             else if (Model.Status == InvoiceStatus.Deleted)
@@ -211,6 +229,25 @@
                 </tr>
             }
             @if (convLogs.Count == 0) { <tr><td colspan="4" class="text-muted small">Chưa in chuyển đổi.</td></tr> }
+            </tbody>
+        </table>
+    </div></div>
+
+    <div class="card mt-3"><div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="bi bi-vector-pen me-1"></i>Nhật ký ký lại hóa đơn</h6>
+        <table class="table table-sm align-middle mb-0">
+            <thead><tr><th>Thời điểm</th><th>File XML đã ký</th><th>Ghi chú</th><th>Người thực hiện</th></tr></thead>
+            <tbody>
+            @foreach (var l in reSignLogs)
+            {
+                <tr>
+                    <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM HH:mm")</td>
+                    <td class="small text-break">@l.FilePath</td>
+                    <td class="small">@l.Note</td>
+                    <td class="small text-muted">@l.By</td>
+                </tr>
+            }
+            @if (reSignLogs.Count == 0) { <tr><td colspan="4" class="text-muted small">Chưa ký lại.</td></tr> }
             </tbody>
         </table>
     </div></div>
