@@ -1,0 +1,87 @@
+@model List<District>
+@{
+    ViewData["Title"] = "Quận / Huyện";
+    var keyword = ViewBag.Keyword as string;
+    var provinceCode = ViewBag.ProvinceCode as string;
+    var provinces = ViewBag.Provinces as List<Province> ?? new List<Province>();
+    string ProvinceName(string code) => provinces.FirstOrDefault(p => p.ProvinceCode == code)?.ProvinceName ?? code;
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-signpost-split me-1"></i>Danh mục quận / huyện</h6>
+                <form method="get" action="/District" class="d-flex gap-2">
+                    <select name="provinceCode" class="form-select form-select-sm" style="width:auto">
+                        <option value="">— Tất cả tỉnh/thành —</option>
+                        @foreach (var p in provinces)
+                        {
+                            <option value="@p.ProvinceCode" selected="@(p.ProvinceCode == provinceCode)">@p.ProvinceCode — @p.ProvinceName</option>
+                        }
+                    </select>
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm mã / tên quận" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Tỉnh / Thành</th><th>Mã quận</th><th>Tên quận / huyện</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var d in Model)
+                {
+                    <tr>
+                        <td class="small text-muted">@d.ProvinceCode — @ProvinceName(d.ProvinceCode)</td>
+                        <td class="fw-semibold">@d.DistrictCode</td>
+                        <td>@d.DistrictName</td>
+                        <td>
+                            @if (d.FlagActive) { <span class="badge bg-success">Đang dùng</span> }
+                            else { <span class="badge bg-secondary">Ngừng dùng</span> }
+                        </td>
+                        <td class="small text-muted">
+                            @if (d.UpdatedAt.HasValue) { <div>@d.UpdatedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div> }
+                            @if (!string.IsNullOrWhiteSpace(d.UpdatedBy)) { <div>@d.UpdatedBy</div> }
+                            @if (!d.UpdatedAt.HasValue && string.IsNullOrWhiteSpace(d.UpdatedBy)) { <span>—</span> }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/District/Delete" class="d-inline" onsubmit="return confirm('Xóa quận/huyện @d.DistrictName?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@d.Id" />
+                                <input type="hidden" name="provinceCode" value="@provinceCode" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có quận/huyện nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm / cập nhật quận / huyện</h6>
+            <form method="post" action="/District/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12">
+                    <label class="form-label small mb-1">Tỉnh / Thành phố</label>
+                    <select name="provinceCode" class="form-select form-select-sm" required>
+                        <option value="">— Chọn tỉnh/thành —</option>
+                        @foreach (var p in provinces)
+                        {
+                            <option value="@p.ProvinceCode" selected="@(p.ProvinceCode == provinceCode)">@p.ProvinceCode — @p.ProvinceName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Mã quận / huyện</label><input name="code" class="form-control form-control-sm" placeholder="0101" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Tên quận / huyện</label><input name="name" class="form-control form-control-sm" placeholder="Quận Ba Đình" required /></div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="active" value="true" id="districtActive" checked />
+                    <label class="form-check-label small" for="districtActive">Đang dùng</label>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu quận / huyện</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Lưu cùng mã quận/huyện trong một tỉnh/thành = cập nhật quận/huyện đã có (theo khóa nghiệp vụ OrgId + mã tỉnh + mã quận).</p>
+        </div></div>
+    </div>
+</div>

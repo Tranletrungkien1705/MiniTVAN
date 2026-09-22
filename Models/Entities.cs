@@ -212,6 +212,23 @@ public class Province : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Danh mục Quận/Huyện (theo bảng Mst_District của TVAN gốc): danh mục địa giới hành chính
+// cấp quận/huyện, thuộc một tỉnh/thành (ProvinceCode), dùng để chọn khi khai báo địa chỉ
+// NNT/khách hàng (CustomerNnt.DistrictCode).
+// Khóa nghiệp vụ: (OrgId, ProvinceCode, DistrictCode). FlagActive = quận/huyện đang dùng hay không.
+public class District : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ProvinceCode { get; set; } = "";      // Mã tỉnh/thành mà quận/huyện thuộc về (VD 01)
+    public string DistrictCode { get; set; } = "";      // Mã quận/huyện (VD 0101)
+    public string DistrictName { get; set; } = "";      // Tên quận/huyện (VD Quận Ba Đình)
+    public bool FlagActive { get; set; } = true;         // Quận/huyện đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 public class Invoice : IOrgOwned
 {
     public int Id { get; set; }

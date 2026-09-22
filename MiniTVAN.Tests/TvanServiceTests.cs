@@ -2525,4 +2525,75 @@ public class TvanServiceTests
             Assert.Empty(await svc.ProvincesAsync(null));
         }
     }
+
+    [Fact]
+    public async Task District_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveProvinceAsync(null, "01", "Hà Nội", true, null);
+            var (ok, _, id) = await svc.SaveDistrictAsync(null, "01", "0101", "Quận Ba Đình", true, "kế toán");
+            Assert.True(ok);
+            var list = await svc.DistrictsAsync(null, null);
+            Assert.Single(list);
+            Assert.Equal("Quận Ba Đình", list[0].DistrictName);
+            Assert.Equal("01", list[0].ProvinceCode);
+            Assert.True(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task District_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveProvinceAsync(null, "01", "Hà Nội", true, null);
+            var (_, _, id) = await svc.SaveDistrictAsync(null, "01", "0101", "Quận Ba Đình", true, null);
+            // Lưu lại cùng mã quận trong cùng tỉnh = cập nhật (không tạo mới).
+            var (ok, _, id2) = await svc.SaveDistrictAsync(null, "01", "0101", "Q. Ba Đình", false, null);
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            var list = await svc.DistrictsAsync(null, null);
+            Assert.Single(list);
+            Assert.Equal("Q. Ba Đình", list[0].DistrictName);
+            Assert.False(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task District_Save_MissingProvince_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            // Chưa có tỉnh/thành nào → chặn (theo Mst_Province_CheckDB của TVAN gốc).
+            var (ok, msg, _) = await svc.SaveDistrictAsync(null, "01", "0101", "Quận Ba Đình", true, null);
+            Assert.False(ok);
+            Assert.Contains("Tỉnh/thành phố không tồn tại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task District_Save_MissingName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveProvinceAsync(null, "01", "Hà Nội", true, null);
+            var (ok, msg, _) = await svc.SaveDistrictAsync(null, "01", "0101", "  ", true, null);
+            Assert.False(ok);
+            Assert.Contains("tên", msg);
+        }
+    }
+
+    [Fact]
+    public async Task District_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveProvinceAsync(null, "01", "Hà Nội", true, null);
+            var (_, _, id) = await svc.SaveDistrictAsync(null, "01", "0101", "Quận Ba Đình", true, null);
+            var (ok, _) = await svc.DeleteDistrictAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.DistrictsAsync(null, null));
+        }
+    }
 }

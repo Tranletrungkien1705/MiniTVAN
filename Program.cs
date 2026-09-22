@@ -681,6 +681,27 @@ app.MapDelete("/api/provinces/{id:int}", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Danh mục Quận/Huyện (theo Mst_District của TVAN gốc): danh sách (lọc theo tỉnh/thành + từ khóa nếu có).
+app.MapGet("/api/districts", async (string? provinceCode, string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.DistrictsAsync(provinceCode, keyword);
+    return Results.Ok(ls.Select(d => new { d.Id, d.ProvinceCode, d.DistrictCode, d.DistrictName, d.FlagActive, d.UpdatedAt, d.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) quận/huyện theo khóa (ProvinceCode, DistrictCode) (theo Mst_District_Create/Update của TVAN gốc).
+app.MapPost("/api/districts", async (DistrictDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveDistrictAsync(dto.Id, dto.ProvinceCode ?? "", dto.Code ?? "", dto.Name ?? "", dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa quận/huyện theo id (theo Mst_District_Delete của TVAN gốc).
+app.MapDelete("/api/districts/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteDistrictAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -726,3 +747,4 @@ record MessageTemplateDto(string? Code, string? Name, MessageTypeCode Type, stri
 record CustomerNntDto(int? Id, string? Mst, string? Code, string? Name, string? CustomerMst, string? Type, string? Address, string? Email, string? Phone, string? Fax, string? ContactName, string? ContactPhone, string? ContactEmail, DateTime? Dob, string? ProvinceCode, string? DistrictCode, string? AccNo, string? BankName, string? GovIdType, string? GovId, string? Remark, bool Active, string? By);
 record NntTypeDto(int? Id, string? Code, string? Name, bool Active, string? By);
 record ProvinceDto(int? Id, string? Code, string? Name, bool Active, string? By);
+record DistrictDto(int? Id, string? ProvinceCode, string? Code, string? Name, bool Active, string? By);

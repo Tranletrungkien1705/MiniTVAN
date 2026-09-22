@@ -457,6 +457,18 @@ public static class Seeder
                 new Province { ProvinceCode = "48", ProvinceName = "Đà Nẵng", FlagActive = true, UpdatedBy = "kế toán" });
             await db.SaveChangesAsync();
         }
+
+        // Danh mục Quận/Huyện (theo Mst_District của TVAN gốc):
+        // các quận/huyện demo thuộc các tỉnh/thành ở trên, dùng khi khai báo địa chỉ NNT/khách hàng.
+        if (!await db.Districts.AnyAsync())
+        {
+            db.Districts.AddRange(
+                new District { ProvinceCode = "01", DistrictCode = "0101", DistrictName = "Quận Ba Đình", FlagActive = true, UpdatedBy = "kế toán" },
+                new District { ProvinceCode = "01", DistrictCode = "0102", DistrictName = "Quận Hoàn Kiếm", FlagActive = true, UpdatedBy = "kế toán" },
+                new District { ProvinceCode = "79", DistrictCode = "7901", DistrictName = "Quận 1", FlagActive = true, UpdatedBy = "kế toán" },
+                new District { ProvinceCode = "48", DistrictCode = "4801", DistrictName = "Quận Hải Châu", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

@@ -107,6 +107,10 @@ public interface ITvanService
     Task<Province?> GetProvinceAsync(int id);
     Task<(bool ok, string msg, int id)> SaveProvinceAsync(int? id, string code, string name, bool active, string? by);
     Task<(bool ok, string msg)> DeleteProvinceAsync(int id);
+    Task<List<District>> DistrictsAsync(string? provinceCode, string? keyword);
+    Task<District?> GetDistrictAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveDistrictAsync(int? id, string provinceCode, string code, string name, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteDistrictAsync(int id);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -2197,6 +2201,86 @@ public class TvanService(AppDbContext db) : ITvanService
         db.Provinces.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa tỉnh/thành phố {code}.");
+    }
+
+    // Danh mục Quận/Huyện (theo Mst_District của TVAN gốc):
+    // danh sách quận/huyện (lọc theo tỉnh/thành và từ khóa mã/tên nếu có).
+    public Task<List<District>> DistrictsAsync(string? provinceCode, string? keyword)
+    {
+        var q = db.Districts.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(provinceCode))
+        {
+            var pc = provinceCode.Trim();
+            q = q.Where(d => d.ProvinceCode == pc);
+        }
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(d => d.DistrictCode.Contains(k) || d.DistrictName.Contains(k));
+        }
+        return q.OrderBy(d => d.ProvinceCode).ThenBy(d => d.DistrictCode).ToListAsync();
+    }
+
+    public Task<District?> GetDistrictAsync(int id) =>
+        db.Districts.FirstOrDefaultAsync(d => d.Id == id);
+
+    // Lưu (tạo mới/cập nhật) quận/huyện theo khóa nghiệp vụ (OrgId, ProvinceCode, DistrictCode)
+    // (theo Mst_District_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã quận/huyện + tên quận/huyện;
+    //  - tỉnh/thành (ProvinceCode) phải tồn tại và đang dùng (Mst_Province_CheckDB);
+    //  - khi tạo: mã quận/huyện chưa tồn tại trong tỉnh (Mst_District_CheckDB_DistrictExist).
+    public async Task<(bool ok, string msg, int id)> SaveDistrictAsync(int? id, string provinceCode, string code, string name, bool active, string? by)
+    {
+        provinceCode = (provinceCode ?? "").Trim();
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (provinceCode.Length == 0) return (false, "Cần chọn tỉnh/thành phố.", 0);
+        if (code.Length == 0) return (false, "Cần mã quận/huyện.", 0);
+        if (name.Length == 0) return (false, "Cần tên quận/huyện.", 0);
+
+        // Tỉnh/thành phải tồn tại và đang dùng (theo Mst_Province_CheckDB của TVAN gốc).
+        var province = await db.Provinces.FirstOrDefaultAsync(p => p.ProvinceCode == provinceCode);
+        if (province == null) return (false, "Tỉnh/thành phố không tồn tại.", 0);
+        if (!province.FlagActive) return (false, "Tỉnh/thành phố đã ngừng dùng.", 0);
+
+        District? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.Districts.FirstOrDefaultAsync(d => d.Id == id.Value);
+        else e = await db.Districts.FirstOrDefaultAsync(d => d.ProvinceCode == provinceCode && d.DistrictCode == code);
+
+        if (e == null)
+        {
+            if (await db.Districts.AnyAsync(d => d.ProvinceCode == provinceCode && d.DistrictCode == code))
+                return (false, "Mã quận/huyện đã tồn tại trong tỉnh/thành này.", 0);
+            e = new District { ProvinceCode = provinceCode, DistrictCode = code };
+            db.Districts.Add(e);
+        }
+        else
+        {
+            // Đổi mã quận/huyện: chặn trùng với quận/huyện khác trong cùng tỉnh.
+            if (!string.Equals(e.DistrictCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.Districts.AnyAsync(d => d.ProvinceCode == provinceCode && d.DistrictCode == code && d.Id != e.Id))
+                return (false, "Mã quận/huyện đã tồn tại trong tỉnh/thành này.", 0);
+            e.ProvinceCode = provinceCode;
+            e.DistrictCode = code;
+        }
+
+        e.DistrictName = name;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu quận/huyện {code} — {name}.", e.Id);
+    }
+
+    // Xóa quận/huyện theo id (theo Mst_District_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteDistrictAsync(int id)
+    {
+        var e = await db.Districts.FirstOrDefaultAsync(d => d.Id == id);
+        if (e == null) return (false, "Không tìm thấy quận/huyện.");
+        var code = e.DistrictCode;
+        db.Districts.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa quận/huyện {code}.");
     }
 
     // Khoảng thời gian [from, to) của kỳ dữ liệu theo loại kỳ (LKDLieu).
