@@ -99,6 +99,10 @@ public interface ITvanService
     Task<CustomerNnt?> GetCustomerNntAsync(int id);
     Task<(bool ok, string msg, int id)> SaveCustomerNntAsync(int? id, string mst, string code, string name, string? customerMst, string? type, string? address, string? email, string? phone, string? fax, string? contactName, string? contactPhone, string? contactEmail, DateTime? dob, string? provinceCode, string? districtCode, string? accNo, string? bankName, string? govIdType, string? govId, string? remark, bool active, string? by);
     Task<(bool ok, string msg)> DeleteCustomerNntAsync(int id);
+    Task<List<NntType>> NntTypesAsync(string? keyword);
+    Task<NntType?> GetNntTypeAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveNntTypeAsync(int? id, string code, string name, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteNntTypeAsync(int id);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -2057,6 +2061,72 @@ public class TvanService(AppDbContext db) : ITvanService
         db.CustomerNnts.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa khách hàng {code}.");
+    }
+
+    // Danh mục loại người nộp thuế (theo Mst_NNTType của TVAN gốc):
+    // danh sách loại NNT (lọc theo từ khóa tên/mã nếu có).
+    public Task<List<NntType>> NntTypesAsync(string? keyword)
+    {
+        var q = db.NntTypes.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.NNTType.Contains(k) || t.NNTTypeName.Contains(k));
+        }
+        return q.OrderBy(t => t.NNTType).ToListAsync();
+    }
+
+    public Task<NntType?> GetNntTypeAsync(int id) =>
+        db.NntTypes.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) loại NNT theo khóa nghiệp vụ (OrgId, NNTType)
+    // (theo Mst_NNTType_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã loại NNT + tên loại NNT;
+    //  - khi tạo: mã loại NNT chưa tồn tại trong tổ chức (Mst_NNTType_CheckDB_NNTTypeExist).
+    public async Task<(bool ok, string msg, int id)> SaveNntTypeAsync(int? id, string code, string name, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã loại người nộp thuế.", 0);
+        if (name.Length == 0) return (false, "Cần tên loại người nộp thuế.", 0);
+
+        NntType? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.NntTypes.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.NntTypes.FirstOrDefaultAsync(t => t.NNTType == code);
+
+        if (e == null)
+        {
+            if (await db.NntTypes.AnyAsync(t => t.NNTType == code))
+                return (false, "Mã loại người nộp thuế đã tồn tại.", 0);
+            e = new NntType { NNTType = code };
+            db.NntTypes.Add(e);
+        }
+        else
+        {
+            // Đổi mã loại NNT: chặn trùng với loại khác.
+            if (!string.Equals(e.NNTType, code, StringComparison.OrdinalIgnoreCase)
+                && await db.NntTypes.AnyAsync(t => t.NNTType == code && t.Id != e.Id))
+                return (false, "Mã loại người nộp thuế đã tồn tại.", 0);
+            e.NNTType = code;
+        }
+
+        e.NNTTypeName = name;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu loại người nộp thuế {code} — {name}.", e.Id);
+    }
+
+    // Xóa loại NNT theo id (theo Mst_NNTType_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteNntTypeAsync(int id)
+    {
+        var e = await db.NntTypes.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy loại người nộp thuế.");
+        var code = e.NNTType;
+        db.NntTypes.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa loại người nộp thuế {code}.");
     }
 
     // Khoảng thời gian [from, to) của kỳ dữ liệu theo loại kỳ (LKDLieu).

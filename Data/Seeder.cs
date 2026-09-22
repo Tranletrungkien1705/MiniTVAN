@@ -435,6 +435,17 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
         }
+
+        // Danh mục loại người nộp thuế (theo Mst_NNTType của TVAN gốc):
+        // các loại NNT demo dùng khi đăng ký NNT.
+        if (!await db.NntTypes.AnyAsync())
+        {
+            db.NntTypes.AddRange(
+                new NntType { NNTType = "DN", NNTTypeName = "Doanh nghiệp", FlagActive = true, UpdatedBy = "kế toán" },
+                new NntType { NNTType = "HKD", NNTTypeName = "Hộ kinh doanh", FlagActive = true, UpdatedBy = "kế toán" },
+                new NntType { NNTType = "CN", NNTTypeName = "Cá nhân", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

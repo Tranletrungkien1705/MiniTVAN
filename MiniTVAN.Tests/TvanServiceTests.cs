@@ -2416,4 +2416,58 @@ public class TvanServiceTests
             Assert.Empty(await svc.CustomerNntsAsync("0101243150"));
         }
     }
+
+    [Fact]
+    public async Task NntType_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveNntTypeAsync(null, "DN", "Doanh nghiệp", true, "kế toán");
+            Assert.True(ok);
+            var list = await svc.NntTypesAsync(null);
+            Assert.Single(list);
+            Assert.Equal("Doanh nghiệp", list[0].NNTTypeName);
+            Assert.True(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task NntType_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveNntTypeAsync(null, "DN", "Doanh nghiệp", true, null);
+            // Lưu lại cùng mã loại = cập nhật (không tạo mới).
+            var (ok, _, id2) = await svc.SaveNntTypeAsync(null, "DN", "Doanh nghiệp lớn", false, null);
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            var list = await svc.NntTypesAsync(null);
+            Assert.Single(list);
+            Assert.Equal("Doanh nghiệp lớn", list[0].NNTTypeName);
+            Assert.False(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task NntType_Save_MissingName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveNntTypeAsync(null, "DN", "  ", true, null);
+            Assert.False(ok);
+            Assert.Contains("tên", msg);
+        }
+    }
+
+    [Fact]
+    public async Task NntType_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveNntTypeAsync(null, "HKD", "Hộ kinh doanh", true, null);
+            var (ok, _) = await svc.DeleteNntTypeAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.NntTypesAsync(null));
+        }
+    }
 }

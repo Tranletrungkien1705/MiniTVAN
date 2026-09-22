@@ -182,6 +182,21 @@ public class CustomerNnt : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Loại người nộp thuế (theo bảng Mst_NNTType của TVAN gốc): danh mục phân loại NNT
+// (VD: Doanh nghiệp, Hộ kinh doanh, Cá nhân...) dùng để gán loại cho NNT khi đăng ký.
+// Khóa nghiệp vụ: (OrgId, NNTType). FlagActive = loại đang dùng hay không.
+public class NntType : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string NNTType { get; set; } = "";        // Mã loại NNT
+    public string NNTTypeName { get; set; } = "";    // Tên loại NNT
+    public bool FlagActive { get; set; } = true;      // Loại đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 public class Invoice : IOrgOwned
 {
     public int Id { get; set; }

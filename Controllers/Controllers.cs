@@ -710,6 +710,33 @@ public class CustomerController(ITvanService svc) : Controller
     }
 }
 
+// Danh mục loại người nộp thuế (theo Mst_NNTType của TVAN gốc):
+// phân loại NNT (Doanh nghiệp, Hộ kinh doanh, Cá nhân...) dùng khi đăng ký NNT.
+public class NntTypeController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.NntTypesAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string name, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveNntTypeAsync(id, code, name, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteNntTypeAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()
