@@ -358,4 +358,63 @@ public class TvanServiceTests
             Assert.Contains("Cần nhập", msg);
         }
     }
+
+    [Fact]
+    public async Task SendEmail_OnAccepted_LogsAndStampsInvoice()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);   // Accepted
+            var (ok, msg, logId) = await svc.SendInvoiceEmailAsync(invId, "khachhang@congty.vn", "kế toán");
+            Assert.True(ok);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal("khachhang@congty.vn", inv!.EmailSend);
+            Assert.NotNull(inv.SendEmailDTimeUTC);
+            Assert.Equal("kế toán", inv.SendEmailBy);
+            var logs = await svc.EmailLogsAsync(invId);
+            Assert.Single(logs);
+            Assert.Equal(logId, logs[0].Id);
+            Assert.Equal(EmailSendResult.Success, logs[0].Result);
+        }
+    }
+
+    [Fact]
+    public async Task SendEmail_OnDraft_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);   // Draft, chưa truyền
+            var (ok, msg, _) = await svc.SendInvoiceEmailAsync(invId, "a@b.vn", "x");
+            Assert.False(ok);
+            Assert.Contains("chấp nhận", msg);
+            Assert.Empty(await svc.EmailLogsAsync(invId));
+        }
+    }
+
+    [Fact]
+    public async Task SendEmail_InvalidEmail_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);
+            var (ok, msg, _) = await svc.SendInvoiceEmailAsync(invId, "khong-phai-email", "x");
+            Assert.False(ok);
+            Assert.Contains("không hợp lệ", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SendEmail_NoRecipient_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);
+            var (ok, msg, _) = await svc.SendInvoiceEmailAsync(invId, "  ", "x");
+            Assert.False(ok);
+            Assert.Contains("Cần email", msg);
+        }
+    }
 }

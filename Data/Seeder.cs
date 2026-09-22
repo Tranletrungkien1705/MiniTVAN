@@ -23,6 +23,19 @@ public static class Seeder
             // HĐ điều chỉnh giảm cho HĐ gốc inv1 (minh họa xử lý sai sót)
             var inv3 = new Invoice { NntId = seller.Id, Symbol = "1C26TAA", No = "00000003", BuyerName = "Nguyễn Văn A", BuyerMst = "8012345678", BuyerAddress = "Hà Nội", Amount = 5_000_000, VatRate = 10, IssuedDate = DateTime.Today.AddDays(-2), Status = InvoiceStatus.Accepted, TctCode = "0026082612345679", SentAt = DateTime.UtcNow.AddDays(-2), SourceCode = SourceInvoiceCode.Adjust, AdjType = InvoiceAdjType.Decrease, RefInvoiceId = inv1.Id, RefTctCode = inv1.TctCode, AdjReason = "Giảm giá theo phụ lục hợp đồng" };
             db.Invoices.Add(inv3); await db.SaveChangesAsync();
+            // Gửi email hóa đơn cho người mua (theo Invoice_Invoice_Support_SendMail của TVAN gốc):
+            // inv1 đã phát hành → đã gửi email cho người mua.
+            inv1.EmailSend = "nguyenvana@congty.vn";
+            inv1.SendEmailDTimeUTC = DateTime.UtcNow.AddDays(-5);
+            inv1.SendEmailBy = "kế toán";
+            db.InvoiceEmailLogs.Add(new InvoiceEmailLog
+            {
+                InvoiceId = inv1.Id, ToEmail = "nguyenvana@congty.vn",
+                Subject = $"Hóa đơn điện tử {inv1.Symbol}-{inv1.No} — {seller.Name}",
+                Result = EmailSendResult.Success, SentBy = "kế toán",
+                Message = "Đã gửi email hóa đơn tới nguyenvana@congty.vn.", CreatedAt = DateTime.UtcNow.AddDays(-5)
+            });
+            await db.SaveChangesAsync();
             db.Messages.AddRange(
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300", Text = "Gửi HĐ 1C26TAA-00000001", CreatedAt = DateTime.UtcNow.AddDays(-5) },
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "202", Text = "TCT cấp mã: 0026082512345678", CreatedAt = DateTime.UtcNow.AddDays(-5) },

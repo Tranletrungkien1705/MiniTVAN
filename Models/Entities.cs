@@ -23,6 +23,9 @@ public enum GthStatus { Draft = 0, Sent = 1, Accepted = 2, Rejected = 3 }
 // Kết quả tra cứu thông tin NNT theo MST từ cơ quan thuế (theo RT_EFY.status của TVAN gốc)
 public enum LookupResult { Success = 0, NotFound = 1, Error = 2 }
 
+// Kết quả gửi email hóa đơn cho người mua (theo Invoice_Invoice_Support_SendMail của TVAN gốc)
+public enum EmailSendResult { Success = 0, Failed = 1 }
+
 public class Org
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -72,6 +75,11 @@ public class Invoice : IOrgOwned
     public Invoice? RefInvoice { get; set; }
     public string? RefTctCode { get; set; }          // Số tra cứu HĐ gốc (RefNo)
     public string? AdjReason { get; set; }           // Lý do điều chỉnh/thay thế
+
+    // Gửi email hóa đơn cho người mua (theo Invoice_Invoice của TVAN gốc: EmailSend/SendEmailDTimeUTC/SendEmailBy)
+    public string? EmailSend { get; set; }           // Email người nhận (nhiều địa chỉ cách nhau bởi ';')
+    public DateTime? SendEmailDTimeUTC { get; set; } // Thời điểm gửi email gần nhất
+    public string? SendEmailBy { get; set; }         // Người gửi email
 
     public decimal VatAmount => Math.Round(Amount * VatRate / 100m, 0);
     public decimal Total => Amount + VatAmount;
@@ -190,6 +198,22 @@ public class NntLookupLog : IOrgOwned
     public string? GovTaxID { get; set; }              // CQT quản lý
     public string? GovTaxName { get; set; }            // Tên CQT quản lý
     public string? Message { get; set; }               // Thông báo kết quả
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Nhật ký gửi email hóa đơn cho người mua (theo Invoice_Invoice_Support_SendMail của TVAN gốc).
+// Mỗi lần gửi/gửi lại email hóa đơn đã phát hành ghi lại kết quả để đối soát.
+public class InvoiceEmailLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InvoiceId { get; set; }
+    public Invoice? Invoice { get; set; }
+    public string ToEmail { get; set; } = "";        // Địa chỉ nhận
+    public string? Subject { get; set; }              // Tiêu đề email
+    public EmailSendResult Result { get; set; } = EmailSendResult.Success;
+    public string? Message { get; set; }              // Thông báo kết quả
+    public string? SentBy { get; set; }               // Người gửi
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 

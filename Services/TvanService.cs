@@ -34,6 +34,8 @@ public interface ITvanService
     Task<List<TaxOffice>> TaxOfficesAsync();
     Task<List<NntLookupLog>> NntLookupLogsAsync(string? mst);
     Task<(bool ok, string msg, NntLookupLog? log)> LookupNntByMstAsync(string mst);
+    Task<List<InvoiceEmailLog>> EmailLogsAsync(int? invoiceId);
+    Task<(bool ok, string msg, int id)> SendInvoiceEmailAsync(int invoiceId, string? toEmail, string? sentBy);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -428,6 +430,45 @@ public class TvanService(AppDbContext db) : ITvanService
         log.Message = "Tra cứu thành công từ cơ quan thuế.";
         db.NntLookupLogs.Add(log); await db.SaveChangesAsync();
         return (true, log.Message, log);
+    }
+
+    // Gửi/gửi lại email hóa đơn cho người mua (theo Invoice_Invoice_Support_SendMail của TVAN gốc).
+    // Chỉ gửi được cho hóa đơn ĐÃ PHÁT HÀNH (Accepted); người nhận lấy từ tham số, nếu trống thì dùng EmailSend đã lưu.
+    // Mọi lần gửi đều ghi nhật ký (InvoiceEmailLog) và cập nhật SendEmailDTimeUTC/SendEmailBy trên hóa đơn.
+    public async Task<(bool ok, string msg, int id)> SendInvoiceEmailAsync(int invoiceId, string? toEmail, string? sentBy)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.", 0);
+        if (inv.Status != InvoiceStatus.Accepted) return (false, "Chỉ gửi email được cho hóa đơn đã được CQT chấp nhận.", 0);
+
+        var to = (toEmail ?? "").Trim();
+        if (to.Length == 0) to = (inv.EmailSend ?? "").Trim();
+        if (to.Length == 0) return (false, "Cần email người nhận.", 0);
+
+        var recipients = to.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (recipients.Length == 0 || recipients.Any(r => !r.Contains('@'))) return (false, "Email người nhận không hợp lệ.", 0);
+
+        var subject = $"Hóa đơn điện tử {inv.Symbol}-{inv.No} — {inv.Nnt?.Name}";
+        var log = new InvoiceEmailLog
+        {
+            InvoiceId = inv.Id, ToEmail = string.Join(";", recipients), Subject = subject,
+            Result = EmailSendResult.Success, SentBy = sentBy,
+            Message = $"Đã gửi email hóa đơn tới {string.Join(";", recipients)}."
+        };
+        db.InvoiceEmailLogs.Add(log);
+
+        inv.EmailSend = string.Join(";", recipients);
+        inv.SendEmailDTimeUTC = DateTime.UtcNow;
+        inv.SendEmailBy = sentBy;
+        await db.SaveChangesAsync();
+        return (true, log.Message!, log.Id);
+    }
+
+    public Task<List<InvoiceEmailLog>> EmailLogsAsync(int? invoiceId)
+    {
+        var q = db.InvoiceEmailLogs.Include(l => l.Invoice).AsQueryable();
+        if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
+        return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
     }
 
     // Khoảng thời gian [from, to) của kỳ dữ liệu theo loại kỳ (LKDLieu).

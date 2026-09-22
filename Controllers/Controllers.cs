@@ -64,6 +64,7 @@ public class InvoiceController(ITvanService svc) : Controller
         var inv = await svc.GetInvoiceAsync(id);
         if (inv == null) return NotFound();
         ViewBag.Messages = await svc.MessagesAsync(id);
+        ViewBag.EmailLogs = await svc.EmailLogsAsync(id);
         return View(inv);
     }
 
@@ -95,6 +96,15 @@ public class InvoiceController(ITvanService svc) : Controller
         var (ok, msg, newId) = await svc.ReplaceAsync(id, amount, vatRate, reason);
         TempData[ok ? "Success" : "Error"] = msg;
         return ok ? RedirectToAction(nameof(Detail), new { id = newId }) : RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Gửi/gửi lại email hóa đơn đã phát hành cho người mua (theo Invoice_Invoice_Support_SendMail của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SendEmail(int id, string? toEmail, string? sentBy)
+    {
+        var (ok, msg, _) = await svc.SendInvoiceEmailAsync(id, toEmail, sentBy);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
     }
 }
 
@@ -177,6 +187,16 @@ public class TaxLookupController(ITvanService svc) : Controller
             ViewBag.Ok = ok; ViewBag.Msg = msg; ViewBag.Result = log;
         }
         return View();
+    }
+}
+
+// Nhật ký gửi email hóa đơn cho người mua (theo Invoice_Invoice_Support_SendMail của TVAN gốc).
+public class EmailLogController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? invoiceId)
+    {
+        ViewBag.InvoiceId = invoiceId;
+        return View(await svc.EmailLogsAsync(invoiceId));
     }
 }
 

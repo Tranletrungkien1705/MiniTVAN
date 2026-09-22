@@ -84,4 +84,11 @@ public static class Ui
         LookupResult.Error    => ("Lỗi", "danger"),
         _ => (r.ToString(), "secondary")
     };
+
+    public static (string text, string css) Email(EmailSendResult r) => r switch
+    {
+        EmailSendResult.Success => ("Đã gửi", "success"),
+        EmailSendResult.Failed  => ("Gửi lỗi", "danger"),
+        _ => (r.ToString(), "secondary")
+    };
 }

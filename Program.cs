@@ -198,6 +198,20 @@ app.MapGet("/api/tax/offices", async (ITvanService svc) =>
     return Results.Ok(ls.Select(t => new { t.GovTaxID, t.GovTaxName, t.Address, t.ContactEmail, t.ContactPhone, t.FlagActive }));
 });
 
+// Gửi/gửi lại email hóa đơn đã phát hành cho người mua (theo Invoice_Invoice_Support_SendMail của TVAN gốc).
+app.MapPost("/api/invoices/{id:int}/send-email", async (int id, SendEmailDto dto, ITvanService svc) =>
+{
+    var (ok, msg, logId) = await svc.SendInvoiceEmailAsync(id, dto.ToEmail, dto.SentBy);
+    return ok ? Results.Ok(new { id = logId, msg }) : Results.BadRequest(new { id = logId, error = msg });
+});
+
+// Nhật ký gửi email hóa đơn (lọc theo hóa đơn nếu có).
+app.MapGet("/api/email-logs", async (int? invoiceId, ITvanService svc) =>
+{
+    var ls = await svc.EmailLogsAsync(invoiceId);
+    return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, l.ToEmail, l.Subject, result = l.Result.ToString(), l.Message, l.SentBy, l.CreatedAt }));
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -210,3 +224,4 @@ record AdjustDto(InvoiceAdjType AdjType, decimal Amount, decimal VatRate, string
 record ReplaceDto(decimal Amount, decimal VatRate, string? Reason);
 record LicenseIncreaseDto(int NntId, int Qty, string? Note);
 record GuiTongHopDto(int NntId, PeriodType LKDLieu, string? KDLieu, int BSLThu, string? Note);
+record SendEmailDto(string? ToEmail, string? SentBy);

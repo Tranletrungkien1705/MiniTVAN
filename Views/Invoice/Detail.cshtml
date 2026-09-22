@@ -1,5 +1,6 @@
 @model Invoice
 @{ ViewData["Title"] = $"HĐ {Model.Symbol}-{Model.No}"; var msgs = (List<TranMessage>)ViewBag.Messages; var (st, css) = Ui.Inv(Model.Status);
+   var emailLogs = (List<InvoiceEmailLog>)ViewBag.EmailLogs;
    var (srcText, srcCss) = Ui.Source(Model.SourceCode);
    var lookupUrl = $"{Context.Request.Scheme}://{Context.Request.Host}/Lookup/{Model.TctCode}"; }
 <div class="row g-3">
@@ -82,6 +83,14 @@
                     </div></div>
                 }
                 <form asp-action="Cancel" method="post" onsubmit="return confirm('Hủy hóa đơn đã phát hành?')">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><button class="btn btn-outline-danger w-100"><i class="bi bi-x-circle me-1"></i>Hủy hóa đơn</button></form>
+                <button class="btn btn-outline-success w-100" type="button" data-bs-toggle="collapse" data-bs-target="#emailForm"><i class="bi bi-envelope me-1"></i>Gửi email hóa đơn</button>
+                <div class="collapse" id="emailForm"><div class="border rounded p-2">
+                    <form asp-action="SendEmail" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                        <div class="mb-2"><label class="form-label small mb-1">Email người nhận (nhiều địa chỉ cách nhau bởi ';')</label><input name="toEmail" class="form-control form-control-sm" value="@Model.EmailSend" placeholder="VD khachhang@congty.vn" required /></div>
+                        <div class="mb-2"><label class="form-label small mb-1">Người gửi</label><input name="sentBy" class="form-control form-control-sm" placeholder="VD kế toán" /></div>
+                        <button class="btn btn-success btn-sm w-100">Gửi email</button>
+                    </form>
+                </div></div>
             }
             else if (Model.Status == InvoiceStatus.Sent) { <div class="text-muted small">Đang chờ phản hồi TCT...</div> }
             else { <div class="text-muted small">Hóa đơn đã hủy.</div> }
@@ -91,5 +100,25 @@
             <hr /><div class="small text-muted mb-1">Link tra cứu công khai</div>
             <div class="border rounded p-2 small text-break">@lookupUrl</div>
         }
-    </div></div></div>
+    </div></div>
+
+    <div class="card mt-3"><div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="bi bi-envelope-paper me-1"></i>Nhật ký gửi email cho người mua</h6>
+        <table class="table table-sm align-middle mb-0">
+            <thead><tr><th>Thời điểm</th><th>Người nhận</th><th>Kết quả</th><th>Người gửi</th></tr></thead>
+            <tbody>
+            @foreach (var l in emailLogs)
+            {
+                var (et, ecss) = Ui.Email(l.Result);
+                <tr>
+                    <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM HH:mm")</td>
+                    <td class="small">@l.ToEmail</td>
+                    <td><span class="badge bg-@ecss">@et</span></td>
+                    <td class="small text-muted">@l.SentBy</td>
+                </tr>
+            }
+            @if (emailLogs.Count == 0) { <tr><td colspan="4" class="text-muted small">Chưa gửi email.</td></tr> }
+            </tbody>
+        </table>
+    </div></div>
 </div>

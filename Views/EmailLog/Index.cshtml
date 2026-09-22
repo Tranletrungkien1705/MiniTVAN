@@ -1,0 +1,29 @@
+@model List<InvoiceEmailLog>
+@{ ViewData["Title"] = "Nhật ký gửi email hóa đơn"; int? filterInv = ViewBag.InvoiceId as int?; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0"><i class="bi bi-envelope-paper me-1"></i>Nhật ký gửi email hóa đơn cho người mua</h6>
+        @if (filterInv.HasValue) { <a class="small" href="/EmailLog">Bỏ lọc</a> }
+    </div>
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Thời điểm</th><th>Hóa đơn</th><th>Người nhận</th><th>Tiêu đề</th><th>Kết quả</th><th>Người gửi</th></tr></thead>
+        <tbody>
+        @foreach (var l in Model)
+        {
+            var (t, css) = Ui.Email(l.Result);
+            <tr>
+                <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                <td class="small">
+                    @if (l.Invoice != null) { <a href="/Invoice/Detail/@l.InvoiceId">@l.Invoice.Symbol-@l.Invoice.No</a> }
+                    else { <span class="text-muted">#@l.InvoiceId</span> }
+                </td>
+                <td class="small">@l.ToEmail</td>
+                <td class="small text-muted">@l.Subject</td>
+                <td><span class="badge bg-@css">@t</span></td>
+                <td class="small text-muted">@l.SentBy</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa gửi email hóa đơn nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>
