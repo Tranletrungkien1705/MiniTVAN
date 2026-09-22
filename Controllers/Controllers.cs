@@ -191,6 +191,15 @@ public class InvoiceController(ITvanService svc) : Controller
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Detail), new { id });
     }
+
+    // Cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc): PENDING + chưa có số → cấp số kế tiếp từ mẫu.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AllocateNo(int id, DateTime invoiceDate, string? by)
+    {
+        var (ok, msg, _) = await svc.AllocateInvoiceNoAsync(id, invoiceDate, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
 }
 
 public class LicenseController(ITvanService svc) : Controller
@@ -312,6 +321,36 @@ public class ApproveLogController(ITvanService svc) : Controller
     {
         ViewBag.InvoiceId = invoiceId;
         return View(await svc.ApproveLogsAsync(invoiceId));
+    }
+}
+
+// Danh mục mẫu hóa đơn + nhật ký cấp phát số (theo Invoice_TempInvoice / Invoice_Invoice_AllocatedInv của TVAN gốc).
+public class InvoiceTemplateController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? nntId)
+    {
+        ViewBag.Nnts = await svc.NntsAsync();
+        ViewBag.NntId = nntId;
+        ViewBag.Logs = await svc.AllocLogsAsync(null);
+        return View(await svc.TemplatesAsync(nntId));
+    }
+
+    // Phát hành mẫu hóa đơn (theo Invoice_TempInvoice_Issued của TVAN gốc): PENDING → ISSUED.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Issue(int id, DateTime effDateStart, string? remark)
+    {
+        var (ok, msg) = await svc.IssueTemplateAsync(id, effDateStart, remark);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Ngừng hoạt động mẫu hóa đơn (theo Invoice_TempInvoice_InActive của TVAN gốc): ISSUED → INACTIVE.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Inactivate(int id, string? remark)
+    {
+        var (ok, msg) = await svc.InactivateTemplateAsync(id, remark);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
     }
 }
 

@@ -136,6 +136,48 @@ public static class Seeder
             db.SystemSettings.Add(new SystemSetting { Sign60Day = Sign60DayFlag.Check, Note = "Mặc định bật kiểm tra ký >60 ngày" });
             await db.SaveChangesAsync();
         }
+
+        // Mẫu hóa đơn (theo Invoice_TempInvoice của TVAN gốc): seller có mẫu 1C26TAA dải số 1..1000,
+        // đã cấp tới số 00000003 (khớp 3 HĐ demo) + nhật ký cấp số cho HĐ gần nhất.
+        if (!await db.InvoiceTemplates.AnyAsync())
+        {
+            var seller = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == "0101243150");
+            if (seller != null)
+            {
+                var tpl = new InvoiceTemplate
+                {
+                    NntId = seller.Id, TInvoiceCode = "TINV-1C26TAA", TInvoiceName = "Hóa đơn GTGT 1C26TAA",
+                    FormNo = "1C26TAA", Sign = "K26TAA", TTType = InvoiceNoRule.TT78,
+                    EffDateStart = DateTime.Today.AddDays(-30), StartInvoiceNo = 1, EndInvoiceNo = 1000,
+                    LastInvoiceNo = "00000003", QtyUsed = 3, LastInvoiceDateUTC = DateTime.Today.AddDays(-1),
+                    TInvoiceStatus = TemplateStatus.Issued, FlagActive = true
+                };
+                db.InvoiceTemplates.Add(tpl); await db.SaveChangesAsync();
+
+                var lastInv = await db.Invoices.OrderByDescending(i => i.Id).FirstOrDefaultAsync(i => i.NntId == seller.Id);
+                if (lastInv != null)
+                {
+                    db.InvoiceNoAllocLogs.Add(new InvoiceNoAllocLog
+                    {
+                        InvoiceId = lastInv.Id, TemplateId = tpl.Id, FormNo = tpl.FormNo, Sign = tpl.Sign,
+                        InvoiceNo = lastInv.No, InvoiceDate = lastInv.IssuedDate, By = "kế toán",
+                        CreatedAt = DateTime.UtcNow.AddDays(-1)
+                    });
+                    await db.SaveChangesAsync();
+                }
+
+                // Mẫu hóa đơn mới ở trạng thái chờ (Draft/PENDING) — minh họa phát hành mẫu
+                // (theo Invoice_TempInvoice_Issued của TVAN gốc): chưa có hiệu lực, chờ phát hành.
+                db.InvoiceTemplates.Add(new InvoiceTemplate
+                {
+                    NntId = seller.Id, TInvoiceCode = "TINV-1C26TAB", TInvoiceName = "Hóa đơn GTGT 1C26TAB",
+                    FormNo = "1C26TAB", Sign = "K26TAB", TTType = InvoiceNoRule.TT78,
+                    EffDateStart = DateTime.Today, StartInvoiceNo = 1, EndInvoiceNo = 500,
+                    QtyUsed = 0, TInvoiceStatus = TemplateStatus.Draft, FlagActive = true
+                });
+                await db.SaveChangesAsync();
+            }
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

@@ -23,6 +23,8 @@ public class AppDbContext : DbContext
     public DbSet<ReSignLog> ReSignLogs => Set<ReSignLog>();
     public DbSet<ApproveLog> ApproveLogs => Set<ApproveLog>();
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
+    public DbSet<InvoiceTemplate> InvoiceTemplates => Set<InvoiceTemplate>();
+    public DbSet<InvoiceNoAllocLog> InvoiceNoAllocLogs => Set<InvoiceNoAllocLog>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -119,6 +121,19 @@ public class AppDbContext : DbContext
         b.Entity<SystemSetting>(e =>
         {
             e.HasIndex(x => x.OrgId).IsUnique();   // mỗi tổ chức một cấu hình
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InvoiceTemplate>(e =>
+        {
+            e.Ignore(x => x.QtyRemain);
+            e.HasIndex(x => new { x.OrgId, x.TInvoiceCode }).IsUnique();   // mỗi mẫu một mã
+            e.HasOne(x => x.Nnt).WithMany().HasForeignKey(x => x.NntId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InvoiceNoAllocLog>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.InvoiceId });
+            e.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

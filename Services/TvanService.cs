@@ -50,6 +50,11 @@ public interface ITvanService
     Task<List<ApproveLog>> ApproveLogsAsync(int? invoiceId);
     Task<SystemSetting> GetSettingAsync();
     Task<(bool ok, string msg)> SetSign60DayAsync(Sign60DayFlag flag, string? note);
+    Task<List<InvoiceTemplate>> TemplatesAsync(int? nntId);
+    Task<(bool ok, string msg)> IssueTemplateAsync(int templateId, DateTime effDateStart, string? remark);
+    Task<(bool ok, string msg)> InactivateTemplateAsync(int templateId, string? remark);
+    Task<(bool ok, string msg, string? invoiceNo)> AllocateInvoiceNoAsync(int invoiceId, DateTime invoiceDate, string? by);
+    Task<List<InvoiceNoAllocLog>> AllocLogsAsync(int? invoiceId);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -770,6 +775,128 @@ public class TvanService(AppDbContext db) : ITvanService
         return (true, flag == Sign60DayFlag.Uncheck
             ? "Đã bỏ kiểm tra ký quá 60 ngày."
             : "Đã bật kiểm tra ký quá 60 ngày.");
+    }
+
+    // Mẫu hóa đơn (theo bảng Invoice_TempInvoice của TVAN gốc): danh sách mẫu theo NNT.
+    public Task<List<InvoiceTemplate>> TemplatesAsync(int? nntId)
+    {
+        var q = db.InvoiceTemplates.Include(t => t.Nnt).AsQueryable();
+        if (nntId.HasValue) q = q.Where(t => t.NntId == nntId.Value);
+        return q.OrderBy(t => t.Nnt!.Name).ThenBy(t => t.TInvoiceCode).ToListAsync();
+    }
+
+    // Phát hành mẫu hóa đơn (theo Invoice_TempInvoice_Issued của TVAN gốc):
+    // chỉ phát hành được mẫu đang ở trạng thái chờ (Draft/PENDING) và đang hoạt động (FlagActive).
+    // Ràng buộc: dải số phải hợp lệ (StartInvoiceNo/EndInvoiceNo != 0) và ngày bắt đầu sử dụng
+    // không được trước ngày hiện tại. Đưa mẫu sang ISSUED, ghi ngày bắt đầu sử dụng + ghi chú.
+    public async Task<(bool ok, string msg)> IssueTemplateAsync(int templateId, DateTime effDateStart, string? remark)
+    {
+        var tpl = await db.InvoiceTemplates.Include(t => t.Nnt).FirstOrDefaultAsync(t => t.Id == templateId);
+        if (tpl == null) return (false, "Không tìm thấy mẫu hóa đơn.");
+        if (tpl.TInvoiceStatus != TemplateStatus.Draft) return (false, "Chỉ phát hành được mẫu đang ở trạng thái chờ (PENDING).");
+        if (!tpl.FlagActive) return (false, "Mẫu đã ngừng hoạt động, không thể phát hành.");
+        if (tpl.StartInvoiceNo == 0 || tpl.EndInvoiceNo == 0) return (false, "Mẫu chưa có dải số hợp lệ (số bắt đầu/kết thúc phải khác 0).");
+
+        var date = effDateStart == default ? DateTime.Today : effDateStart.Date;
+        if (date < DateTime.Today) return (false, "Ngày bắt đầu sử dụng không được trước ngày hiện tại.");
+
+        tpl.TInvoiceStatus = TemplateStatus.Issued;
+        tpl.EffDateStart = date;
+        tpl.EffDateEnd = null;
+        db.Messages.Add(new TranMessage
+        {
+            NntId = tpl.NntId, Type = MsgType.RegisterNnt, Dir = MsgDir.Out, Code = "300",
+            Text = $"Phát hành mẫu hóa đơn {tpl.FormNo} ({tpl.TInvoiceCode}) từ {date:dd/MM/yyyy}{(string.IsNullOrWhiteSpace(remark) ? "" : ": " + remark.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã phát hành mẫu {tpl.FormNo} ({tpl.TInvoiceCode}).");
+    }
+
+    // Ngừng hoạt động mẫu hóa đơn (theo Invoice_TempInvoice_InActive của TVAN gốc):
+    // chỉ ngừng được mẫu đang sử dụng (Issued) và đang hoạt động (FlagActive).
+    // Đưa mẫu sang INACTIVE, ghi ngày kết thúc sử dụng = hiện tại và tắt cờ hoạt động.
+    public async Task<(bool ok, string msg)> InactivateTemplateAsync(int templateId, string? remark)
+    {
+        var tpl = await db.InvoiceTemplates.Include(t => t.Nnt).FirstOrDefaultAsync(t => t.Id == templateId);
+        if (tpl == null) return (false, "Không tìm thấy mẫu hóa đơn.");
+        if (tpl.TInvoiceStatus != TemplateStatus.Issued) return (false, "Chỉ ngừng được mẫu đang sử dụng (ISSUED).");
+        if (!tpl.FlagActive) return (false, "Mẫu đã ngừng hoạt động.");
+
+        tpl.TInvoiceStatus = TemplateStatus.Inactive;
+        tpl.EffDateEnd = DateTime.Today;
+        tpl.FlagActive = false;
+        db.Messages.Add(new TranMessage
+        {
+            NntId = tpl.NntId, Type = MsgType.RegisterNnt, Dir = MsgDir.Out, Code = "300",
+            Text = $"Ngừng hoạt động mẫu hóa đơn {tpl.FormNo} ({tpl.TInvoiceCode}){(string.IsNullOrWhiteSpace(remark) ? "" : ": " + remark.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã ngừng hoạt động mẫu {tpl.FormNo} ({tpl.TInvoiceCode}).");
+    }
+
+    // Cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc):
+    // HĐ phải đang ở trạng thái chờ (Draft/PENDING) và CHƯA có số; ngày hóa đơn không được trước
+    // ngày cấp số gần nhất của mẫu, không trước ngày bắt đầu sử dụng mẫu và không được là ngày tương lai.
+    // Số được cấp = LastInvoiceNo + 1 (TT78) hoặc StartInvoiceNo + QtyUsed (TT68); cập nhật mẫu + ghi nhật ký.
+    public async Task<(bool ok, string msg, string? invoiceNo)> AllocateInvoiceNoAsync(int invoiceId, DateTime invoiceDate, string? by)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.", null);
+        if (inv.Status != InvoiceStatus.Draft) return (false, "Chỉ cấp số được cho hóa đơn đang ở trạng thái chờ (PENDING).", null);
+        if (!string.IsNullOrWhiteSpace(inv.No)) return (false, "Hóa đơn đã có số, không thể cấp số lại.", null);
+
+        var date = invoiceDate == default ? DateTime.Today : invoiceDate.Date;
+        if (date > DateTime.Today) return (false, "Ngày hóa đơn không được là ngày tương lai.", null);
+
+        var tpl = await db.InvoiceTemplates.FirstOrDefaultAsync(t => t.NntId == inv.NntId && t.FlagActive);
+        if (tpl == null) return (false, "NNT chưa có mẫu hóa đơn đang hoạt động để cấp số.", null);
+        if (date < tpl.EffDateStart.Date) return (false, $"Ngày hóa đơn phải sau ngày bắt đầu sử dụng mẫu ({tpl.EffDateStart:dd/MM/yyyy}).", null);
+        if (tpl.LastInvoiceDateUTC.HasValue && date < tpl.LastInvoiceDateUTC.Value.Date)
+            return (false, $"Ngày hóa đơn không được trước ngày cấp số gần nhất ({tpl.LastInvoiceDateUTC.Value:dd/MM/yyyy}).", null);
+        if (tpl.QtyUsed >= tpl.EndInvoiceNo - tpl.StartInvoiceNo + 1)
+            return (false, "Mẫu hóa đơn đã dùng hết dải số được cấp.", null);
+
+        // Tính số kế tiếp theo loại thông tư (TT78: nối tiếp LastInvoiceNo; TT68: StartInvoiceNo + QtyUsed).
+        int nextNo;
+        if (tpl.TTType == InvoiceNoRule.TT78)
+        {
+            nextNo = (int.TryParse(tpl.LastInvoiceNo, out var last) ? last : tpl.StartInvoiceNo - 1) + 1;
+        }
+        else
+        {
+            nextNo = tpl.StartInvoiceNo + tpl.QtyUsed;
+        }
+        var invoiceNo = nextNo.ToString("D8");
+
+        inv.No = invoiceNo;
+        inv.Symbol = string.IsNullOrWhiteSpace(tpl.FormNo) ? inv.Symbol : tpl.FormNo;
+        inv.IssuedDate = date;
+        inv.InvoiceNoDTimeUTC = DateTime.UtcNow;
+        inv.InvoiceNoBy = by;
+
+        tpl.LastInvoiceNo = invoiceNo;
+        tpl.LastInvoiceDateUTC = date;
+        tpl.QtyUsed += 1;
+
+        db.InvoiceNoAllocLogs.Add(new InvoiceNoAllocLog
+        {
+            InvoiceId = inv.Id, TemplateId = tpl.Id, FormNo = tpl.FormNo, Sign = tpl.Sign,
+            InvoiceNo = invoiceNo, InvoiceDate = date, By = by,
+        });
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Cấp số hóa đơn {tpl.FormNo}-{invoiceNo} cho HĐ ngày {date:dd/MM/yyyy}{(string.IsNullOrWhiteSpace(by) ? "" : " bởi " + by.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã cấp số hóa đơn {tpl.FormNo}-{invoiceNo}.", invoiceNo);
+    }
+
+    public Task<List<InvoiceNoAllocLog>> AllocLogsAsync(int? invoiceId)
+    {
+        var q = db.InvoiceNoAllocLogs.Include(l => l.Invoice).AsQueryable();
+        if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
+        return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
     }
 
     // Khoảng thời gian [from, to) của kỳ dữ liệu theo loại kỳ (LKDLieu).

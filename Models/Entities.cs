@@ -46,6 +46,13 @@ public enum HotfixFlag { None = 0, Hotfixed = 1 }
 // Loại thao tác duyệt hóa đơn (theo Invoice_Invoice_Approved của TVAN gốc)
 public enum ApproveAction { Approve = 0, Unapprove = 1 }
 
+// Trạng thái mẫu hóa đơn (theo Invoice_TempInvoice.TInvoiceStatus của TVAN gốc)
+public enum TemplateStatus { Draft = 0, Issued = 1, Inactive = 2 }
+
+// Loại thông tư quy định cách đánh số hóa đơn (theo Invoice_TempGroup.TTType của TVAN gốc):
+// TT68 = số 8 chữ số liên tục; TT78 = số 7 chữ số, reset theo năm trên mẫu số.
+public enum InvoiceNoRule { TT68 = 0, TT78 = 1 }
+
 public class Org
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -127,6 +134,11 @@ public class Invoice : IOrgOwned
     // InvoiceFilePath/InvoicePDFFilePath = đường dẫn file XML/PDF hóa đơn đã duyệt;
     // ApprDTimeUTC/ApprBy = thời điểm & người duyệt (dùng chung với ký lại).
     public string? InvoicePDFFilePath { get; set; }
+
+    // Cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc):
+    // InvoiceNoDTimeUTC/InvoiceNoBy = thời điểm & người ấn cấp số hóa đơn.
+    public DateTime? InvoiceNoDTimeUTC { get; set; }
+    public string? InvoiceNoBy { get; set; }
 
     public decimal VatAmount => Math.Round(Amount * VatRate / 100m, 0);
     public decimal Total => Amount + VatAmount;
@@ -317,6 +329,50 @@ public class SystemSetting : IOrgOwned
     public Sign60DayFlag Sign60Day { get; set; } = Sign60DayFlag.Check;
     public string? Note { get; set; }                 // Ghi chú / người thay đổi
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Mẫu hóa đơn (theo bảng Invoice_TempInvoice của TVAN gốc): mỗi NNT đăng ký một mẫu với dải số
+// được cấp phát (StartInvoiceNo..EndInvoiceNo). Hệ thống cấp số tuần tự từ mẫu này khi phát hành HĐ.
+public class InvoiceTemplate : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int NntId { get; set; }
+    public Nnt? Nnt { get; set; }
+    public string TInvoiceCode { get; set; } = "";        // Mã mẫu
+    public string TInvoiceName { get; set; } = "";        // Tên mẫu
+    public string FormNo { get; set; } = "";              // Mẫu số (VD 1C26TAA)
+    public string Sign { get; set; } = "";                // Ký hiệu
+    public InvoiceNoRule TTType { get; set; } = InvoiceNoRule.TT78;   // Loại thông tư (cách đánh số)
+    public DateTime EffDateStart { get; set; } = DateTime.Today;      // Ngày bắt đầu sử dụng
+    public DateTime? EffDateEnd { get; set; }             // Ngày kết thúc
+    public int StartInvoiceNo { get; set; }               // Số bắt đầu
+    public int EndInvoiceNo { get; set; }                 // Số kết thúc
+    public string? LastInvoiceNo { get; set; }            // Số hóa đơn cuối đã cấp
+    public int QtyUsed { get; set; }                      // Số lượng đã sử dụng
+    public DateTime? LastInvoiceDateUTC { get; set; }     // Ngày hóa đơn cuối được cấp số
+    public TemplateStatus TInvoiceStatus { get; set; } = TemplateStatus.Issued;
+    public bool FlagActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public int QtyRemain => EndInvoiceNo - StartInvoiceNo + 1 - QtyUsed;
+}
+
+// Nhật ký cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc).
+// Mỗi lần ấn cấp số cho một hóa đơn ghi lại để đối soát.
+public class InvoiceNoAllocLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InvoiceId { get; set; }
+    public Invoice? Invoice { get; set; }
+    public int TemplateId { get; set; }
+    public string? FormNo { get; set; }                   // Mẫu số tại thời điểm cấp
+    public string? Sign { get; set; }                     // Ký hiệu tại thời điểm cấp
+    public string InvoiceNo { get; set; } = "";           // Số hóa đơn được cấp
+    public DateTime InvoiceDate { get; set; } = DateTime.Today;   // Ngày hóa đơn
+    public string? By { get; set; }                       // Người ấn cấp số
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
 // Nhật ký thông điệp trao đổi với TCT

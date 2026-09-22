@@ -311,6 +311,41 @@ app.MapPost("/api/settings/sign60day", async (Sign60DayDto dto, ITvanService svc
     return ok ? Results.Ok(new { ok, msg }) : Results.BadRequest(new { ok, error = msg });
 });
 
+// Danh mục mẫu hóa đơn (theo Invoice_TempInvoice của TVAN gốc): dải số được cấp phát theo NNT.
+app.MapGet("/api/templates", async (int? nntId, ITvanService svc) =>
+{
+    var ls = await svc.TemplatesAsync(nntId);
+    return Results.Ok(ls.Select(t => new { t.Id, t.TInvoiceCode, t.TInvoiceName, nnt = t.Nnt?.Name, mst = t.Nnt?.Mst, t.FormNo, t.Sign, rule = t.TTType.ToString(), t.StartInvoiceNo, t.EndInvoiceNo, t.LastInvoiceNo, t.QtyUsed, remain = t.QtyRemain, t.EffDateStart, status = t.TInvoiceStatus.ToString() }));
+});
+
+// Phát hành mẫu hóa đơn (theo Invoice_TempInvoice_Issued của TVAN gốc): PENDING → ISSUED, ghi ngày bắt đầu sử dụng.
+app.MapPost("/api/templates/{id:int}/issue", async (int id, IssueTemplateDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.IssueTemplateAsync(id, dto.EffDateStart ?? DateTime.Today, dto.Remark);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Ngừng hoạt động mẫu hóa đơn (theo Invoice_TempInvoice_InActive của TVAN gốc): ISSUED → INACTIVE, ghi ngày kết thúc.
+app.MapPost("/api/templates/{id:int}/inactivate", async (int id, InactivateTemplateDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.InactivateTemplateAsync(id, dto.Remark);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc): PENDING + chưa có số → cấp số kế tiếp từ mẫu.
+app.MapPost("/api/invoices/{id:int}/allocate-no", async (int id, AllocateNoDto dto, ITvanService svc) =>
+{
+    var (ok, msg, invoiceNo) = await svc.AllocateInvoiceNoAsync(id, dto.InvoiceDate ?? DateTime.Today, dto.By);
+    return ok ? Results.Ok(new { id, invoiceNo, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Nhật ký cấp phát số hóa đơn (lọc theo hóa đơn nếu có).
+app.MapGet("/api/invoice-no-alloc-logs", async (int? invoiceId, ITvanService svc) =>
+{
+    var ls = await svc.AllocLogsAsync(invoiceId);
+    return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, l.FormNo, l.Sign, l.InvoiceNo, l.InvoiceDate, l.By, l.CreatedAt }));
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -333,3 +368,6 @@ record ReSignDto(string? FileSpec, string? Note, string? By);
 record ApproveDto(string? FilePath, string? PdfFilePath, string? Note, string? By);
 record UnapproveDto(string? Note, string? By);
 record Sign60DayDto(Sign60DayFlag Flag, string? Note);
+record AllocateNoDto(DateTime? InvoiceDate, string? By);
+record IssueTemplateDto(DateTime? EffDateStart, string? Remark);
+record InactivateTemplateDto(string? Remark);

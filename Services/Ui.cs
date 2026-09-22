@@ -128,4 +128,27 @@ public static class Ui
         Models.ApproveAction.Unapprove => ("Bỏ duyệt", "secondary"),
         _ => (a.ToString(), "secondary")
     };
+
+    public static (string text, string css) Template(TemplateStatus s) => s switch
+    {
+        TemplateStatus.Draft    => ("Nháp", "secondary"),
+        TemplateStatus.Issued   => ("Đang sử dụng", "success"),
+        TemplateStatus.Inactive => ("Ngừng hoạt động", "dark"),
+        _ => (s.ToString(), "secondary")
+    };
+
+    public static string NoRule(InvoiceNoRule r) => r switch
+    {
+        InvoiceNoRule.TT68 => "TT68 (8 số liên tục)",
+        InvoiceNoRule.TT78 => "TT78 (7 số, reset theo năm)",
+        _ => r.ToString()
+    };
+
+    // Thao tác vòng đời mẫu hóa đơn (theo Invoice_TempInvoice_Issued / Invoice_TempInvoice_InActive của TVAN gốc).
+    public static (string text, string css) TemplateAction(TemplateStatus s) => s switch
+    {
+        TemplateStatus.Draft    => ("Phát hành", "success"),
+        TemplateStatus.Issued   => ("Ngừng hoạt động", "dark"),
+        _ => ("", "secondary")
+    };
 }

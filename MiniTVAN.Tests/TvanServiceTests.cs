@@ -926,4 +926,215 @@ public class TvanServiceTests
             Assert.Contains("đã duyệt", msg);
         }
     }
+
+    // Cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc).
+    // Tạo HĐ nháp CHƯA có số (CreateInvoiceAsync tự cấp số nên tạo trực tiếp qua DbContext).
+    private static async Task<(int nntId, int invId)> SetupNoNo(AppDbContext db, ITvanService svc)
+    {
+        var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+        await svc.RegisterNntAsync(nntId);
+        var inv = new Invoice { NntId = nntId, Symbol = "1C26TAA", No = "", BuyerName = "Cty Mua", Amount = 10_000_000, Status = InvoiceStatus.Draft };
+        db.Invoices.Add(inv); await db.SaveChangesAsync();
+        return (nntId, inv.Id);
+    }
+
+    private static async Task<int> AddTemplate(AppDbContext db, int nntId, InvoiceNoRule rule = InvoiceNoRule.TT78, string? lastNo = null, int qtyUsed = 0)
+    {
+        var tpl = new InvoiceTemplate
+        {
+            NntId = nntId, TInvoiceCode = "TINV-1C26TAA", TInvoiceName = "Mẫu 1C26TAA",
+            FormNo = "1C26TAA", Sign = "K26TAA", TTType = rule,
+            EffDateStart = DateTime.Today.AddDays(-30), StartInvoiceNo = 1, EndInvoiceNo = 1000,
+            LastInvoiceNo = lastNo, QtyUsed = qtyUsed, TInvoiceStatus = TemplateStatus.Issued, FlagActive = true
+        };
+        db.InvoiceTemplates.Add(tpl); await db.SaveChangesAsync();
+        return tpl.Id;
+    }
+
+    [Fact]
+    public async Task AllocateNo_OnDraft_AssignsNextNoAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, invId) = await SetupNoNo(db, svc);
+            await AddTemplate(db, nntId, InvoiceNoRule.TT78, lastNo: "00000003", qtyUsed: 3);
+            var (ok, msg, no) = await svc.AllocateInvoiceNoAsync(invId, DateTime.Today, "kế toán");
+            Assert.True(ok);
+            Assert.Equal("00000004", no);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal("00000004", inv!.No);
+            Assert.Equal("1C26TAA", inv.Symbol);
+            Assert.NotNull(inv.InvoiceNoDTimeUTC);
+            Assert.Equal("kế toán", inv.InvoiceNoBy);
+            var logs = await svc.AllocLogsAsync(invId);
+            Assert.Single(logs);
+            Assert.Equal("00000004", logs[0].InvoiceNo);
+        }
+    }
+
+    [Fact]
+    public async Task AllocateNo_AlreadyHasNo_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, invId) = await SetupNoNo(db, svc);
+            await AddTemplate(db, nntId);
+            await svc.AllocateInvoiceNoAsync(invId, DateTime.Today, null);
+            var (ok, msg, _) = await svc.AllocateInvoiceNoAsync(invId, DateTime.Today, null);
+            Assert.False(ok);
+            Assert.Contains("đã có số", msg);
+        }
+    }
+
+    [Fact]
+    public async Task AllocateNo_NoTemplate_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await SetupNoNo(db, svc);   // không có mẫu
+            var (ok, msg, _) = await svc.AllocateInvoiceNoAsync(invId, DateTime.Today, null);
+            Assert.False(ok);
+            Assert.Contains("mẫu hóa đơn", msg);
+        }
+    }
+
+    [Fact]
+    public async Task AllocateNo_FutureDate_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, invId) = await SetupNoNo(db, svc);
+            await AddTemplate(db, nntId);
+            var (ok, msg, _) = await svc.AllocateInvoiceNoAsync(invId, DateTime.Today.AddDays(1), null);
+            Assert.False(ok);
+            Assert.Contains("tương lai", msg);
+        }
+    }
+
+    [Fact]
+    public async Task AllocateNo_DateBeforeLastAllocated_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, invId) = await SetupNoNo(db, svc);
+            var tplId = await AddTemplate(db, nntId);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            tpl.LastInvoiceDateUTC = DateTime.Today;
+            await db.SaveChangesAsync();
+            var (ok, msg, _) = await svc.AllocateInvoiceNoAsync(invId, DateTime.Today.AddDays(-1), null);
+            Assert.False(ok);
+            Assert.Contains("trước ngày cấp số gần nhất", msg);
+        }
+    }
+
+    [Fact]
+    public async Task AllocateNo_TT68_UsesStartPlusQtyUsed()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, invId) = await SetupNoNo(db, svc);
+            await AddTemplate(db, nntId, InvoiceNoRule.TT68, qtyUsed: 5);
+            var (ok, _, no) = await svc.AllocateInvoiceNoAsync(invId, DateTime.Today, null);
+            Assert.True(ok);
+            Assert.Equal("00000006", no);   // StartInvoiceNo(1) + QtyUsed(5)
+        }
+    }
+
+    // Phát hành / ngừng mẫu hóa đơn (theo Invoice_TempInvoice_Issued / Invoice_TempInvoice_InActive của TVAN gốc).
+    private static async Task<int> AddDraftTemplate(AppDbContext db, int nntId, int startNo = 1, int endNo = 500)
+    {
+        var tpl = new InvoiceTemplate
+        {
+            NntId = nntId, TInvoiceCode = "TINV-1C26TAB", TInvoiceName = "Mẫu 1C26TAB",
+            FormNo = "1C26TAB", Sign = "K26TAB", TTType = InvoiceNoRule.TT78,
+            EffDateStart = DateTime.Today, StartInvoiceNo = startNo, EndInvoiceNo = endNo,
+            QtyUsed = 0, TInvoiceStatus = TemplateStatus.Draft, FlagActive = true
+        };
+        db.InvoiceTemplates.Add(tpl); await db.SaveChangesAsync();
+        return tpl.Id;
+    }
+
+    [Fact]
+    public async Task IssueTemplate_Draft_BecomesIssued()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddDraftTemplate(db, nntId);
+            var (ok, msg) = await svc.IssueTemplateAsync(tplId, DateTime.Today, "Phát hành theo thông báo TCT");
+            Assert.True(ok);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            Assert.Equal(TemplateStatus.Issued, tpl.TInvoiceStatus);
+            Assert.Equal(DateTime.Today, tpl.EffDateStart.Date);
+            Assert.Null(tpl.EffDateEnd);
+        }
+    }
+
+    [Fact]
+    public async Task IssueTemplate_AlreadyIssued_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddTemplate(db, nntId);   // đã Issued
+            var (ok, msg) = await svc.IssueTemplateAsync(tplId, DateTime.Today, null);
+            Assert.False(ok);
+            Assert.Contains("trạng thái chờ", msg);
+        }
+    }
+
+    [Fact]
+    public async Task IssueTemplate_EffDateBeforeToday_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddDraftTemplate(db, nntId);
+            var (ok, msg) = await svc.IssueTemplateAsync(tplId, DateTime.Today.AddDays(-1), null);
+            Assert.False(ok);
+            Assert.Contains("trước ngày hiện tại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task IssueTemplate_InvalidRange_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddDraftTemplate(db, nntId, startNo: 0, endNo: 0);
+            var (ok, msg) = await svc.IssueTemplateAsync(tplId, DateTime.Today, null);
+            Assert.False(ok);
+            Assert.Contains("dải số", msg);
+        }
+    }
+
+    [Fact]
+    public async Task InactivateTemplate_Issued_BecomesInactive()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddTemplate(db, nntId);   // đã Issued
+            var (ok, msg) = await svc.InactivateTemplateAsync(tplId, "Hết hiệu lực");
+            Assert.True(ok);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            Assert.Equal(TemplateStatus.Inactive, tpl.TInvoiceStatus);
+            Assert.False(tpl.FlagActive);
+            Assert.NotNull(tpl.EffDateEnd);
+        }
+    }
+
+    [Fact]
+    public async Task InactivateTemplate_Draft_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddDraftTemplate(db, nntId);
+            var (ok, msg) = await svc.InactivateTemplateAsync(tplId, null);
+            Assert.False(ok);
+            Assert.Contains("đang sử dụng", msg);
+        }
+    }
 }

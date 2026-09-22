@@ -1,0 +1,132 @@
+@model List<InvoiceTemplate>
+@{ ViewData["Title"] = "Mẫu & cấp số hóa đơn";
+   var nnts = (List<Nnt>)ViewBag.Nnts;
+   var logs = (List<InvoiceNoAllocLog>)ViewBag.Logs;
+   int? filterNnt = ViewBag.NntId as int?; }
+<div class="row g-3">
+    <div class="col-lg-8"><div class="card"><div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-bold mb-0">Mẫu hóa đơn & dải số được cấp phát</h6>
+            @if (filterNnt.HasValue) { <a class="small" href="/InvoiceTemplate">Bỏ lọc</a> }
+        </div>
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Mẫu</th><th>NNT</th><th>Cách đánh số</th><th class="text-end">Dải số</th><th class="text-end">Đã dùng</th><th class="text-end">Còn lại</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var t in Model)
+            {
+                var (stText, stCss) = Ui.Template(t.TInvoiceStatus);
+                var total = t.EndInvoiceNo - t.StartInvoiceNo + 1;
+                var pct = total > 0 ? (int)Math.Round(100.0 * t.QtyUsed / total) : 0;
+                var barCss = pct >= 90 ? "bg-danger" : pct >= 70 ? "bg-warning" : "bg-success";
+                <tr>
+                    <td><b>@t.FormNo</b> <span class="badge bg-@stCss ms-1">@stText</span>
+                        <div class="small text-muted">@t.TInvoiceCode · @t.TInvoiceName</div></td>
+                    <td><b>@t.Nnt?.Name</b><div class="small text-muted">MST @t.Nnt?.Mst</div></td>
+                    <td class="small">@Ui.NoRule(t.TTType)</td>
+                    <td class="text-end small">@t.StartInvoiceNo.ToString("D8") → @t.EndInvoiceNo.ToString("D8")</td>
+                    <td class="text-end">@t.QtyUsed.ToString("N0")</td>
+                    <td class="text-end">
+                        <span class="badge bg-@(t.QtyRemain > 0 ? "success" : "secondary")">@t.QtyRemain.ToString("N0")</span>
+                        <div class="progress mt-1" style="height:5px"><div class="progress-bar @barCss" style="width:@(pct)%"></div></div>
+                    </td>
+                    <td class="text-end">
+                        <a class="btn btn-sm btn-outline-primary" href="/InvoiceTemplate?nntId=@t.NntId"><i class="bi bi-funnel me-1"></i>Lọc</a>
+                        @if (t.TInvoiceStatus == TemplateStatus.Draft && t.FlagActive)
+                        {
+                            <button class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#issueModal"
+                                    data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode"><i class="bi bi-send-check me-1"></i>Phát hành</button>
+                        }
+                        @if (t.TInvoiceStatus == TemplateStatus.Issued && t.FlagActive)
+                        {
+                            <button class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#inactiveModal"
+                                    data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode"><i class="bi bi-slash-circle me-1"></i>Ngừng</button>
+                        }
+                    </td>
+                </tr>
+            }
+            @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có mẫu hóa đơn nào.</td></tr> }
+            </tbody>
+        </table>
+    </div></div>
+
+        <div class="card mt-3"><div class="card-body">
+            <h6 class="fw-bold mb-2">Nhật ký cấp phát số hóa đơn</h6>
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Thời điểm</th><th>Hóa đơn</th><th>Mẫu</th><th>Số cấp</th><th>Ngày HĐ</th><th>Người cấp</th></tr></thead>
+                <tbody>
+                @foreach (var l in logs)
+                {
+                    <tr>
+                        <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                        <td class="small">@if (l.Invoice != null) { <a href="/Invoice/Detail/@l.InvoiceId">@l.Invoice.Symbol-@l.Invoice.No</a> }</td>
+                        <td class="small">@l.FormNo</td>
+                        <td class="small fw-semibold">@l.InvoiceNo</td>
+                        <td class="small">@l.InvoiceDate.ToString("dd/MM/yyyy")</td>
+                        <td class="small">@l.By</td>
+                    </tr>
+                }
+                @if (logs.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-3">Chưa có lần cấp số nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+    <div class="col-lg-4"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Cấp số hóa đơn</h6>
+        <div class="small text-muted mb-2">Cấp số được thực hiện trên trang chi tiết hóa đơn đang ở trạng thái chờ (PENDING) và chưa có số.</div>
+        <form action="/Invoice" method="get">
+            <div class="mb-2"><label class="form-label small mb-1">Lọc theo người nộp thuế</label>
+                <select name="nntId" class="form-select" onchange="this.form.submit()">
+                    <option value="">— Tất cả NNT —</option>
+                    @foreach (var n in nnts) { <option value="@n.Id" selected="@(filterNnt == n.Id)">@n.Name (@n.Mst)</option> }
+                </select></div>
+        </form>
+        <div class="small text-muted mt-3">Số kế tiếp được tính từ mẫu: TT78 nối tiếp số cuối đã cấp, TT68 = số bắt đầu + số đã dùng. Ngày hóa đơn không được trước ngày cấp số gần nhất, trước ngày hiệu lực mẫu hoặc là ngày tương lai.</div>
+    </div></div></div>
+</div>
+
+<!-- Phát hành mẫu hóa đơn (theo Invoice_TempInvoice_Issued của TVAN gốc) -->
+<div class="modal fade" id="issueModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <form method="post" action="/InvoiceTemplate/Issue">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="id" id="issueId" />
+        <div class="modal-header"><h6 class="modal-title">Phát hành mẫu hóa đơn</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <p class="small text-muted mb-3">Mẫu <b id="issueLabel"></b> sẽ chuyển sang trạng thái <b>Đang sử dụng</b> (ISSUED).</p>
+            <div class="mb-2"><label class="form-label small mb-1">Ngày bắt đầu sử dụng</label>
+                <input type="date" name="effDateStart" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required /></div>
+            <div class="mb-2"><label class="form-label small mb-1">Ghi chú</label>
+                <input type="text" name="remark" class="form-control" placeholder="VD: Phát hành theo thông báo TCT" /></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-primary">Phát hành</button></div>
+    </form>
+</div></div></div>
+
+<!-- Ngừng hoạt động mẫu hóa đơn (theo Invoice_TempInvoice_InActive của TVAN gốc) -->
+<div class="modal fade" id="inactiveModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <form method="post" action="/InvoiceTemplate/Inactivate">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="id" id="inactiveId" />
+        <div class="modal-header"><h6 class="modal-title">Ngừng hoạt động mẫu hóa đơn</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <p class="small text-muted mb-3">Mẫu <b id="inactiveLabel"></b> sẽ chuyển sang trạng thái <b>Ngừng hoạt động</b> (INACTIVE) và không cấp số được nữa.</p>
+            <div class="mb-2"><label class="form-label small mb-1">Ghi chú / lý do</label>
+                <input type="text" name="remark" class="form-control" placeholder="VD: Hết hiệu lực sử dụng" /></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-dark">Ngừng hoạt động</button></div>
+    </form>
+</div></div></div>
+
+@section Scripts {
+<script>
+    document.getElementById('issueModal').addEventListener('show.bs.modal', e => {
+        const b = e.relatedTarget;
+        document.getElementById('issueId').value = b.dataset.id;
+        document.getElementById('issueLabel').textContent = b.dataset.form + ' (' + b.dataset.code + ')';
+    });
+    document.getElementById('inactiveModal').addEventListener('show.bs.modal', e => {
+        const b = e.relatedTarget;
+        document.getElementById('inactiveId').value = b.dataset.id;
+        document.getElementById('inactiveLabel').textContent = b.dataset.form + ' (' + b.dataset.code + ')';
+    });
+</script>
+}
