@@ -57,6 +57,8 @@ public interface ITvanService
     Task<List<InvoiceNoAllocLog>> AllocLogsAsync(int? invoiceId);
     Task<(bool ok, string msg)> ReceiveTctResultAsync(int invoiceId, TctMessageType mltDiep, string? maCQT, string? maLoi, string? lyDo);
     Task<List<TctReceiveLog>> TctReceiveLogsAsync(int? invoiceId);
+    Task<(bool ok, string msg)> UpdateAfterAllocatedAsync(int invoiceId, string? buyerName, string? buyerMst, string? buyerAddress, PaymentMethod paymentMethod, decimal amount, decimal vatRate, DateTime invoiceDate, string? note, string? by);
+    Task<List<InvoiceUpdateLog>> UpdateLogsAsync(int? invoiceId);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -948,6 +950,74 @@ public class TvanService(AppDbContext db) : ITvanService
     public Task<List<TctReceiveLog>> TctReceiveLogsAsync(int? invoiceId)
     {
         var q = db.TctReceiveLogs.Include(l => l.Invoice).AsQueryable();
+        if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
+        return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
+
+    // Cập nhật nội dung hóa đơn SAU KHI đã cấp số (theo Invoice_Invoice_UpdAfterAllocated của TVAN gốc):
+    // cho phép sửa người mua, phương thức thanh toán, tiền hàng/thuế suất và ngày hóa đơn khi HĐ đang ở
+    // trạng thái chờ (PENDING) và ĐÃ có số. Ràng buộc theo TVAN gốc:
+    //  - HĐ phải là hóa đơn gốc (SourceInvoiceCode = INVOICEROOT);
+    //  - ngày hóa đơn không được là ngày tương lai;
+    //  - ngày hóa đơn phải nằm giữa ngày HĐ liền trước và liền sau trong cùng mẫu (TInvoiceCode).
+    // Mọi lần cập nhật ghi nhật ký (InvoiceUpdateLog) để đối soát.
+    public async Task<(bool ok, string msg)> UpdateAfterAllocatedAsync(
+        int invoiceId, string? buyerName, string? buyerMst, string? buyerAddress,
+        PaymentMethod paymentMethod, decimal amount, decimal vatRate, DateTime invoiceDate, string? note, string? by)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.");
+        if (inv.Status != InvoiceStatus.Draft) return (false, "Chỉ cập nhật được hóa đơn đang ở trạng thái chờ (PENDING).");
+        if (inv.SourceCode != SourceInvoiceCode.Root) return (false, "Chỉ cập nhật được hóa đơn gốc (không áp dụng cho HĐ điều chỉnh/thay thế).");
+        if (string.IsNullOrWhiteSpace(inv.No)) return (false, "Hóa đơn chưa được cấp số, không thể cập nhật sau cấp số.");
+        if (string.IsNullOrWhiteSpace(buyerName)) return (false, "Cần tên người mua.");
+        if (amount <= 0) return (false, "Tiền hàng phải > 0.");
+        if (vatRate < 0) return (false, "Thuế suất VAT không được âm.");
+
+        var date = invoiceDate == default ? inv.IssuedDate.Date : invoiceDate.Date;
+        if (date > DateTime.Today) return (false, "Ngày hóa đơn không được là ngày tương lai.");
+
+        // Ràng buộc thứ tự ngày: ngày HĐ phải >= ngày HĐ liền trước và <= ngày HĐ liền sau trong cùng mẫu.
+        if (int.TryParse(inv.No, out var curNo))
+        {
+            var siblings = await db.Invoices
+                .Where(i => i.NntId == inv.NntId && i.Symbol == inv.Symbol && i.Id != inv.Id)
+                .ToListAsync();
+            var before = siblings.Where(i => int.TryParse(i.No, out var n) && n < curNo)
+                                 .OrderByDescending(i => int.Parse(i.No)).FirstOrDefault();
+            var after = siblings.Where(i => int.TryParse(i.No, out var n) && n > curNo)
+                                .OrderBy(i => int.Parse(i.No)).FirstOrDefault();
+            if (before != null && date < before.IssuedDate.Date)
+                return (false, $"Ngày hóa đơn không được trước ngày HĐ liền trước ({before.Symbol}-{before.No}: {before.IssuedDate:dd/MM/yyyy}).");
+            if (after != null && date > after.IssuedDate.Date)
+                return (false, $"Ngày hóa đơn không được sau ngày HĐ liền sau ({after.Symbol}-{after.No}: {after.IssuedDate:dd/MM/yyyy}).");
+        }
+
+        inv.BuyerName = buyerName.Trim();
+        inv.BuyerMst = string.IsNullOrWhiteSpace(buyerMst) ? null : buyerMst.Trim();
+        inv.BuyerAddress = string.IsNullOrWhiteSpace(buyerAddress) ? null : buyerAddress.Trim();
+        inv.PaymentMethod = paymentMethod;
+        inv.Amount = amount;
+        inv.VatRate = vatRate;
+        inv.IssuedDate = date;
+
+        db.InvoiceUpdateLogs.Add(new InvoiceUpdateLog
+        {
+            InvoiceId = inv.Id, BuyerName = inv.BuyerName, BuyerMst = inv.BuyerMst, BuyerAddress = inv.BuyerAddress,
+            PaymentMethod = paymentMethod, Amount = amount, VatRate = vatRate, InvoiceDate = date, Note = note, By = by,
+        });
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Cập nhật nội dung HĐ {inv.Symbol}-{inv.No} sau khi cấp số{(string.IsNullOrWhiteSpace(note) ? "" : ": " + note.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật nội dung HĐ {inv.Symbol}-{inv.No} (sau cấp số).");
+    }
+
+    public Task<List<InvoiceUpdateLog>> UpdateLogsAsync(int? invoiceId)
+    {
+        var q = db.InvoiceUpdateLogs.Include(l => l.Invoice).AsQueryable();
         if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
     }

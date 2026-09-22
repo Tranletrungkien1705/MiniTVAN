@@ -69,6 +69,7 @@ public class InvoiceController(ITvanService svc) : Controller
         ViewBag.ReSignLogs = await svc.ReSignLogsAsync(id);
         ViewBag.ApproveLogs = await svc.ApproveLogsAsync(id);
         ViewBag.TctLogs = await svc.TctReceiveLogsAsync(id);
+        ViewBag.UpdateLogs = await svc.UpdateLogsAsync(id);
         return View(inv);
     }
 
@@ -207,6 +208,15 @@ public class InvoiceController(ITvanService svc) : Controller
     public async Task<IActionResult> TctReceive(int id, TctMessageType mltDiep, string? maCQT, string? maLoi, string? lyDo)
     {
         var (ok, msg) = await svc.ReceiveTctResultAsync(id, mltDiep, maCQT, maLoi, lyDo);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Cập nhật nội dung hóa đơn sau khi đã cấp số (theo Invoice_Invoice_UpdAfterAllocated của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateAfterAllocated(int id, string? buyerName, string? buyerMst, string? buyerAddress, PaymentMethod paymentMethod, decimal amount, decimal vatRate, DateTime invoiceDate, string? note, string? by)
+    {
+        var (ok, msg) = await svc.UpdateAfterAllocatedAsync(id, buyerName, buyerMst, buyerAddress, paymentMethod, amount, vatRate, invoiceDate, note, by);
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Detail), new { id });
     }

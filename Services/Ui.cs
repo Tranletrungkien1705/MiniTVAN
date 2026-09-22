@@ -167,4 +167,13 @@ public static class Ui
         TctAcceptStatus.Reject => ("Từ chối", "danger"),
         _ => (s.ToString(), "secondary")
     };
+
+    // Phương thức thanh toán (theo Mst_PaymentMethods của TVAN gốc).
+    public static string Payment(PaymentMethod p) => p switch
+    {
+        PaymentMethod.Cash           => "Tiền mặt",
+        PaymentMethod.Transfer       => "Chuyển khoản",
+        PaymentMethod.CashOrTransfer => "Tiền mặt/Chuyển khoản",
+        _ => p.ToString()
+    };
 }

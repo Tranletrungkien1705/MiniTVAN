@@ -1226,4 +1226,97 @@ public class TvanServiceTests
             Assert.Contains("Không tìm thấy", msg);
         }
     }
+
+    // Cập nhật nội dung hóa đơn sau khi đã cấp số (theo Invoice_Invoice_UpdAfterAllocated của TVAN gốc).
+    // Tạo HĐ nháp ĐÃ có số (Draft + No) để mô phỏng trạng thái sau khi cấp số.
+    private static async Task<(int nntId, int invId)> SetupAllocated(AppDbContext db, ITvanService svc, string no = "00000002", DateTime? date = null)
+    {
+        var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+        await svc.RegisterNntAsync(nntId);
+        var inv = new Invoice
+        {
+            NntId = nntId, Symbol = "1C26TAA", No = no, BuyerName = "Cty Mua", Amount = 10_000_000,
+            VatRate = 10, IssuedDate = date ?? DateTime.Today, Status = InvoiceStatus.Draft
+        };
+        db.Invoices.Add(inv); await db.SaveChangesAsync();
+        return (nntId, inv.Id);
+    }
+
+    [Fact]
+    public async Task UpdateAfterAllocated_UpdatesContentAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await SetupAllocated(db, svc);
+            var (ok, msg) = await svc.UpdateAfterAllocatedAsync(invId, "Cty Mua Mới", "8012345678", "Hà Nội",
+                PaymentMethod.Transfer, 20_000_000, 8, DateTime.Today, "sửa sai", "kế toán");
+            Assert.True(ok);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal("Cty Mua Mới", inv!.BuyerName);
+            Assert.Equal("8012345678", inv.BuyerMst);
+            Assert.Equal(PaymentMethod.Transfer, inv.PaymentMethod);
+            Assert.Equal(20_000_000, inv.Amount);
+            Assert.Equal(8, inv.VatRate);
+            var logs = await svc.UpdateLogsAsync(invId);
+            Assert.Single(logs);
+            Assert.Equal("Cty Mua Mới", logs[0].BuyerName);
+            Assert.Equal(PaymentMethod.Transfer, logs[0].PaymentMethod);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateAfterAllocated_NoNumber_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, invId) = await SetupNoNo(db, svc);   // Draft, chưa có số
+            var (ok, msg) = await svc.UpdateAfterAllocatedAsync(invId, "Cty Mua", null, null,
+                PaymentMethod.Cash, 10_000_000, 10, DateTime.Today, null, null);
+            Assert.False(ok);
+            Assert.Contains("chưa được cấp số", msg);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateAfterAllocated_NotDraft_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);   // Draft nhưng CreateInvoiceAsync tự cấp số → Draft + No
+            await svc.TransmitAsync(invId);      // → Accepted
+            var (ok, msg) = await svc.UpdateAfterAllocatedAsync(invId, "Cty Mua", null, null,
+                PaymentMethod.Cash, 10_000_000, 10, DateTime.Today, null, null);
+            Assert.False(ok);
+            Assert.Contains("trạng thái chờ", msg);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateAfterAllocated_FutureDate_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await SetupAllocated(db, svc);
+            var (ok, msg) = await svc.UpdateAfterAllocatedAsync(invId, "Cty Mua", null, null,
+                PaymentMethod.Cash, 10_000_000, 10, DateTime.Today.AddDays(1), null, null);
+            Assert.False(ok);
+            Assert.Contains("ngày tương lai", msg);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateAfterAllocated_DateBeforePrevious_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, invId) = await SetupAllocated(db, svc, no: "00000002", date: DateTime.Today);
+            // HĐ liền trước (số 00000001) có ngày hôm qua → ngày mới không được trước hôm qua.
+            db.Invoices.Add(new Invoice { NntId = nntId, Symbol = "1C26TAA", No = "00000001", BuyerName = "X", Amount = 1_000_000, IssuedDate = DateTime.Today.AddDays(-1), Status = InvoiceStatus.Draft });
+            await db.SaveChangesAsync();
+            var (ok, msg) = await svc.UpdateAfterAllocatedAsync(invId, "Cty Mua", null, null,
+                PaymentMethod.Cash, 10_000_000, 10, DateTime.Today.AddDays(-3), null, null);
+            Assert.False(ok);
+            Assert.Contains("liền trước", msg);
+        }
+    }
 }

@@ -85,6 +85,16 @@ public static class Seeder
                 CreatedAt = DateTime.UtcNow.AddDays(-5)
             });
             await db.SaveChangesAsync();
+            // Cập nhật nội dung hóa đơn sau khi đã cấp số (theo Invoice_Invoice_UpdAfterAllocated của TVAN gốc):
+            // inv2 đang chờ (Draft) và đã có số → đã được cập nhật lại thông tin người mua.
+            inv2.PaymentMethod = PaymentMethod.Transfer;
+            db.InvoiceUpdateLogs.Add(new InvoiceUpdateLog
+            {
+                InvoiceId = inv2.Id, BuyerName = inv2.BuyerName, BuyerMst = inv2.BuyerMst, BuyerAddress = inv2.BuyerAddress,
+                PaymentMethod = PaymentMethod.Transfer, Amount = inv2.Amount, VatRate = inv2.VatRate, InvoiceDate = inv2.IssuedDate,
+                Note = "Sửa sai thông tin người mua sau khi cấp số", By = "kế toán", CreatedAt = DateTime.UtcNow.AddDays(-1)
+            });
+            await db.SaveChangesAsync();
             db.Messages.AddRange(
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300", Text = "Gửi HĐ 1C26TAA-00000001", CreatedAt = DateTime.UtcNow.AddDays(-5) },
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "202", Text = "TCT cấp mã: 0026082512345678", CreatedAt = DateTime.UtcNow.AddDays(-5) },

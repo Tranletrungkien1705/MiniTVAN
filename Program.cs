@@ -361,6 +361,21 @@ app.MapGet("/api/tct-receive-logs", async (int? invoiceId, ITvanService svc) =>
     return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, mltDiep = (int)l.MltDiep, chapNhan = l.ChapNhan.ToString(), l.MaCQT, l.MaLoi, l.LyDo, l.Message, l.CreatedAt }));
 });
 
+// Cập nhật nội dung hóa đơn sau khi đã cấp số (theo Invoice_Invoice_UpdAfterAllocated của TVAN gốc):
+// sửa người mua, phương thức thanh toán, tiền hàng/thuế suất, ngày HĐ khi HĐ đang chờ và đã có số.
+app.MapPost("/api/invoices/{id:int}/update-after-allocated", async (int id, UpdateAfterAllocatedDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.UpdateAfterAllocatedAsync(id, dto.BuyerName, dto.BuyerMst, dto.BuyerAddress, dto.PaymentMethod, dto.Amount, dto.VatRate, dto.InvoiceDate ?? DateTime.Today, dto.Note, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Nhật ký cập nhật nội dung hóa đơn sau cấp số (lọc theo hóa đơn nếu có).
+app.MapGet("/api/invoice-update-logs", async (int? invoiceId, ITvanService svc) =>
+{
+    var ls = await svc.UpdateLogsAsync(invoiceId);
+    return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, l.BuyerName, l.BuyerMst, l.BuyerAddress, paymentMethod = l.PaymentMethod.ToString(), l.Amount, l.VatRate, l.InvoiceDate, l.Note, l.By, l.CreatedAt }));
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -387,3 +402,4 @@ record AllocateNoDto(DateTime? InvoiceDate, string? By);
 record IssueTemplateDto(DateTime? EffDateStart, string? Remark);
 record InactivateTemplateDto(string? Remark);
 record TctReceiveDto(TctMessageType MltDiep, string? MaCQT, string? MaLoi, string? LyDo);
+record UpdateAfterAllocatedDto(string? BuyerName, string? BuyerMst, string? BuyerAddress, PaymentMethod PaymentMethod, decimal Amount, decimal VatRate, DateTime? InvoiceDate, string? Note, string? By);

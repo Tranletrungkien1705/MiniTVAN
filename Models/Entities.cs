@@ -56,6 +56,10 @@ public enum TctAcceptStatus { Accept = 0, Reject = 1 }
 // Trạng thái mẫu hóa đơn (theo Invoice_TempInvoice.TInvoiceStatus của TVAN gốc)
 public enum TemplateStatus { Draft = 0, Issued = 1, Inactive = 2 }
 
+// Phương thức thanh toán của hóa đơn (theo Mst_PaymentMethods của TVAN gốc):
+// TM = tiền mặt, CK = chuyển khoản, TM/CK = tiền mặt/chuyển khoản.
+public enum PaymentMethod { Cash = 0, Transfer = 1, CashOrTransfer = 2 }
+
 // Loại thông tư quy định cách đánh số hóa đơn (theo Invoice_TempGroup.TTType của TVAN gốc):
 // TT68 = số 8 chữ số liên tục; TT78 = số 7 chữ số, reset theo năm trên mẫu số.
 public enum InvoiceNoRule { TT68 = 0, TT78 = 1 }
@@ -155,6 +159,10 @@ public class Invoice : IOrgOwned
     public string? TctMaLoi { get; set; }
     public string? TctLyDo { get; set; }
     public DateTime? TctReceiveDTimeUTC { get; set; }
+
+    // Phương thức thanh toán (theo Invoice_Invoice.PaymentMethodCode của TVAN gốc):
+    // dùng cho cập nhật nội dung hóa đơn sau khi đã cấp số (Invoice_Invoice_UpdAfterAllocated).
+    public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.CashOrTransfer;
 
     public decimal VatAmount => Math.Round(Amount * VatRate / 100m, 0);
     public decimal Total => Amount + VatAmount;
@@ -419,5 +427,25 @@ public class TranMessage : IOrgOwned
     public MsgDir Dir { get; set; }
     public string? Code { get; set; }                // Mã kết quả TCT: 202/204/301...
     public string? Text { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Nhật ký cập nhật nội dung hóa đơn sau khi đã cấp số (theo Invoice_Invoice_UpdAfterAllocated của TVAN gốc).
+// Mỗi lần sửa nội dung HĐ (người mua, phương thức thanh toán, tiền hàng/thuế) sau khi đã cấp số ghi lại để đối soát.
+public class InvoiceUpdateLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InvoiceId { get; set; }
+    public Invoice? Invoice { get; set; }
+    public string? BuyerName { get; set; }             // Tên người mua sau cập nhật
+    public string? BuyerMst { get; set; }              // MST người mua sau cập nhật
+    public string? BuyerAddress { get; set; }          // Địa chỉ người mua sau cập nhật
+    public PaymentMethod PaymentMethod { get; set; }   // Phương thức thanh toán sau cập nhật
+    public decimal Amount { get; set; }                // Tiền hàng sau cập nhật
+    public decimal VatRate { get; set; }               // Thuế suất VAT sau cập nhật
+    public DateTime InvoiceDate { get; set; }          // Ngày hóa đơn sau cập nhật
+    public string? Note { get; set; }                  // Ghi chú / lý do
+    public string? By { get; set; }                    // Người thực hiện
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

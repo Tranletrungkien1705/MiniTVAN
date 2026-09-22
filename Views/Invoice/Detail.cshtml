@@ -5,6 +5,7 @@
    var reSignLogs = (List<ReSignLog>)ViewBag.ReSignLogs;
    var approveLogs = (List<ApproveLog>)ViewBag.ApproveLogs;
    var tctLogs = (List<TctReceiveLog>)ViewBag.TctLogs;
+   var updateLogs = (List<InvoiceUpdateLog>)ViewBag.UpdateLogs;
    var (srcText, srcCss) = Ui.Source(Model.SourceCode);
    var (cpText, cpCss) = Ui.ConvPrint(Model.FlagChange);
    var (hfText, hfCss) = Ui.Hotfix(Model.FlagHotfix);
@@ -77,6 +78,29 @@
                                 <div class="mb-2"><label class="form-label small mb-1">Ngày hóa đơn</label><input name="invoiceDate" type="date" value="@Model.IssuedDate.ToString("yyyy-MM-dd")" class="form-control form-control-sm" required /></div>
                                 <div class="mb-2"><label class="form-label small mb-1">Người cấp số</label><input name="by" class="form-control form-control-sm" placeholder="VD kế toán" /></div>
                                 <button class="btn btn-dark btn-sm w-100">Cấp số kế tiếp từ mẫu</button>
+                            </form>
+                        </div></div>
+                    }
+                    else if (Model.SourceCode == SourceInvoiceCode.Root)
+                    {
+                        <button class="btn btn-outline-info w-100" type="button" data-bs-toggle="collapse" data-bs-target="#updAfterAllocForm"><i class="bi bi-pencil-square me-1"></i>Cập nhật nội dung sau cấp số</button>
+                        <div class="collapse" id="updAfterAllocForm"><div class="border rounded p-2">
+                            <form asp-action="UpdateAfterAllocated" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                                <div class="mb-2"><label class="form-label small mb-1">Tên người mua</label><input name="buyerName" class="form-control form-control-sm" value="@Model.BuyerName" required /></div>
+                                <div class="mb-2"><label class="form-label small mb-1">MST người mua</label><input name="buyerMst" class="form-control form-control-sm" value="@Model.BuyerMst" /></div>
+                                <div class="mb-2"><label class="form-label small mb-1">Địa chỉ người mua</label><input name="buyerAddress" class="form-control form-control-sm" value="@Model.BuyerAddress" /></div>
+                                <div class="mb-2"><label class="form-label small mb-1">Phương thức thanh toán</label>
+                                    <select name="paymentMethod" class="form-select form-select-sm">
+                                        <option value="0" selected="@(Model.PaymentMethod == PaymentMethod.Cash)">Tiền mặt</option>
+                                        <option value="1" selected="@(Model.PaymentMethod == PaymentMethod.Transfer)">Chuyển khoản</option>
+                                        <option value="2" selected="@(Model.PaymentMethod == PaymentMethod.CashOrTransfer)">Tiền mặt/Chuyển khoản</option>
+                                    </select></div>
+                                <div class="mb-2"><label class="form-label small mb-1">Tiền hàng</label><input name="amount" type="number" step="1000" min="1" value="@Model.Amount" class="form-control form-control-sm" required /></div>
+                                <div class="mb-2"><label class="form-label small mb-1">Thuế suất VAT (%)</label><input name="vatRate" type="number" step="0.1" min="0" value="@Model.VatRate" class="form-control form-control-sm" /></div>
+                                <div class="mb-2"><label class="form-label small mb-1">Ngày hóa đơn</label><input name="invoiceDate" type="date" value="@Model.IssuedDate.ToString("yyyy-MM-dd")" class="form-control form-control-sm" required /></div>
+                                <div class="mb-2"><label class="form-label small mb-1">Ghi chú / lý do (tùy chọn)</label><input name="note" class="form-control form-control-sm" placeholder="VD sửa sai thông tin người mua" /></div>
+                                <div class="mb-2"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="VD kế toán" /></div>
+                                <button class="btn btn-info btn-sm w-100">Cập nhật nội dung hóa đơn</button>
                             </form>
                         </div></div>
                     }
@@ -326,6 +350,28 @@
                 </tr>
             }
             @if (tctLogs.Count == 0) { <tr><td colspan="6" class="text-muted small">Chưa nhận kết quả CQT.</td></tr> }
+            </tbody>
+        </table>
+    </div></div>
+
+    <div class="card mt-3"><div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="bi bi-pencil-square me-1"></i>Nhật ký cập nhật nội dung sau cấp số</h6>
+        <table class="table table-sm align-middle mb-0">
+            <thead><tr><th>Thời điểm</th><th>Người mua</th><th>PTTT</th><th class="text-end">Tiền hàng</th><th>Ngày HĐ</th><th>Ghi chú</th><th>Người thực hiện</th></tr></thead>
+            <tbody>
+            @foreach (var l in updateLogs)
+            {
+                <tr>
+                    <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM HH:mm")</td>
+                    <td class="small">@l.BuyerName<div class="text-muted">@(l.BuyerMst != null ? "MST " + l.BuyerMst : "")</div></td>
+                    <td class="small">@Ui.Payment(l.PaymentMethod)</td>
+                    <td class="text-end small">@Ui.Money(l.Amount)</td>
+                    <td class="small">@l.InvoiceDate.ToString("dd/MM/yyyy")</td>
+                    <td class="small">@l.Note</td>
+                    <td class="small text-muted">@l.By</td>
+                </tr>
+            }
+            @if (updateLogs.Count == 0) { <tr><td colspan="7" class="text-muted small">Chưa cập nhật nội dung sau cấp số.</td></tr> }
             </tbody>
         </table>
     </div></div>
