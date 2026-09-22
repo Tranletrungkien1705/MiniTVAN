@@ -516,6 +516,49 @@ public class SettingController(ITvanService svc) : Controller
     }
 }
 
+// Trường tùy chỉnh hóa đơn (theo Invoice_CustomField / Invoice_DtlCustomField của TVAN gốc):
+// mỗi tổ chức tự định nghĩa các trường tùy chỉnh trên hóa đơn và trên danh sách hàng hóa.
+public class CustomFieldController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index()
+    {
+        ViewBag.DtlFields = await svc.InvoiceDtlCustomFieldsAsync();
+        return View(await svc.InvoiceCustomFieldsAsync());
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(string code, string name, DBPhysicalType type, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveInvoiceCustomFieldAsync(code, name, type, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveDtl(string code, string name, DBPhysicalType type, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveInvoiceDtlCustomFieldAsync(code, name, type, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(string code)
+    {
+        var (ok, msg) = await svc.DeleteInvoiceCustomFieldAsync(code);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteDtl(string code)
+    {
+        var (ok, msg) = await svc.DeleteInvoiceDtlCustomFieldAsync(code);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

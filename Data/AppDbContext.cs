@@ -33,6 +33,8 @@ public class AppDbContext : DbContext
     public DbSet<InvoiceRecordLog> InvoiceRecordLogs => Set<InvoiceRecordLog>();
     public DbSet<BulkFixLog> BulkFixLogs => Set<BulkFixLog>();
     public DbSet<TemplateTctLog> TemplateTctLogs => Set<TemplateTctLog>();
+    public DbSet<InvoiceCustomField> InvoiceCustomFields => Set<InvoiceCustomField>();
+    public DbSet<InvoiceDtlCustomField> InvoiceDtlCustomFields => Set<InvoiceDtlCustomField>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -193,6 +195,16 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => new { x.OrgId, x.TemplateId });
             e.HasOne(x => x.Template).WithMany().HasForeignKey(x => x.TemplateId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InvoiceCustomField>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.InvoiceCustomFieldCode }).IsUnique();   // mỗi tổ chức một mã trường
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InvoiceDtlCustomField>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.InvoiceDtlCustomFieldCode }).IsUnique();   // mỗi tổ chức một mã trường
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

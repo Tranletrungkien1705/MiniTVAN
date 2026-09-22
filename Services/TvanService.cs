@@ -76,6 +76,12 @@ public interface ITvanService
     Task<(bool ok, string msg)> SendTemplateToTctAsync(int templateId, string? remark, string? by);
     Task<(bool ok, string msg)> ReceiveTemplateTctResultAsync(int templateId, TctAcceptStatus chapNhan, string? message, string? by);
     Task<List<TemplateTctLog>> TemplateTctLogsAsync(int? templateId);
+    Task<List<InvoiceCustomField>> InvoiceCustomFieldsAsync();
+    Task<List<InvoiceDtlCustomField>> InvoiceDtlCustomFieldsAsync();
+    Task<(bool ok, string msg, int id)> SaveInvoiceCustomFieldAsync(string code, string name, DBPhysicalType type, bool active, string? by);
+    Task<(bool ok, string msg, int id)> SaveInvoiceDtlCustomFieldAsync(string code, string name, DBPhysicalType type, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteInvoiceCustomFieldAsync(string code);
+    Task<(bool ok, string msg)> DeleteInvoiceDtlCustomFieldAsync(string code);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -1558,6 +1564,83 @@ public class TvanService(AppDbContext db) : ITvanService
         var q = db.TemplateTctLogs.Include(l => l.Template).AsQueryable();
         if (templateId.HasValue) q = q.Where(l => l.TemplateId == templateId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
+
+    // ===== Trường tùy chỉnh hóa đơn (theo Invoice_CustomField / Invoice_DtlCustomField của TVAN gốc) =====
+    // Mỗi tổ chức tự định nghĩa các trường tùy chỉnh trên hóa đơn (InvCF1..InvCF10) và trên danh sách
+    // hàng hóa (InvDCF1..InvDCF5). Khóa nghiệp vụ là (OrgId, Code); lưu lần đầu = tạo, lưu lại = cập nhật.
+    public Task<List<InvoiceCustomField>> InvoiceCustomFieldsAsync() =>
+        db.InvoiceCustomFields.OrderBy(x => x.InvoiceCustomFieldCode).ToListAsync();
+
+    public Task<List<InvoiceDtlCustomField>> InvoiceDtlCustomFieldsAsync() =>
+        db.InvoiceDtlCustomFields.OrderBy(x => x.InvoiceDtlCustomFieldCode).ToListAsync();
+
+    public async Task<(bool ok, string msg, int id)> SaveInvoiceCustomFieldAsync(string code, string name, DBPhysicalType type, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã trường tùy chỉnh.", 0);
+        if (name.Length == 0) return (false, "Cần tên trường tùy chỉnh.", 0);
+
+        var e = await db.InvoiceCustomFields.FirstOrDefaultAsync(x => x.InvoiceCustomFieldCode == code);
+        if (e == null)
+        {
+            e = new InvoiceCustomField { InvoiceCustomFieldCode = code, InvoiceCustomFieldName = name, DBPhysicalType = type, FlagActive = active, UpdatedBy = by };
+            db.InvoiceCustomFields.Add(e);
+            await db.SaveChangesAsync();
+            return (true, $"Đã tạo trường tùy chỉnh hóa đơn {code}.", e.Id);
+        }
+        e.InvoiceCustomFieldName = name;
+        e.DBPhysicalType = type;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật trường tùy chỉnh hóa đơn {code}.", e.Id);
+    }
+
+    public async Task<(bool ok, string msg, int id)> SaveInvoiceDtlCustomFieldAsync(string code, string name, DBPhysicalType type, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã trường tùy chỉnh.", 0);
+        if (name.Length == 0) return (false, "Cần tên trường tùy chỉnh.", 0);
+
+        var e = await db.InvoiceDtlCustomFields.FirstOrDefaultAsync(x => x.InvoiceDtlCustomFieldCode == code);
+        if (e == null)
+        {
+            e = new InvoiceDtlCustomField { InvoiceDtlCustomFieldCode = code, InvoiceDtlCustomFieldName = name, DBPhysicalType = type, FlagActive = active, UpdatedBy = by };
+            db.InvoiceDtlCustomFields.Add(e);
+            await db.SaveChangesAsync();
+            return (true, $"Đã tạo trường tùy chỉnh hàng hóa {code}.", e.Id);
+        }
+        e.InvoiceDtlCustomFieldName = name;
+        e.DBPhysicalType = type;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật trường tùy chỉnh hàng hóa {code}.", e.Id);
+    }
+
+    public async Task<(bool ok, string msg)> DeleteInvoiceCustomFieldAsync(string code)
+    {
+        code = (code ?? "").Trim();
+        var e = await db.InvoiceCustomFields.FirstOrDefaultAsync(x => x.InvoiceCustomFieldCode == code);
+        if (e == null) return (false, "Không tìm thấy trường tùy chỉnh hóa đơn.");
+        db.InvoiceCustomFields.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa trường tùy chỉnh hóa đơn {code}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteInvoiceDtlCustomFieldAsync(string code)
+    {
+        code = (code ?? "").Trim();
+        var e = await db.InvoiceDtlCustomFields.FirstOrDefaultAsync(x => x.InvoiceDtlCustomFieldCode == code);
+        if (e == null) return (false, "Không tìm thấy trường tùy chỉnh hàng hóa.");
+        db.InvoiceDtlCustomFields.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa trường tùy chỉnh hàng hóa {code}.");
     }
 
     // Khoảng thời gian [from, to) của kỳ dữ liệu theo loại kỳ (LKDLieu).

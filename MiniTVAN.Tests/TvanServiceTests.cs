@@ -1868,4 +1868,66 @@ public class TvanServiceTests
             Assert.Contains("SENTTCT", msg);
         }
     }
+
+    // ===== Trường tùy chỉnh hóa đơn (theo Invoice_CustomField / Invoice_DtlCustomField của TVAN gốc) =====
+    [Fact]
+    public async Task CustomField_Save_CreatesThenUpdates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveInvoiceCustomFieldAsync("InvCF1", "Số hợp đồng", DBPhysicalType.Text, true, "kế toán");
+            Assert.True(ok);
+            var f = await db.InvoiceCustomFields.FirstAsync(x => x.Id == id);
+            Assert.Equal("Số hợp đồng", f.InvoiceCustomFieldName);
+            Assert.True(f.FlagActive);
+
+            // Lưu lại cùng mã → cập nhật, không tạo mới.
+            var (ok2, _, id2) = await svc.SaveInvoiceCustomFieldAsync("InvCF1", "Số HĐ", DBPhysicalType.Text, false, "kế toán");
+            Assert.True(ok2);
+            Assert.Equal(id, id2);
+            Assert.Equal(1, await db.InvoiceCustomFields.CountAsync());
+            Assert.Equal("Số HĐ", (await db.InvoiceCustomFields.FirstAsync(x => x.Id == id)).InvoiceCustomFieldName);
+            Assert.False((await db.InvoiceCustomFields.FirstAsync(x => x.Id == id)).FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task CustomField_Save_MissingName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveInvoiceCustomFieldAsync("InvCF1", "  ", DBPhysicalType.Text, true, null);
+            Assert.False(ok);
+            Assert.Contains("tên trường", msg);
+            Assert.Equal(0, await db.InvoiceCustomFields.CountAsync());
+        }
+    }
+
+    [Fact]
+    public async Task CustomField_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveInvoiceCustomFieldAsync("InvCF1", "Số hợp đồng", DBPhysicalType.Text, true, null);
+            var (ok, _) = await svc.DeleteInvoiceCustomFieldAsync("InvCF1");
+            Assert.True(ok);
+            Assert.Equal(0, await db.InvoiceCustomFields.CountAsync());
+            var (ok2, msg2) = await svc.DeleteInvoiceCustomFieldAsync("InvCF1");
+            Assert.False(ok2);
+            Assert.Contains("Không tìm thấy", msg2);
+        }
+    }
+
+    [Fact]
+    public async Task DtlCustomField_SaveAndList()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, _) = await svc.SaveInvoiceDtlCustomFieldAsync("InvDCF1", "Mã kho", DBPhysicalType.Text, true, "kế toán");
+            Assert.True(ok);
+            var ls = await svc.InvoiceDtlCustomFieldsAsync();
+            Assert.Single(ls);
+            Assert.Equal("Mã kho", ls[0].InvoiceDtlCustomFieldName);
+        }
+    }
 }

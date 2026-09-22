@@ -313,6 +313,22 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
         }
+
+        // Trường tùy chỉnh hóa đơn (theo Invoice_CustomField / Invoice_DtlCustomField của TVAN gốc):
+        // tổ chức demo định nghĩa 2 trường trên hóa đơn + 1 trường trên danh sách hàng hóa.
+        if (!await db.InvoiceCustomFields.AnyAsync())
+        {
+            db.InvoiceCustomFields.AddRange(
+                new InvoiceCustomField { InvoiceCustomFieldCode = "InvCF1", InvoiceCustomFieldName = "Số hợp đồng", DBPhysicalType = DBPhysicalType.Text, FlagActive = true, UpdatedBy = "kế toán" },
+                new InvoiceCustomField { InvoiceCustomFieldCode = "InvCF2", InvoiceCustomFieldName = "Mã dự án", DBPhysicalType = DBPhysicalType.Text, FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+        if (!await db.InvoiceDtlCustomFields.AnyAsync())
+        {
+            db.InvoiceDtlCustomFields.Add(
+                new InvoiceDtlCustomField { InvoiceDtlCustomFieldCode = "InvDCF1", InvoiceDtlCustomFieldName = "Mã kho", DBPhysicalType = DBPhysicalType.Text, FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

@@ -95,6 +95,10 @@ public enum TemplateRangeAction { IncreaseEndNo = 0 }
 // FixByTemplate = ký lại hàng loạt HĐ đã phát hành (ISSUED) chưa ký lại của một mẫu hóa đơn.
 public enum BulkFixAction { FixByTemplate = 0 }
 
+// Kiểu vật lý trong DB của trường tùy chỉnh (theo Invoice_CustomField.DBPhysicalType của TVAN gốc).
+// Giao diện gốc luôn gửi "TEXT" (xem invoice_CustomField.js: DBPhysicalType = "TEXT").
+public enum DBPhysicalType { Text = 0, Number = 1, Date = 2 }
+
 public class Org
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -621,4 +625,36 @@ public class BulkFixLog : IOrgOwned
     public string? Reason { get; set; }                      // Lý do sửa lỗi
     public string? By { get; set; }                          // Người thực hiện
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Trường tùy chỉnh trên HÓA ĐƠN (theo bảng Invoice_CustomField của TVAN gốc).
+// Mỗi tổ chức tự định nghĩa tối đa 10 trường (InvCF1..InvCF10) để lưu thêm thông tin trên hóa đơn.
+// Khóa nghiệp vụ: (OrgId, InvoiceCustomFieldCode). FlagActive = trường đang dùng hay không.
+public class InvoiceCustomField : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string InvoiceCustomFieldCode { get; set; } = "";   // Mã trường (VD InvCF1)
+    public string InvoiceCustomFieldName { get; set; } = "";   // Tên hiển thị của trường
+    public DBPhysicalType DBPhysicalType { get; set; } = DBPhysicalType.Text;   // Kiểu vật lý trong DB
+    public bool FlagActive { get; set; } = true;                // Trường đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
+// Trường tùy chỉnh trên DANH SÁCH HÀNG HÓA của hóa đơn (theo bảng Invoice_DtlCustomField của TVAN gốc).
+// Mỗi tổ chức tự định nghĩa tối đa 5 trường (InvDCF1..InvDCF5) cho từng dòng hàng hóa.
+// Khóa nghiệp vụ: (OrgId, InvoiceDtlCustomFieldCode).
+public class InvoiceDtlCustomField : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string InvoiceDtlCustomFieldCode { get; set; } = "";   // Mã trường (VD InvDCF1)
+    public string InvoiceDtlCustomFieldName { get; set; } = "";   // Tên hiển thị của trường
+    public DBPhysicalType DBPhysicalType { get; set; } = DBPhysicalType.Text;   // Kiểu vật lý trong DB
+    public bool FlagActive { get; set; } = true;                  // Trường đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
 }

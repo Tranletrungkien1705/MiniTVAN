@@ -479,6 +479,48 @@ app.MapGet("/api/record-logs", async (int? invoiceId, ITvanService svc) =>
     return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, type = l.Type.ToString(), l.FileName, l.FilePath, l.Reason, l.By, l.CreatedAt }));
 });
 
+// Trường tùy chỉnh hóa đơn (theo Invoice_CustomField / Invoice_DtlCustomField của TVAN gốc): danh sách.
+app.MapGet("/api/custom-fields", async (ITvanService svc) =>
+{
+    var ls = await svc.InvoiceCustomFieldsAsync();
+    return Results.Ok(ls.Select(f => new { f.InvoiceCustomFieldCode, f.InvoiceCustomFieldName, type = f.DBPhysicalType.ToString(), f.FlagActive }));
+});
+
+// Trường tùy chỉnh trên danh sách hàng hóa: danh sách.
+app.MapGet("/api/custom-fields/dtl", async (ITvanService svc) =>
+{
+    var ls = await svc.InvoiceDtlCustomFieldsAsync();
+    return Results.Ok(ls.Select(f => new { f.InvoiceDtlCustomFieldCode, f.InvoiceDtlCustomFieldName, type = f.DBPhysicalType.ToString(), f.FlagActive }));
+});
+
+// Lưu (tạo mới/cập nhật) trường tùy chỉnh hóa đơn theo mã (theo Invoice_CustomField_Create/Update của TVAN gốc).
+app.MapPost("/api/custom-fields", async (CustomFieldDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveInvoiceCustomFieldAsync(dto.Code ?? "", dto.Name ?? "", dto.Type, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Lưu (tạo mới/cập nhật) trường tùy chỉnh hàng hóa theo mã (theo Invoice_DtlCustomField_Create/Update của TVAN gốc).
+app.MapPost("/api/custom-fields/dtl", async (CustomFieldDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveInvoiceDtlCustomFieldAsync(dto.Code ?? "", dto.Name ?? "", dto.Type, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa trường tùy chỉnh hóa đơn theo mã (theo Invoice_CustomField_Delete của TVAN gốc).
+app.MapDelete("/api/custom-fields/{code}", async (string code, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteInvoiceCustomFieldAsync(code);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
+// Xóa trường tùy chỉnh hàng hóa theo mã (theo Invoice_DtlCustomField_Delete của TVAN gốc).
+app.MapDelete("/api/custom-fields/dtl/{code}", async (string code, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteInvoiceDtlCustomFieldAsync(code);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -513,3 +555,4 @@ record TctReceiveDto(TctMessageType MltDiep, string? MaCQT, string? MaLoi, strin
 record UpdateAfterAllocatedDto(string? BuyerName, string? BuyerMst, string? BuyerAddress, PaymentMethod PaymentMethod, decimal Amount, decimal VatRate, DateTime? InvoiceDate, string? Note, string? By);
 record CancelInvoiceDto(string? Remark, string? By);
 record CreateRecordDto(RecordType Type, string? FileName, string? FileSpec, string? Reason, string? By);
+record CustomFieldDto(string? Code, string? Name, DBPhysicalType Type, bool Active, string? By);
