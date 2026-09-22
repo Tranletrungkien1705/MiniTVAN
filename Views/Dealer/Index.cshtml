@@ -1,0 +1,94 @@
+@model List<Dealer>
+@{
+    ViewData["Title"] = "Đại lý";
+    var keyword = ViewBag.Keyword as string;
+    var provinceCode = ViewBag.ProvinceCode as string;
+    var provinces = ViewBag.Provinces as List<Province> ?? new();
+    string ProvName(string code) => provinces.FirstOrDefault(p => p.ProvinceCode == code)?.ProvinceName ?? code;
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-shop me-1"></i>Danh mục đại lý</h6>
+                <form method="get" action="/Dealer" class="d-flex gap-2">
+                    <select name="provinceCode" class="form-select form-select-sm" style="width:auto">
+                        <option value="">— Tất cả tỉnh/thành —</option>
+                        @foreach (var p in provinces)
+                        {
+                            <option value="@p.ProvinceCode" selected="@(p.ProvinceCode == provinceCode)">@p.ProvinceName</option>
+                        }
+                    </select>
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm mã / tên / ĐT / email" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã đại lý</th><th>Tên đại lý</th><th>Tỉnh/Thành</th><th>Liên hệ</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var d in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@d.DLCode</td>
+                        <td>
+                            <div>@d.DLName</div>
+                            @if (!string.IsNullOrWhiteSpace(d.DLAddress)) { <div class="small text-muted">@d.DLAddress</div> }
+                        </td>
+                        <td>@ProvName(d.ProvinceCode)</td>
+                        <td class="small">
+                            @if (!string.IsNullOrWhiteSpace(d.DLPresentBy)) { <div><i class="bi bi-person me-1"></i>@d.DLPresentBy</div> }
+                            @if (!string.IsNullOrWhiteSpace(d.DLPhoneNo)) { <div><i class="bi bi-telephone me-1"></i>@d.DLPhoneNo</div> }
+                            @if (!string.IsNullOrWhiteSpace(d.DLEmail)) { <div><i class="bi bi-envelope me-1"></i>@d.DLEmail</div> }
+                        </td>
+                        <td>
+                            @if (d.FlagActive) { <span class="badge bg-success">Đang hoạt động</span> }
+                            else { <span class="badge bg-secondary">Ngừng hoạt động</span> }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/Dealer/Delete" class="d-inline" onsubmit="return confirm('Xóa đại lý @d.DLName?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@d.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có đại lý nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm / cập nhật đại lý</h6>
+            <form method="post" action="/Dealer/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã đại lý</label><input name="code" class="form-control form-control-sm" placeholder="DL001" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Tên đại lý</label><input name="name" class="form-control form-control-sm" placeholder="Đại lý Hà Nội" required /></div>
+                <div class="col-12">
+                    <label class="form-label small mb-1">Tỉnh/Thành phố</label>
+                    <select name="provinceCode" class="form-select form-select-sm" required>
+                        <option value="">— Chọn tỉnh/thành —</option>
+                        @foreach (var p in provinces)
+                        {
+                            <option value="@p.ProvinceCode">@p.ProvinceName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Địa chỉ</label><input name="address" class="form-control form-control-sm" placeholder="Số 1 Lê Lợi" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Người đại diện</label><input name="presentBy" class="form-control form-control-sm" placeholder="Nguyễn Văn A" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Số CMT/Hộ chiếu</label><input name="govIdNumber" class="form-control form-control-sm" placeholder="001090012345" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Email</label><input name="email" class="form-control form-control-sm" placeholder="daily@congty.vn" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Điện thoại</label><input name="phone" class="form-control form-control-sm" placeholder="024 3933 1122" /></div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="active" value="true" id="dealerActive" checked />
+                    <label class="form-check-label small" for="dealerActive">Đang hoạt động</label>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu đại lý</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Lưu cùng mã đại lý = cập nhật đại lý đã có (theo khóa nghiệp vụ OrgId + mã đại lý).</p>
+        </div></div>
+    </div>
+</div>

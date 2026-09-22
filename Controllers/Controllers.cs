@@ -820,6 +820,35 @@ public class CountryController(ITvanService svc) : Controller
     }
 }
 
+// Danh mục Đại lý (theo Mst_Dealer của TVAN gốc):
+// đại lý phân phối/giới thiệu khách hàng cho NNT, gắn với một tỉnh/thành.
+public class DealerController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword, string? provinceCode)
+    {
+        ViewBag.Keyword = keyword;
+        ViewBag.ProvinceCode = provinceCode;
+        ViewBag.Provinces = await svc.ProvincesAsync(null);
+        return View(await svc.DealersAsync(keyword, provinceCode));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string name, string provinceCode, string? address, string? presentBy, string? govIdNumber, string? email, string? phone, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveDealerAsync(id, code, name, provinceCode, address, presentBy, govIdNumber, email, phone, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteDealerAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

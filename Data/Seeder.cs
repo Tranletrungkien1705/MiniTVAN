@@ -480,6 +480,26 @@ public static class Seeder
                 new Country { CountryCode = "JP", CountryName = "Nhật Bản", FlagActive = true, UpdatedBy = "kế toán" });
             await db.SaveChangesAsync();
         }
+
+        // Danh mục Đại lý (theo Mst_Dealer của TVAN gốc):
+        // các đại lý demo gắn với tỉnh/thành, dùng để quản lý mạng lưới đại lý.
+        if (!await db.Dealers.AnyAsync())
+        {
+            db.Dealers.AddRange(
+                new Dealer
+                {
+                    DLCode = "DL001", DLName = "Đại lý Ô tô Hà Nội", ProvinceCode = "01",
+                    DLAddress = "Số 1 Lê Lợi, Ba Đình", DLPresentBy = "Nguyễn Văn A", DLGovIDNumber = "001090012345",
+                    DLEmail = "daily.hn@dongdo.vn", DLPhoneNo = "024 3933 1122", FlagActive = true, UpdatedBy = "kế toán"
+                },
+                new Dealer
+                {
+                    DLCode = "DL002", DLName = "Đại lý Ô tô Miền Nam", ProvinceCode = "79",
+                    DLAddress = "Số 45 Nguyễn Huệ, Quận 1", DLPresentBy = "Trần Thị B", DLGovIDNumber = "079090098765",
+                    DLEmail = "daily.mn@dongdo.vn", DLPhoneNo = "028 3822 3344", FlagActive = true, UpdatedBy = "kế toán"
+                });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

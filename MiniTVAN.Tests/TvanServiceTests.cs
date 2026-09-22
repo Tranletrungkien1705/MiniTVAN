@@ -2651,4 +2651,75 @@ public class TvanServiceTests
             Assert.Empty(await svc.CountriesAsync(null));
         }
     }
+
+    // Danh mục Đại lý (theo Mst_Dealer của TVAN gốc).
+    [Fact]
+    public async Task Dealer_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveProvinceAsync(null, "01", "Hà Nội", true, null);
+            var (ok, _, id) = await svc.SaveDealerAsync(null, "DL001", "Đại lý Hà Nội", "01", "Số 1 Lê Lợi", "Nguyễn Văn A", "001090012345", "dl@x.vn", "024 3933 1122", true, "kế toán");
+            Assert.True(ok);
+            var list = await svc.DealersAsync(null, null);
+            Assert.Single(list);
+            Assert.Equal("Đại lý Hà Nội", list[0].DLName);
+            Assert.Equal("01", list[0].ProvinceCode);
+            Assert.True(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task Dealer_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveProvinceAsync(null, "01", "Hà Nội", true, null);
+            var (_, _, id) = await svc.SaveDealerAsync(null, "DL001", "Đại lý Hà Nội", "01", null, null, null, null, null, true, null);
+            // Lưu lại cùng mã đại lý = cập nhật (không tạo mới).
+            var (ok, _, id2) = await svc.SaveDealerAsync(null, "DL001", "Đại lý Hà Nội (mới)", "01", null, null, null, null, null, false, null);
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            var list = await svc.DealersAsync(null, null);
+            Assert.Single(list);
+            Assert.Equal("Đại lý Hà Nội (mới)", list[0].DLName);
+            Assert.False(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task Dealer_Save_MissingName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveProvinceAsync(null, "01", "Hà Nội", true, null);
+            var (ok, msg, _) = await svc.SaveDealerAsync(null, "DL001", "  ", "01", null, null, null, null, null, true, null);
+            Assert.False(ok);
+            Assert.Contains("tên", msg);
+        }
+    }
+
+    [Fact]
+    public async Task Dealer_Save_UnknownProvince_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveDealerAsync(null, "DL001", "Đại lý X", "99", null, null, null, null, null, true, null);
+            Assert.False(ok);
+            Assert.Contains("Tỉnh", msg);
+        }
+    }
+
+    [Fact]
+    public async Task Dealer_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveProvinceAsync(null, "01", "Hà Nội", true, null);
+            var (_, _, id) = await svc.SaveDealerAsync(null, "DL001", "Đại lý Hà Nội", "01", null, null, null, null, null, true, null);
+            var (ok, _) = await svc.DeleteDealerAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.DealersAsync(null, null));
+        }
+    }
 }

@@ -723,6 +723,27 @@ app.MapDelete("/api/countries/{id:int}", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Danh mục Đại lý (theo Mst_Dealer của TVAN gốc): danh sách (lọc theo tỉnh/thành + từ khóa nếu có).
+app.MapGet("/api/dealers", async (string? provinceCode, string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.DealersAsync(keyword, provinceCode);
+    return Results.Ok(ls.Select(d => new { d.Id, d.DLCode, d.DLName, d.ProvinceCode, d.DLAddress, d.DLPresentBy, d.DLGovIDNumber, d.DLEmail, d.DLPhoneNo, d.FlagActive, d.UpdatedAt, d.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) đại lý theo mã (theo Mst_Dealer_Create/Update của TVAN gốc).
+app.MapPost("/api/dealers", async (DealerDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveDealerAsync(dto.Id, dto.Code ?? "", dto.Name ?? "", dto.ProvinceCode ?? "", dto.Address, dto.PresentBy, dto.GovIdNumber, dto.Email, dto.Phone, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa đại lý theo id (theo Mst_Dealer_Delete của TVAN gốc).
+app.MapDelete("/api/dealers/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteDealerAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -770,3 +791,4 @@ record NntTypeDto(int? Id, string? Code, string? Name, bool Active, string? By);
 record ProvinceDto(int? Id, string? Code, string? Name, bool Active, string? By);
 record DistrictDto(int? Id, string? ProvinceCode, string? Code, string? Name, bool Active, string? By);
 record CountryDto(int? Id, string? Code, string? Name, bool Active, string? By);
+record DealerDto(int? Id, string? Code, string? Name, string? ProvinceCode, string? Address, string? PresentBy, string? GovIdNumber, string? Email, string? Phone, bool Active, string? By);

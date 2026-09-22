@@ -244,6 +244,27 @@ public class Country : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Danh mục Đại lý (theo bảng Mst_Dealer của TVAN gốc): đại lý phân phối/giới thiệu khách hàng
+// cho NNT, gắn với một tỉnh/thành (ProvinceCode). Dùng để quản lý mạng lưới đại lý.
+// Khóa nghiệp vụ: (OrgId, DLCode). FlagActive = đại lý đang hoạt động hay không.
+public class Dealer : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string DLCode { get; set; } = "";            // Mã đại lý (VD DL001)
+    public string DLName { get; set; } = "";            // Tên đại lý
+    public string ProvinceCode { get; set; } = "";      // Mã tỉnh/thành của đại lý
+    public string? DLAddress { get; set; }               // Địa chỉ
+    public string? DLPresentBy { get; set; }             // Người đại diện
+    public string? DLGovIDNumber { get; set; }           // Số CMT/Hộ chiếu người đại diện
+    public string? DLEmail { get; set; }                 // Email
+    public string? DLPhoneNo { get; set; }               // Điện thoại
+    public bool FlagActive { get; set; } = true;         // Đại lý đang hoạt động
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 public class Invoice : IOrgOwned
 {
     public int Id { get; set; }

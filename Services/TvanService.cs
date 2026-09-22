@@ -115,6 +115,10 @@ public interface ITvanService
     Task<Country?> GetCountryAsync(int id);
     Task<(bool ok, string msg, int id)> SaveCountryAsync(int? id, string code, string name, bool active, string? by);
     Task<(bool ok, string msg)> DeleteCountryAsync(int id);
+    Task<List<Dealer>> DealersAsync(string? keyword, string? provinceCode);
+    Task<Dealer?> GetDealerAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveDealerAsync(int? id, string code, string name, string provinceCode, string? address, string? presentBy, string? govIdNumber, string? email, string? phone, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteDealerAsync(int id);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -2351,6 +2355,92 @@ public class TvanService(AppDbContext db) : ITvanService
         db.Countries.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa quốc gia {code}.");
+    }
+
+    // Danh mục Đại lý (theo Mst_Dealer của TVAN gốc):
+    // danh sách đại lý (lọc theo từ khóa mã/tên/điện thoại/email + tỉnh/thành nếu có).
+    public Task<List<Dealer>> DealersAsync(string? keyword, string? provinceCode)
+    {
+        var q = db.Dealers.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(provinceCode))
+        {
+            var p = provinceCode.Trim();
+            q = q.Where(d => d.ProvinceCode == p);
+        }
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(d => d.DLCode.Contains(k) || d.DLName.Contains(k)
+                || (d.DLPhoneNo != null && d.DLPhoneNo.Contains(k))
+                || (d.DLEmail != null && d.DLEmail.Contains(k)));
+        }
+        return q.OrderBy(d => d.DLCode).ToListAsync();
+    }
+
+    public Task<Dealer?> GetDealerAsync(int id) =>
+        db.Dealers.FirstOrDefaultAsync(d => d.Id == id);
+
+    // Lưu (tạo mới/cập nhật) đại lý theo khóa nghiệp vụ (OrgId, DLCode)
+    // (theo Mst_Dealer_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã đại lý + tên đại lý (Mst_Dealer_Create_InvalidDLCode / _InvalidDLName);
+    //  - tỉnh/thành phải tồn tại và đang dùng (Mst_Province_CheckDB);
+    //  - khi tạo: mã đại lý chưa tồn tại trong tổ chức (Mst_Dealer_CheckDB_DLCodeExist).
+    public async Task<(bool ok, string msg, int id)> SaveDealerAsync(int? id, string code, string name, string provinceCode, string? address, string? presentBy, string? govIdNumber, string? email, string? phone, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        provinceCode = (provinceCode ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã đại lý.", 0);
+        if (name.Length == 0) return (false, "Cần tên đại lý.", 0);
+
+        // Tỉnh/thành phải tồn tại và đang dùng (theo Mst_Province_CheckDB của TVAN gốc).
+        var prov = await db.Provinces.FirstOrDefaultAsync(p => p.ProvinceCode == provinceCode);
+        if (prov == null) return (false, "Tỉnh/thành phố không tồn tại.", 0);
+        if (!prov.FlagActive) return (false, "Tỉnh/thành phố đã ngừng dùng.", 0);
+
+        Dealer? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.Dealers.FirstOrDefaultAsync(d => d.Id == id.Value);
+        else e = await db.Dealers.FirstOrDefaultAsync(d => d.DLCode == code);
+
+        if (e == null)
+        {
+            if (await db.Dealers.AnyAsync(d => d.DLCode == code))
+                return (false, "Mã đại lý đã tồn tại.", 0);
+            e = new Dealer { DLCode = code };
+            db.Dealers.Add(e);
+        }
+        else
+        {
+            // Đổi mã đại lý: chặn trùng với đại lý khác.
+            if (!string.Equals(e.DLCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.Dealers.AnyAsync(d => d.DLCode == code && d.Id != e.Id))
+                return (false, "Mã đại lý đã tồn tại.", 0);
+            e.DLCode = code;
+        }
+
+        e.DLName = name;
+        e.ProvinceCode = provinceCode;
+        e.DLAddress = address;
+        e.DLPresentBy = presentBy;
+        e.DLGovIDNumber = govIdNumber;
+        e.DLEmail = email;
+        e.DLPhoneNo = phone;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu đại lý {code} — {name}.", e.Id);
+    }
+
+    // Xóa đại lý theo id (theo Mst_Dealer_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteDealerAsync(int id)
+    {
+        var e = await db.Dealers.FirstOrDefaultAsync(d => d.Id == id);
+        if (e == null) return (false, "Không tìm thấy đại lý.");
+        var code = e.DLCode;
+        db.Dealers.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa đại lý {code}.");
     }
 
     // Khoảng thời gian [from, to) của kỳ dữ liệu theo loại kỳ (LKDLieu).
