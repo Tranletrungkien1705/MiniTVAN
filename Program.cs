@@ -406,6 +406,21 @@ app.MapGet("/api/invoice-update-logs", async (int? invoiceId, ITvanService svc) 
     return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, l.BuyerName, l.BuyerMst, l.BuyerAddress, paymentMethod = l.PaymentMethod.ToString(), l.Amount, l.VatRate, l.InvoiceDate, l.Note, l.By, l.CreatedAt }));
 });
 
+// Hủy hóa đơn đang chờ/đã duyệt (theo Invoice_Invoice_Cancel của TVAN gốc): PENDING/APPROVED → CANCELED,
+// ghi thời điểm/người hủy + lý do.
+app.MapPost("/api/invoices/{id:int}/cancel-invoice", async (int id, CancelInvoiceDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.CancelInvoiceAsync(id, dto.Remark, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Nhật ký hủy hóa đơn (lọc theo hóa đơn nếu có).
+app.MapGet("/api/cancel-logs", async (int? invoiceId, ITvanService svc) =>
+{
+    var ls = await svc.CancelLogsAsync(invoiceId);
+    return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, action = l.Action.ToString(), l.Remark, l.By, l.CreatedAt }));
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -435,3 +450,4 @@ record InactivateTemplateDto(string? Remark);
 record IncreaseEndNoDto(int NewEndInvoiceNo, string? Remark, string? By);
 record TctReceiveDto(TctMessageType MltDiep, string? MaCQT, string? MaLoi, string? LyDo);
 record UpdateAfterAllocatedDto(string? BuyerName, string? BuyerMst, string? BuyerAddress, PaymentMethod PaymentMethod, decimal Amount, decimal VatRate, DateTime? InvoiceDate, string? Note, string? By);
+record CancelInvoiceDto(string? Remark, string? By);

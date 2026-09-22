@@ -1484,4 +1484,78 @@ public class TvanServiceTests
             Assert.Contains("Không tìm thấy", msg);
         }
     }
+
+    // Hủy hóa đơn (theo Invoice_Invoice_Cancel của TVAN gốc): PENDING/APPROVED → CANCELED.
+    [Fact]
+    public async Task CancelInvoice_OnDraftWithNo_SetsCanceledAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);   // Draft, đã có số (CreateInvoiceAsync tự cấp số)
+            var (ok, msg) = await svc.CancelInvoiceAsync(invId, "lập sai", "kế toán");
+            Assert.True(ok);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(InvoiceStatus.Cancelled, inv!.Status);
+            Assert.NotNull(inv.CancelDTimeUTC);
+            Assert.Equal("kế toán", inv.CancelBy);
+            Assert.Equal("lập sai", inv.Remark);
+            var logs = await svc.CancelLogsAsync(invId);
+            Assert.Single(logs);
+            Assert.Equal(CancelAction.Cancel, logs[0].Action);
+            Assert.Equal("kế toán", logs[0].By);
+        }
+    }
+
+    [Fact]
+    public async Task CancelInvoice_OnApproved_SetsCanceled()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.ApproveAsync(invId, null, null, null, "kế toán trưởng");
+            var (ok, _) = await svc.CancelInvoiceAsync(invId, null, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(InvoiceStatus.Cancelled, (await svc.GetInvoiceAsync(invId))!.Status);
+        }
+    }
+
+    [Fact]
+    public async Task CancelInvoice_OnAccepted_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);   // Accepted
+            var (ok, msg) = await svc.CancelInvoiceAsync(invId, null, null);
+            Assert.False(ok);
+            Assert.Contains("chờ", msg);
+            Assert.Empty(await svc.CancelLogsAsync(invId));
+        }
+    }
+
+    [Fact]
+    public async Task CancelInvoice_DraftWithoutNo_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            await svc.RegisterNntAsync(nntId);
+            var inv = new Invoice { NntId = nntId, Symbol = "1C26TAA", No = "", BuyerName = "Cty Mua", Amount = 5_000_000 };
+            db.Invoices.Add(inv); await db.SaveChangesAsync();
+            var (ok, msg) = await svc.CancelInvoiceAsync(inv.Id, null, null);
+            Assert.False(ok);
+            Assert.Contains("cấp số", msg);
+        }
+    }
+
+    [Fact]
+    public async Task CancelInvoice_UnknownInvoice_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.CancelInvoiceAsync(9999, null, null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
 }

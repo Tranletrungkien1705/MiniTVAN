@@ -105,6 +105,16 @@ public static class Seeder
                 Note = "Sửa sai thông tin người mua sau khi cấp số", By = "kế toán", CreatedAt = DateTime.UtcNow.AddDays(-1)
             });
             await db.SaveChangesAsync();
+            // Hủy hóa đơn (theo Invoice_Invoice_Cancel của TVAN gốc):
+            // inv5 đang chờ (Draft) và đã có số → đã được hủy (CANCELED) kèm lý do & người hủy.
+            var inv5 = new Invoice { NntId = seller.Id, Symbol = "1C26TAA", No = "00000005", BuyerName = "Phạm Thị D", BuyerAddress = "Cần Thơ", Amount = 12_000_000, VatRate = 10, IssuedDate = DateTime.Today.AddDays(-1), Status = InvoiceStatus.Cancelled, CancelDTimeUTC = DateTime.UtcNow.AddHours(-6), CancelBy = "kế toán", Remark = "Lập sai thông tin người mua" };
+            db.Invoices.Add(inv5); await db.SaveChangesAsync();
+            db.CancelInvoiceLogs.Add(new CancelInvoiceLog
+            {
+                InvoiceId = inv5.Id, Action = CancelAction.Cancel, Remark = inv5.Remark, By = "kế toán",
+                CreatedAt = DateTime.UtcNow.AddHours(-6)
+            });
+            await db.SaveChangesAsync();
             db.Messages.AddRange(
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300", Text = "Gửi HĐ 1C26TAA-00000001", CreatedAt = DateTime.UtcNow.AddDays(-5) },
                 new TranMessage { InvoiceId = inv1.Id, NntId = seller.Id, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "202", Text = "TCT cấp mã: 0026082512345678", CreatedAt = DateTime.UtcNow.AddDays(-5) },

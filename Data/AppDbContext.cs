@@ -29,6 +29,7 @@ public class AppDbContext : DbContext
     public DbSet<TctReceiveLog> TctReceiveLogs => Set<TctReceiveLog>();
     public DbSet<InvoiceUpdateLog> InvoiceUpdateLogs => Set<InvoiceUpdateLog>();
     public DbSet<TemplateRangeLog> TemplateRangeLogs => Set<TemplateRangeLog>();
+    public DbSet<CancelInvoiceLog> CancelInvoiceLogs => Set<CancelInvoiceLog>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -164,6 +165,12 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => new { x.OrgId, x.TemplateId });
             e.HasOne(x => x.Template).WithMany().HasForeignKey(x => x.TemplateId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CancelInvoiceLog>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.InvoiceId });
+            e.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

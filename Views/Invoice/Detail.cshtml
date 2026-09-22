@@ -7,6 +7,7 @@
    var issueLogs = (List<IssueLog>)ViewBag.IssueLogs;
    var tctLogs = (List<TctReceiveLog>)ViewBag.TctLogs;
    var updateLogs = (List<InvoiceUpdateLog>)ViewBag.UpdateLogs;
+   var cancelLogs = (List<CancelInvoiceLog>)ViewBag.CancelLogs;
    var (srcText, srcCss) = Ui.Source(Model.SourceCode);
    var (cpText, cpCss) = Ui.ConvPrint(Model.FlagChange);
    var (hfText, hfCss) = Ui.Hotfix(Model.FlagHotfix);
@@ -107,6 +108,17 @@
                     }
                 }
                 <form asp-action="Transmit" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><button class="btn btn-primary w-100"><i class="bi bi-send-fill me-1"></i>Truyền tới cơ quan thuế</button></form>
+                @if (Model.Status == InvoiceStatus.Draft && !string.IsNullOrWhiteSpace(Model.No))
+                {
+                    <button class="btn btn-outline-dark w-100" type="button" data-bs-toggle="collapse" data-bs-target="#cancelInvForm"><i class="bi bi-x-circle me-1"></i>Hủy hóa đơn</button>
+                    <div class="collapse" id="cancelInvForm"><div class="border rounded p-2">
+                        <form asp-action="CancelInvoice" method="post" onsubmit="return confirm('Hủy hóa đơn đang chờ (PENDING → CANCELED)?') ">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                            <div class="mb-2"><label class="form-label small mb-1">Lý do hủy (tùy chọn)</label><input name="remark" class="form-control form-control-sm" placeholder="VD lập sai, hủy theo yêu cầu" /></div>
+                            <div class="mb-2"><label class="form-label small mb-1">Người hủy</label><input name="by" class="form-control form-control-sm" placeholder="VD kế toán" /></div>
+                            <button class="btn btn-dark btn-sm w-100">Hủy hóa đơn (CANCELED)</button>
+                        </form>
+                    </div></div>
+                }
                 @if (Model.SourceCode is SourceInvoiceCode.Adjust or SourceInvoiceCode.Replace && !string.IsNullOrWhiteSpace(Model.RefTctCode))
                 {
                     <button class="btn btn-outline-danger w-100" type="button" data-bs-toggle="collapse" data-bs-target="#delAdjRepForm"><i class="bi bi-trash me-1"></i>Xóa HĐ điều chỉnh/thay thế chưa phát hành</button>
@@ -223,6 +235,14 @@
                     </form>
                 </div></div>
                 <form asp-action="Transmit" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><button class="btn btn-primary w-100"><i class="bi bi-send-fill me-1"></i>Truyền tới cơ quan thuế</button></form>
+                <button class="btn btn-outline-dark w-100" type="button" data-bs-toggle="collapse" data-bs-target="#cancelInvForm"><i class="bi bi-x-circle me-1"></i>Hủy hóa đơn</button>
+                <div class="collapse" id="cancelInvForm"><div class="border rounded p-2">
+                    <form asp-action="CancelInvoice" method="post" onsubmit="return confirm('Hủy hóa đơn đã duyệt (APPROVED → CANCELED)?') ">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                        <div class="mb-2"><label class="form-label small mb-1">Lý do hủy (tùy chọn)</label><input name="remark" class="form-control form-control-sm" placeholder="VD lập sai, hủy theo yêu cầu" /></div>
+                        <div class="mb-2"><label class="form-label small mb-1">Người hủy</label><input name="by" class="form-control form-control-sm" placeholder="VD kế toán" /></div>
+                        <button class="btn btn-dark btn-sm w-100">Hủy hóa đơn (CANCELED)</button>
+                    </form>
+                </div></div>
                 <button class="btn btn-outline-secondary w-100" type="button" data-bs-toggle="collapse" data-bs-target="#unapproveForm"><i class="bi bi-arrow-counterclockwise me-1"></i>Bỏ duyệt hóa đơn</button>
                 <div class="collapse" id="unapproveForm"><div class="border rounded p-2">
                     <form asp-action="Unapprove" method="post" onsubmit="return confirm('Bỏ duyệt hóa đơn (APPROVED → PENDING)?')">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
@@ -403,6 +423,26 @@
                 </tr>
             }
             @if (updateLogs.Count == 0) { <tr><td colspan="7" class="text-muted small">Chưa cập nhật nội dung sau cấp số.</td></tr> }
+            </tbody>
+        </table>
+    </div></div>
+
+    <div class="card mt-3"><div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="bi bi-x-circle me-1"></i>Nhật ký hủy hóa đơn</h6>
+        <table class="table table-sm align-middle mb-0">
+            <thead><tr><th>Thời điểm</th><th>Thao tác</th><th>Lý do</th><th>Người hủy</th></tr></thead>
+            <tbody>
+            @foreach (var l in cancelLogs)
+            {
+                var (at, acss) = Ui.CancelAction(l.Action);
+                <tr>
+                    <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM HH:mm")</td>
+                    <td><span class="badge bg-@acss">@at</span></td>
+                    <td class="small">@l.Remark</td>
+                    <td class="small text-muted">@l.By</td>
+                </tr>
+            }
+            @if (cancelLogs.Count == 0) { <tr><td colspan="4" class="text-muted small">Chưa hủy hóa đơn.</td></tr> }
             </tbody>
         </table>
     </div></div>

@@ -46,6 +46,10 @@ public enum HotfixFlag { None = 0, Hotfixed = 1 }
 // Loại thao tác duyệt hóa đơn (theo Invoice_Invoice_Approved của TVAN gốc)
 public enum ApproveAction { Approve = 0, Unapprove = 1 }
 
+// Loại thao tác hủy hóa đơn (theo Invoice_Invoice_Cancel của TVAN gốc):
+// Cancel = hủy hóa đơn đang chờ/đã duyệt (PENDING/APPROVED → CANCELED).
+public enum CancelAction { Cancel = 0 }
+
 // Loại thao tác phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc):
 // Issue = phát hành HĐ đã duyệt (APPROVED → ISSUED) và gửi cho khách hàng.
 public enum IssueAction { Issue = 0 }
@@ -164,6 +168,11 @@ public class Invoice : IOrgOwned
     // InvoiceNoDTimeUTC/InvoiceNoBy = thời điểm & người ấn cấp số hóa đơn.
     public DateTime? InvoiceNoDTimeUTC { get; set; }
     public string? InvoiceNoBy { get; set; }
+
+    // Hủy hóa đơn (theo Invoice_Invoice_Cancel của TVAN gốc):
+    // CancelDTimeUTC/CancelBy = thời điểm & người hủy hóa đơn (PENDING/APPROVED → CANCELED).
+    public DateTime? CancelDTimeUTC { get; set; }
+    public string? CancelBy { get; set; }
 
     // Nhận kết quả phản hồi từ CQT (theo Invoice_Invoice_TCTReceive của TVAN gốc):
     // MltDiep = mã loại thông điệp CQT trả về (202/204); TctChapNhan = CQT chấp nhận/từ chối;
@@ -473,6 +482,20 @@ public class IssueLog : IOrgOwned
     public string? EmailSend { get; set; }             // Email người nhận khi phát hành
     public string? Note { get; set; }                  // Ghi chú / lý do
     public string? By { get; set; }                    // Người phát hành
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Nhật ký hủy hóa đơn (theo Invoice_Invoice_Cancel của TVAN gốc).
+// Mỗi lần hủy hóa đơn đang chờ/đã duyệt (PENDING/APPROVED → CANCELED) ghi lại để đối soát.
+public class CancelInvoiceLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InvoiceId { get; set; }
+    public Invoice? Invoice { get; set; }
+    public CancelAction Action { get; set; } = CancelAction.Cancel;   // Hủy hóa đơn
+    public string? Remark { get; set; }                // Lý do hủy
+    public string? By { get; set; }                    // Người hủy
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 

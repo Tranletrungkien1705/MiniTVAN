@@ -190,4 +190,11 @@ public static class Ui
         PaymentMethod.CashOrTransfer => "Tiền mặt/Chuyển khoản",
         _ => p.ToString()
     };
+
+    // Loại thao tác hủy hóa đơn (theo Invoice_Invoice_Cancel của TVAN gốc).
+    public static (string text, string css) CancelAction(CancelAction a) => a switch
+    {
+        Models.CancelAction.Cancel => ("Hủy hóa đơn", "dark"),
+        _ => (a.ToString(), "secondary")
+    };
 }

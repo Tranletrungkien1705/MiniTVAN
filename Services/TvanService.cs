@@ -63,6 +63,8 @@ public interface ITvanService
     Task<List<TctReceiveLog>> TctReceiveLogsAsync(int? invoiceId);
     Task<(bool ok, string msg)> UpdateAfterAllocatedAsync(int invoiceId, string? buyerName, string? buyerMst, string? buyerAddress, PaymentMethod paymentMethod, decimal amount, decimal vatRate, DateTime invoiceDate, string? note, string? by);
     Task<List<InvoiceUpdateLog>> UpdateLogsAsync(int? invoiceId);
+    Task<(bool ok, string msg)> CancelInvoiceAsync(int invoiceId, string? remark, string? by);
+    Task<List<CancelInvoiceLog>> CancelLogsAsync(int? invoiceId);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -1112,6 +1114,44 @@ public class TvanService(AppDbContext db) : ITvanService
     public Task<List<InvoiceUpdateLog>> UpdateLogsAsync(int? invoiceId)
     {
         var q = db.InvoiceUpdateLogs.Include(l => l.Invoice).AsQueryable();
+        if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
+        return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
+
+    // Hủy hóa đơn (theo Invoice_Invoice_Cancel của TVAN gốc):
+    // chỉ hủy được hóa đơn đang ở trạng thái chờ (PENDING) hoặc đã duyệt (APPROVED).
+    // Nếu HĐ đang chờ (PENDING) thì bắt buộc phải đã có số hóa đơn (InvoiceNoIsNotNull).
+    // Đưa HĐ sang CANCELED, ghi thời điểm hủy (CancelDTimeUTC), người hủy (CancelBy) và lý do (Remark),
+    // đồng thời ghi nhật ký (CancelInvoiceLog) để đối soát.
+    public async Task<(bool ok, string msg)> CancelInvoiceAsync(int invoiceId, string? remark, string? by)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.");
+        if (inv.Status is not (InvoiceStatus.Draft or InvoiceStatus.Approved))
+            return (false, "Chỉ hủy được hóa đơn đang ở trạng thái chờ (PENDING) hoặc đã duyệt (APPROVED).");
+        if (inv.Status == InvoiceStatus.Draft && string.IsNullOrWhiteSpace(inv.No))
+            return (false, "Hóa đơn chưa được cấp số, không thể hủy.");
+
+        inv.Status = InvoiceStatus.Cancelled;
+        inv.CancelDTimeUTC = DateTime.UtcNow;
+        inv.CancelBy = by;
+        inv.Remark = remark;
+        db.CancelInvoiceLogs.Add(new CancelInvoiceLog
+        {
+            InvoiceId = inv.Id, Action = CancelAction.Cancel, Remark = remark, By = by,
+        });
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.CancelInvoice, Dir = MsgDir.Out, Code = "300",
+            Text = $"Hủy hóa đơn {inv.Symbol}-{inv.No}{(string.IsNullOrWhiteSpace(remark) ? "" : ": " + remark.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã hủy hóa đơn {inv.Symbol}-{inv.No} (CANCELED).");
+    }
+
+    public Task<List<CancelInvoiceLog>> CancelLogsAsync(int? invoiceId)
+    {
+        var q = db.CancelInvoiceLogs.Include(l => l.Invoice).AsQueryable();
         if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
     }

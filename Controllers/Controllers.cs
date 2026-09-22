@@ -71,6 +71,7 @@ public class InvoiceController(ITvanService svc) : Controller
         ViewBag.IssueLogs = await svc.IssueLogsAsync(id);
         ViewBag.TctLogs = await svc.TctReceiveLogsAsync(id);
         ViewBag.UpdateLogs = await svc.UpdateLogsAsync(id);
+        ViewBag.CancelLogs = await svc.CancelLogsAsync(id);
         return View(inv);
     }
 
@@ -230,6 +231,15 @@ public class InvoiceController(ITvanService svc) : Controller
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Detail), new { id });
     }
+
+    // Hủy hóa đơn đang chờ/đã duyệt (theo Invoice_Invoice_Cancel của TVAN gốc): PENDING/APPROVED → CANCELED.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CancelInvoice(int id, string? remark, string? by)
+    {
+        var (ok, msg) = await svc.CancelInvoiceAsync(id, remark, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
 }
 
 public class LicenseController(ITvanService svc) : Controller
@@ -371,6 +381,16 @@ public class TctReceiveLogController(ITvanService svc) : Controller
     {
         ViewBag.InvoiceId = invoiceId;
         return View(await svc.TctReceiveLogsAsync(invoiceId));
+    }
+}
+
+// Nhật ký hủy hóa đơn (theo Invoice_Invoice_Cancel của TVAN gốc).
+public class CancelLogController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? invoiceId)
+    {
+        ViewBag.InvoiceId = invoiceId;
+        return View(await svc.CancelLogsAsync(invoiceId));
     }
 }
 
