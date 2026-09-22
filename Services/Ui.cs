@@ -242,4 +242,15 @@ public static class Ui
         SpecPrdType.ProductId => "Mã sản phẩm",
         _ => t.ToString()
     };
+
+    // Trạng thái hóa đơn trong Bảng tổng hợp hóa đơn (BTH) — theo cột TThai của
+    // Invoice_Invoice_BTHGetX (TVAN gốc): 0=Mới, 1=Huỷ, 2=Điều chỉnh, 3=Thay thế.
+    public static (string text, string css) TThai(TThai t) => t switch
+    {
+        Models.TThai.Moi        => ("Mới", "success"),
+        Models.TThai.Huy        => ("Huỷ", "dark"),
+        Models.TThai.DieuChinh  => ("Điều chỉnh", "info"),
+        Models.TThai.ThayThe    => ("Thay thế", "warning"),
+        _ => (t.ToString(), "secondary")
+    };
 }

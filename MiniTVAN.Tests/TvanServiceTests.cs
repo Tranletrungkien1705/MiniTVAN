@@ -2284,4 +2284,65 @@ public class TvanServiceTests
             Assert.Contains("Không tìm thấy", msg2);
         }
     }
+
+    // Bảng tổng hợp hóa đơn (BTH) — theo Invoice_Invoice_BTHGet / Invoice_Invoice_BTHGetX của TVAN gốc.
+    [Fact]
+    public async Task Bth_IssuedRoot_ShowsMoi()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);   // Accepted (ISSUED), IssuedDate = hôm nay
+            var rows = await svc.BthRowsAsync(PeriodType.Month, DateTime.Today.ToString("yyyy-MM"));
+            Assert.Single(rows);
+            Assert.Equal(TThai.Moi, rows[0].TThai);
+            Assert.Equal(11_000_000, rows[0].Total);   // 10tr + 10% VAT
+        }
+    }
+
+    [Fact]
+    public async Task Bth_DeletedRoot_ShowsHuy()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);
+            await svc.DeleteInvoiceAsync(invId, "lập sai", "kế toán");   // ISSUED → DELETED
+            var rows = await svc.BthRowsAsync(PeriodType.Month, DateTime.Today.ToString("yyyy-MM"));
+            Assert.Single(rows);
+            Assert.Equal(TThai.Huy, rows[0].TThai);
+        }
+    }
+
+    [Fact]
+    public async Task Bth_AdjustAndReplace_ShowStatusAndRefInvoice()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);
+            var (_, _, adjId) = await svc.AdjustAsync(invId, InvoiceAdjType.Decrease, 5_000_000, 10, "giảm giá");
+            var (_, _, repId) = await svc.ReplaceAsync(invId, 20_000_000, 10, "sai số tiền");
+            var rows = await svc.BthRowsAsync(PeriodType.Month, DateTime.Today.ToString("yyyy-MM"));
+            var adj = rows.Single(r => r.TThai == TThai.DieuChinh);
+            var rep = rows.Single(r => r.TThai == TThai.ThayThe);
+            // HĐ điều chỉnh/thay thế trỏ tới hóa đơn gốc (ký hiệu/mẫu số/số HĐ gốc).
+            Assert.Equal("1C26TAA", adj.RefFormNo);
+            Assert.False(string.IsNullOrWhiteSpace(adj.RefInvoiceNo));
+            Assert.Equal("1C26TAA", rep.RefFormNo);
+            Assert.False(string.IsNullOrWhiteSpace(rep.RefInvoiceNo));
+        }
+    }
+
+    [Fact]
+    public async Task Bth_EmptyPeriod_ReturnsEmpty()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);
+            var rows = await svc.BthRowsAsync(PeriodType.Month, "2000-01");   // kỳ không có HĐ
+            Assert.Empty(rows);
+        }
+    }
 }

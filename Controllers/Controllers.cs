@@ -341,6 +341,21 @@ public class GuiTongHopController(ITvanService svc) : Controller
     }
 }
 
+// Bảng tổng hợp hóa đơn (BTH) — theo Invoice_Invoice_BTHGet / Invoice_Invoice_BTHGetX của TVAN gốc:
+// liệt kê các hóa đơn đã phát hành (ISSUED) hoặc đã hủy (DELETED) trong một kỳ (ngày/tháng/quý/năm)
+// kèm trạng thái TThai (Mới/Huỷ/Điều chỉnh/Thay thế) và thông tin hóa đơn gốc bị điều chỉnh/thay thế.
+// Dùng để đối chiếu trước khi lập bảng tổng hợp gửi CQT.
+public class BthController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(PeriodType lkdlieu = PeriodType.Month, string? kdlieu = null)
+    {
+        kdlieu = string.IsNullOrWhiteSpace(kdlieu) ? DateTime.Today.ToString("yyyy-MM") : kdlieu.Trim();
+        ViewBag.LKDLieu = lkdlieu;
+        ViewBag.KDLieu = kdlieu;
+        return View(await svc.BthRowsAsync(lkdlieu, kdlieu));
+    }
+}
+
 public class LookupController(ITvanService svc) : Controller
 {
     [Route("Lookup/{code?}")]

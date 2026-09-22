@@ -212,6 +212,21 @@ app.MapPost("/api/guitonghop/{id:int}/send", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
 });
 
+// Bảng tổng hợp hóa đơn (BTH) — theo Invoice_Invoice_BTHGet của TVAN gốc: liệt kê hóa đơn
+// đã phát hành (ISSUED) / đã hủy (DELETED) trong một kỳ kèm trạng thái TThai + hóa đơn gốc.
+app.MapGet("/api/bth", async (PeriodType? lkdlieu, string? kdlieu, ITvanService svc) =>
+{
+    var t = lkdlieu ?? PeriodType.Month;
+    var k = string.IsNullOrWhiteSpace(kdlieu) ? DateTime.Today.ToString("yyyy-MM") : kdlieu.Trim();
+    var rows = await svc.BthRowsAsync(t, k);
+    return Results.Ok(new
+    {
+        lkdlieu = t.ToString(), kdlieu = k, count = rows.Count,
+        totalAmount = rows.Sum(r => r.Amount), totalVat = rows.Sum(r => r.VatAmount), totalPayment = rows.Sum(r => r.Total),
+        rows = rows.Select(r => new { r.InvoiceCode, r.FormNo, r.Sign, r.InvoiceNo, r.InvoiceDate, r.BuyerName, r.BuyerMst, r.Amount, r.VatRate, r.VatAmount, r.Total, tthai = r.TThai.ToString(), r.RefFormNo, r.RefInvoiceNo })
+    });
+});
+
 // Tra cứu thông tin NNT theo MST từ cơ quan thuế (theo TCT_TraTTinMaSoThue của TVAN gốc).
 app.MapGet("/api/tax/lookup/{mst}", async (string mst, ITvanService svc) =>
 {

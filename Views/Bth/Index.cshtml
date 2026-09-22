@@ -1,0 +1,79 @@
+@model List<InvoiceGthRow>
+@{
+    ViewData["Title"] = "Bảng tổng hợp hóa đơn (BTH)";
+    var lkdlieu = (PeriodType)ViewBag.LKDLieu;
+    var kdlieu = (string)ViewBag.KDLieu;
+    var totalAmount = Model.Sum(r => r.Amount);
+    var totalVat = Model.Sum(r => r.VatAmount);
+    var totalPmt = Model.Sum(r => r.Total);
+}
+<div class="row g-3">
+    <div class="col-lg-9"><div class="card"><div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-bold mb-0">Bảng tổng hợp hóa đơn — kỳ @Ui.Period(lkdlieu) @kdlieu</h6>
+            <span class="badge bg-light text-dark border">@Model.Count hóa đơn</span>
+        </div>
+        <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr>
+                <th>Mã tra cứu</th><th>Mẫu số / Ký hiệu</th><th>Số HĐ</th><th>Ngày HĐ</th>
+                <th>Người mua</th><th class="text-end">Tiền hàng</th><th class="text-end">Thuế</th>
+                <th class="text-end">Thanh toán</th><th>Trạng thái</th><th>HĐ gốc</th>
+            </tr></thead>
+            <tbody>
+            @foreach (var r in Model)
+            {
+                var (t, css) = Ui.TThai(r.TThai);
+                <tr>
+                    <td class="small">@(string.IsNullOrWhiteSpace(r.InvoiceCode) ? "—" : r.InvoiceCode)</td>
+                    <td>@r.FormNo<div class="small text-muted">@r.Sign</div></td>
+                    <td><b>@r.InvoiceNo</b></td>
+                    <td>@r.InvoiceDate.ToString("dd/MM/yyyy")</td>
+                    <td>@r.BuyerName<div class="small text-muted">@(string.IsNullOrWhiteSpace(r.BuyerMst) ? "" : "MST " + r.BuyerMst)</div></td>
+                    <td class="text-end">@Ui.Money(r.Amount)</td>
+                    <td class="text-end">@Ui.Money(r.VatAmount)<div class="small text-muted">@r.VatRate.ToString("0.##")%</div></td>
+                    <td class="text-end fw-semibold">@Ui.Money(r.Total)</td>
+                    <td><span class="badge bg-@css">@t</span></td>
+                    <td class="small text-muted">
+                        @if (!string.IsNullOrWhiteSpace(r.RefInvoiceNo))
+                        { <span>@r.RefFormNo-@r.RefInvoiceNo</span> }
+                        else { <span>—</span> }
+                    </td>
+                </tr>
+            }
+            @if (Model.Count == 0) { <tr><td colspan="10" class="text-center text-muted py-4">Không có hóa đơn đã phát hành/hủy trong kỳ này.</td></tr> }
+            </tbody>
+            @if (Model.Count > 0)
+            {
+                <tfoot><tr class="fw-bold">
+                    <td colspan="5" class="text-end">Tổng cộng</td>
+                    <td class="text-end">@Ui.Money(totalAmount)</td>
+                    <td class="text-end">@Ui.Money(totalVat)</td>
+                    <td class="text-end">@Ui.Money(totalPmt)</td>
+                    <td colspan="2"></td>
+                </tr></tfoot>
+            }
+        </table>
+        </div>
+    </div></div></div>
+    <div class="col-lg-3"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Chọn kỳ dữ liệu</h6>
+        <form asp-action="Index" method="get">
+            <div class="mb-2"><label class="form-label small mb-1">Loại kỳ dữ liệu</label>
+                <select name="lkdlieu" class="form-select">
+                    <option value="1" selected="@(lkdlieu == PeriodType.Month)">Tháng</option>
+                    <option value="0" selected="@(lkdlieu == PeriodType.Day)">Ngày</option>
+                    <option value="2" selected="@(lkdlieu == PeriodType.Quarter)">Quý</option>
+                    <option value="3" selected="@(lkdlieu == PeriodType.Year)">Năm</option>
+                </select></div>
+            <div class="mb-3"><label class="form-label small mb-1">Kỳ dữ liệu</label>
+                <input name="kdlieu" value="@kdlieu" class="form-control" placeholder="VD 2026-06 (tháng) / 2026-2 (quý) / 2026 (năm)" /></div>
+            <button class="btn btn-primary w-100"><i class="bi bi-funnel me-1"></i>Xem bảng tổng hợp</button>
+        </form>
+        <div class="small text-muted mt-3">
+            Liệt kê hóa đơn đã phát hành (ISSUED) hoặc đã hủy (DELETED) trong kỳ, kèm trạng thái
+            Mới/Huỷ/Điều chỉnh/Thay thế và hóa đơn gốc bị điều chỉnh/thay thế — dùng để đối chiếu
+            trước khi lập bảng tổng hợp gửi CQT.
+        </div>
+    </div></div></div>
+</div>
