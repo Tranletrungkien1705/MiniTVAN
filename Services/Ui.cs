@@ -115,6 +115,14 @@ public static class Ui
         _ => (f.ToString(), "secondary")
     };
 
+    // Kiểu dấu phân cách động khi hiển thị số trên hóa đơn (theo Mst_DynamicComma.FlagStyle của TVAN gốc).
+    public static string DynamicComma(DynamicCommaStyle s) => s switch
+    {
+        DynamicCommaStyle.Comma => "Dấu phẩy ','",
+        DynamicCommaStyle.Dot   => "Dấu chấm '.'",
+        _ => s.ToString()
+    };
+
     public static (string text, string css) Hotfix(HotfixFlag f) => f switch
     {
         HotfixFlag.Hotfixed => ("Đã ký lại", "primary"),

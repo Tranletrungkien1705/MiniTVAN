@@ -1,0 +1,33 @@
+@model DynamicComma
+@{ ViewData["Title"] = "Cấu hình dấu phân cách động"; }
+<div class="row g-3">
+    <div class="col-lg-7"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Dấu phân cách động khi hiển thị số</h6>
+        <div class="d-flex align-items-center gap-2 mb-3">
+            <span class="text-muted small">Kiểu hiện tại:</span>
+            <span class="badge bg-primary">@Ui.DynamicComma(Model.FlagStyle)</span>
+        </div>
+        <p class="small text-muted mb-3">
+            Quy định kiểu dấu phân cách khi hiển thị số trên hóa đơn:
+            <b>dấu phẩy ','</b> (FlagStyle = 0) hoặc <b>dấu chấm '.'</b> (FlagStyle = 1)
+            (theo <code>Mst_DynamicComma</code> của TVAN gốc).
+        </p>
+        <form asp-action="Edit" method="post">@Html.AntiForgeryToken()
+            <div class="mb-2"><label class="form-label small mb-1">Kiểu dấu phân cách *</label>
+                <select name="flagStyle" class="form-select">
+                    <option value="0" selected="@(Model.FlagStyle == DynamicCommaStyle.Comma)">Dấu phẩy ',' (0)</option>
+                    <option value="1" selected="@(Model.FlagStyle == DynamicCommaStyle.Dot)">Dấu chấm '.' (1)</option>
+                </select></div>
+            <div class="mb-3"><label class="form-label small mb-1">Người thay đổi</label><input name="by" class="form-control" value="@Model.UpdatedBy" placeholder="VD kế toán" /></div>
+            <button class="btn btn-primary w-100"><i class="bi bi-save me-1"></i>Lưu cấu hình</button>
+        </form>
+    </div></div></div>
+    <div class="col-lg-5"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Thông tin</h6>
+        <table class="table table-sm mb-0">
+            <tr><td class="text-muted">Cập nhật lúc</td><td class="text-end">@(Model.UpdatedAt?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "—")</td></tr>
+            <tr><td class="text-muted">Người thay đổi</td><td class="text-end">@Model.UpdatedBy</td></tr>
+        </table>
+        <div class="small text-muted mt-3">Cấu hình áp dụng theo từng tổ chức (tenant).</div>
+    </div></div></div>
+</div>

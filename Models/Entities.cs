@@ -39,6 +39,10 @@ public enum ConversionPrintAction { Print = 0, Reset = 1 }
 // Check = bật kiểm tra (mặc định), Uncheck = bỏ kiểm tra ký >60 ngày.
 public enum Sign60DayFlag { Check = 1, Uncheck = 0 }
 
+// Kiểu dấu phân cách động khi hiển thị số trên hóa đơn (theo Mst_DynamicComma.FlagStyle của TVAN gốc):
+// Comma = '0' (dùng dấu phẩy ','), Dot = '1' (dùng dấu chấm '.').
+public enum DynamicCommaStyle { Comma = 0, Dot = 1 }
+
 // Cờ đánh dấu hóa đơn đã được ký lại (theo Invoice_Invoice.FlagHotfix của TVAN gốc):
 // None = chưa ký lại (FlagHotfix is null), Hotfixed = đã ký lại (FlagHotfix = '1').
 public enum HotfixFlag { None = 0, Hotfixed = 1 }
@@ -621,6 +625,19 @@ public class SystemSetting : IOrgOwned
     public Sign60DayFlag Sign60Day { get; set; } = Sign60DayFlag.Check;
     public string? Note { get; set; }                 // Ghi chú / người thay đổi
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Cấu hình dấu phân cách động theo tổ chức (theo bảng Mst_DynamicComma của TVAN gốc):
+// mỗi tổ chức có một bản ghi quy định kiểu dấu phân cách khi hiển thị số trên hóa đơn
+// (FlagStyle = '0' dùng dấu phẩy ','; '1' dùng dấu chấm '.').
+// Khóa nghiệp vụ: OrgId (mỗi tổ chức một cấu hình).
+public class DynamicComma : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public DynamicCommaStyle FlagStyle { get; set; } = DynamicCommaStyle.Comma;   // 0 = dấu ',', 1 = dấu '.'
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
 }
 
 // Mẫu hóa đơn (theo bảng Invoice_TempInvoice của TVAN gốc): mỗi NNT đăng ký một mẫu với dải số

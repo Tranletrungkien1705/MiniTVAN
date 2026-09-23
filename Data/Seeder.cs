@@ -221,6 +221,14 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Cấu hình dấu phân cách động (theo Mst_DynamicComma của TVAN gốc):
+        // tổ chức demo dùng dấu phẩy ',' khi hiển thị số trên hóa đơn.
+        if (!await db.DynamicCommas.AnyAsync())
+        {
+            db.DynamicCommas.Add(new DynamicComma { FlagStyle = DynamicCommaStyle.Comma, UpdatedBy = "kế toán", UpdatedAt = DateTime.UtcNow.AddDays(-2) });
+            await db.SaveChangesAsync();
+        }
+
         // Mẫu hóa đơn (theo Invoice_TempInvoice của TVAN gốc): seller có mẫu 1C26TAA dải số 1..1000,
         // đã cấp tới số 00000003 (khớp 3 HĐ demo) + nhật ký cấp số cho HĐ gần nhất.
         if (!await db.InvoiceTemplates.AnyAsync())

@@ -58,6 +58,8 @@ public interface ITvanService
     Task<List<IssueLog>> IssueLogsAsync(int? invoiceId);
     Task<SystemSetting> GetSettingAsync();
     Task<(bool ok, string msg)> SetSign60DayAsync(Sign60DayFlag flag, string? note);
+    Task<DynamicComma> GetDynamicCommaAsync();
+    Task<(bool ok, string msg)> SetDynamicCommaAsync(DynamicCommaStyle flagStyle, string? by);
     Task<List<InvoiceTemplate>> TemplatesAsync(int? nntId);
     Task<(bool ok, string msg)> IssueTemplateAsync(int templateId, DateTime effDateStart, string? remark);
     Task<(bool ok, string msg)> InactivateTemplateAsync(int templateId, string? remark);
@@ -1141,6 +1143,33 @@ public class TvanService(AppDbContext db) : ITvanService
         return (true, flag == Sign60DayFlag.Uncheck
             ? "Đã bỏ kiểm tra ký quá 60 ngày."
             : "Đã bật kiểm tra ký quá 60 ngày.");
+    }
+
+    // Cấu hình dấu phân cách động (theo Mst_DynamicComma của TVAN gốc):
+    // mỗi tổ chức có một bản ghi; mặc định dùng dấu phẩy ',' (Comma).
+    public async Task<DynamicComma> GetDynamicCommaAsync()
+    {
+        var c = await db.DynamicCommas.FirstOrDefaultAsync();
+        if (c == null)
+        {
+            c = new DynamicComma { FlagStyle = DynamicCommaStyle.Comma };
+            db.DynamicCommas.Add(c); await db.SaveChangesAsync();
+        }
+        return c;
+    }
+
+    // Cập nhật kiểu dấu phân cách động (theo Mst_DynamicComma_Update của TVAN gốc:
+    // FlagStyle = '0' dùng dấu phẩy ','; '1' dùng dấu chấm '.').
+    public async Task<(bool ok, string msg)> SetDynamicCommaAsync(DynamicCommaStyle flagStyle, string? by)
+    {
+        var c = await GetDynamicCommaAsync();
+        c.FlagStyle = flagStyle;
+        c.UpdatedAt = DateTime.UtcNow;
+        c.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, flagStyle == DynamicCommaStyle.Dot
+            ? "Đã đặt dấu phân cách động là dấu chấm '.'."
+            : "Đã đặt dấu phân cách động là dấu phẩy ','.");
     }
 
     // Mẫu hóa đơn (theo bảng Invoice_TempInvoice của TVAN gốc): danh sách mẫu theo NNT.

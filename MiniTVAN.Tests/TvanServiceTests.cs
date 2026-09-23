@@ -3307,4 +3307,41 @@ public class TvanServiceTests
             Assert.Empty(await svc.TaxOfficesAsync());
         }
     }
+
+    [Fact]
+    public async Task DynamicComma_Default_IsComma()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var c = await svc.GetDynamicCommaAsync();
+            Assert.Equal(DynamicCommaStyle.Comma, c.FlagStyle);
+        }
+    }
+
+    [Fact]
+    public async Task SetDynamicComma_UpdatesStyle()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.SetDynamicCommaAsync(DynamicCommaStyle.Dot, "kế toán");
+            Assert.True(ok);
+            Assert.Contains("dấu chấm", msg);
+            var c = await svc.GetDynamicCommaAsync();
+            Assert.Equal(DynamicCommaStyle.Dot, c.FlagStyle);
+            Assert.Equal("kế toán", c.UpdatedBy);
+        }
+    }
+
+    [Fact]
+    public async Task SetDynamicComma_ReusesSingleRecord()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SetDynamicCommaAsync(DynamicCommaStyle.Dot, "a");
+            await svc.SetDynamicCommaAsync(DynamicCommaStyle.Comma, "b");
+            // Mỗi tổ chức chỉ có một bản ghi cấu hình dấu phân cách.
+            Assert.Single(await db.DynamicCommas.ToListAsync());
+            Assert.Equal(DynamicCommaStyle.Comma, (await svc.GetDynamicCommaAsync()).FlagStyle);
+        }
+    }
 }

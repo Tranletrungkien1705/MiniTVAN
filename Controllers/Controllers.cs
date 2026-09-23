@@ -621,6 +621,21 @@ public class SettingController(ITvanService svc) : Controller
     }
 }
 
+// Cấu hình dấu phân cách động (theo Mst_DynamicComma của TVAN gốc):
+// mỗi tổ chức chọn kiểu dấu phân cách khi hiển thị số trên hóa đơn (dấu phẩy ',' hoặc dấu chấm '.').
+public class DynamicCommaController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.GetDynamicCommaAsync());
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(DynamicCommaStyle flagStyle, string? by)
+    {
+        var (ok, msg) = await svc.SetDynamicCommaAsync(flagStyle, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Trường tùy chỉnh hóa đơn (theo Invoice_CustomField / Invoice_DtlCustomField của TVAN gốc):
 // mỗi tổ chức tự định nghĩa các trường tùy chỉnh trên hóa đơn và trên danh sách hàng hóa.
 public class CustomFieldController(ITvanService svc) : Controller

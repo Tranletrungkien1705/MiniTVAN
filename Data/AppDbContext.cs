@@ -33,6 +33,7 @@ public class AppDbContext : DbContext
     public DbSet<BulkApproveLog> BulkApproveLogs => Set<BulkApproveLog>();
     public DbSet<IssueLog> IssueLogs => Set<IssueLog>();
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
+    public DbSet<DynamicComma> DynamicCommas => Set<DynamicComma>();
     public DbSet<InvoiceTemplate> InvoiceTemplates => Set<InvoiceTemplate>();
     public DbSet<InvoiceNoAllocLog> InvoiceNoAllocLogs => Set<InvoiceNoAllocLog>();
     public DbSet<TctReceiveLog> TctReceiveLogs => Set<TctReceiveLog>();
@@ -202,6 +203,11 @@ public class AppDbContext : DbContext
         b.Entity<SystemSetting>(e =>
         {
             e.HasIndex(x => x.OrgId).IsUnique();   // mỗi tổ chức một cấu hình
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<DynamicComma>(e =>
+        {
+            e.HasIndex(x => x.OrgId).IsUnique();   // mỗi tổ chức một cấu hình dấu phân cách
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<InvoiceTemplate>(e =>

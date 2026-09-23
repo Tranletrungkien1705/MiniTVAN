@@ -370,6 +370,20 @@ app.MapPost("/api/settings/sign60day", async (Sign60DayDto dto, ITvanService svc
     return ok ? Results.Ok(new { ok, msg }) : Results.BadRequest(new { ok, error = msg });
 });
 
+// Cấu hình dấu phân cách động theo tổ chức (theo Mst_DynamicComma của TVAN gốc).
+app.MapGet("/api/settings/dynamic-comma", async (ITvanService svc) =>
+{
+    var c = await svc.GetDynamicCommaAsync();
+    return Results.Ok(new { flagStyle = (int)c.FlagStyle, style = c.FlagStyle.ToString(), c.UpdatedAt, c.UpdatedBy });
+});
+
+// Cập nhật kiểu dấu phân cách động (theo Mst_DynamicComma_Update của TVAN gốc).
+app.MapPost("/api/settings/dynamic-comma", async (DynamicCommaDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.SetDynamicCommaAsync(dto.FlagStyle, dto.By);
+    return ok ? Results.Ok(new { ok, msg }) : Results.BadRequest(new { ok, error = msg });
+});
+
 // Danh mục mẫu hóa đơn (theo Invoice_TempInvoice của TVAN gốc): dải số được cấp phát theo NNT.
 app.MapGet("/api/templates", async (int? nntId, ITvanService svc) =>
 {
@@ -972,6 +986,7 @@ record UnapproveDto(string? Note, string? By);
 record BulkApproveDto(List<int>? Ids, string? Note, string? By);
 record IssueDto(string? EmailSend, string? Note, string? By);
 record Sign60DayDto(Sign60DayFlag Flag, string? Note);
+record DynamicCommaDto(DynamicCommaStyle FlagStyle, string? By);
 record AllocateNoDto(DateTime? InvoiceDate, string? By);
 record AllocateApproveIssueDto(DateTime? InvoiceDate, string? FilePath, string? PdfFilePath, string? EmailSend, string? Note, string? By);
 record IssueTemplateDto(DateTime? EffDateStart, string? Remark);
