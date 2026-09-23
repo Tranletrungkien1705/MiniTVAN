@@ -472,6 +472,21 @@ app.MapPost("/api/templates/{id:int}/bank", async (int id, TemplateBankDto dto, 
     return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
 });
 
+// Tạo mới/cập nhật mẫu hóa đơn (theo Invoice_TempInvoice_Save của TVAN gốc):
+// lưu lần đầu = tạo mẫu mới ở trạng thái chờ (PENDING), lưu lại cùng mã = cập nhật.
+app.MapPost("/api/templates", async (SaveTemplateDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveTemplateAsync(dto.Id, dto.TInvoiceCode ?? "", dto.NntId, dto.TInvoiceName ?? "", dto.FormNo ?? "", dto.Sign ?? "", dto.TTType, dto.Remark, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa mẫu hóa đơn đang chờ chưa dùng số (theo Invoice_TempInvoice_Save với FlagIsDelete của TVAN gốc).
+app.MapDelete("/api/templates/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteTemplateAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 // Cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc): PENDING + chưa có số → cấp số kế tiếp từ mẫu.
 app.MapPost("/api/invoices/{id:int}/allocate-no", async (int id, AllocateNoDto dto, ITvanService svc) =>
 {
@@ -1024,6 +1039,7 @@ record CreateRecordDto(RecordType Type, string? FileName, string? FileSpec, stri
 record CustomFieldDto(string? Code, string? Name, DBPhysicalType Type, bool Active, string? By);
 record TemplateContactDto(string? NntName, string? NntAddress, string? NntPhone, string? NntEmail, string? NntWebsite, bool FlagStyleComma, string? By);
 record TemplateBankDto(string? NntAccNo, string? NntBankName, string? By);
+record SaveTemplateDto(int? Id, string? TInvoiceCode, int NntId, string? TInvoiceName, string? FormNo, string? Sign, InvoiceNoRule TTType, string? Remark, string? By);
 record TempGroupFieldDto(string? FieldName, string? TcfType);
 record TempGroupDto(int? Id, string? Code, string? Mst, VATType VatType, string? Name, string? Body, string? Thumbnail, SpecPrdType SpecPrdType, bool Active, List<TempGroupFieldDto>? Fields, string? By);
 record MessageTemplateDto(string? Code, string? Name, MessageTypeCode Type, string? Content, string? FileName, string? FileSpec, string? By);

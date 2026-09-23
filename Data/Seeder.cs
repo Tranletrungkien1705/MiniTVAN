@@ -394,6 +394,24 @@ public static class Seeder
             }
         }
 
+        // Tạo mẫu hóa đơn mới (theo Invoice_TempInvoice_Save của TVAN gốc):
+        // seller có mẫu 1C26TAE vừa được tạo ở trạng thái nháp (PENDING) với dải số rỗng chờ cấp phát.
+        if (!await db.InvoiceTemplates.AnyAsync(t => t.FormNo == "1C26TAE"))
+        {
+            var seller = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == "0101243150");
+            if (seller != null)
+            {
+                db.InvoiceTemplates.Add(new InvoiceTemplate
+                {
+                    NntId = seller.Id, TInvoiceCode = "TINV-1C26TAE", TInvoiceName = "Hóa đơn GTGT 1C26TAE",
+                    FormNo = "1C26TAE", Sign = "K26TAE", TTType = InvoiceNoRule.TT78,
+                    EffDateStart = DateTime.Today, StartInvoiceNo = 0, EndInvoiceNo = 0,
+                    QtyUsed = 0, TInvoiceStatus = TemplateStatus.Draft, FlagActive = true
+                });
+                await db.SaveChangesAsync();
+            }
+        }
+
         // Trường tùy chỉnh hóa đơn (theo Invoice_CustomField / Invoice_DtlCustomField của TVAN gốc):
         // tổ chức demo định nghĩa 2 trường trên hóa đơn + 1 trường trên danh sách hàng hóa.
         if (!await db.InvoiceCustomFields.AnyAsync())

@@ -69,6 +69,8 @@ public interface ITvanService
     Task<List<TemplateRangeLog>> TemplateRangeLogsAsync(int? templateId);
     Task<(bool ok, string msg)> UpdateTemplateContactAsync(int templateId, string? nntName, string? nntAddress, string? nntPhone, string? nntEmail, string? nntWebsite, bool flagStyleComma, string? by);
     Task<(bool ok, string msg)> UpdateTemplateBankAsync(int templateId, string? nntAccNo, string? nntBankName, string? by);
+    Task<(bool ok, string msg, int id)> SaveTemplateAsync(int? id, string tInvoiceCode, int nntId, string tInvoiceName, string formNo, string sign, InvoiceNoRule ttType, string? remark, string? by);
+    Task<(bool ok, string msg)> DeleteTemplateAsync(int templateId);
     Task<(bool ok, string msg, string? invoiceNo)> AllocateInvoiceNoAsync(int invoiceId, DateTime invoiceDate, string? by);
     Task<(bool ok, string msg, string? invoiceNo)> AllocateApproveIssueAsync(int invoiceId, DateTime invoiceDate, string? filePath, string? pdfFilePath, string? emailSend, string? note, string? by);
     Task<List<InvoiceNoAllocLog>> AllocLogsAsync(int? invoiceId);
@@ -1395,6 +1397,87 @@ public class TvanService(AppDbContext db) : ITvanService
         });
         await db.SaveChangesAsync();
         return (true, $"Đã cập nhật số tài khoản/ngân hàng mẫu {tpl.FormNo} ({tpl.TInvoiceCode}).");
+    }
+
+    // Tạo mới / cập nhật mẫu hóa đơn (theo Invoice_TempInvoice_Save của TVAN gốc):
+    // lưu lần đầu (id rỗng) = tạo mẫu mới ở trạng thái chờ (PENDING), lưu lại cùng mã = cập nhật.
+    // Ràng buộc theo TVAN gốc:
+    //  - Mã mẫu (TInvoiceCode) không được rỗng;
+    //  - Nếu mẫu đã tồn tại thì phải đang ở trạng thái chờ (PENDING) mới được sửa;
+    //  - Mẫu số (FormNo) và ký hiệu (Sign) không được rỗng;
+    //  - NNT (MST) phải tồn tại.
+    // Mẫu mới tạo có dải số rỗng (StartInvoiceNo = EndInvoiceNo = 0) chờ cấp phát.
+    public async Task<(bool ok, string msg, int id)> SaveTemplateAsync(int? id, string tInvoiceCode, int nntId, string tInvoiceName, string formNo, string sign, InvoiceNoRule ttType, string? remark, string? by)
+    {
+        if (string.IsNullOrWhiteSpace(tInvoiceCode)) return (false, "Mã mẫu hóa đơn không được để trống.", 0);
+        if (string.IsNullOrWhiteSpace(formNo)) return (false, "Mẫu số không được để trống.", 0);
+        if (string.IsNullOrWhiteSpace(sign)) return (false, "Ký hiệu hóa đơn không được để trống.", 0);
+
+        var nnt = await db.Nnts.FirstOrDefaultAsync(n => n.Id == nntId);
+        if (nnt == null) return (false, "Không tìm thấy người nộp thuế.", 0);
+
+        var code = tInvoiceCode.Trim();
+        InvoiceTemplate? tpl = null;
+        if (id.HasValue && id.Value > 0) tpl = await db.InvoiceTemplates.FirstOrDefaultAsync(t => t.Id == id.Value);
+        tpl ??= await db.InvoiceTemplates.FirstOrDefaultAsync(t => t.TInvoiceCode == code);
+
+        if (tpl != null)
+        {
+            // Đã tồn tại → chỉ sửa được mẫu đang ở trạng thái chờ (PENDING).
+            if (tpl.TInvoiceStatus != TemplateStatus.Draft)
+                return (false, "Chỉ sửa được mẫu đang ở trạng thái chờ (PENDING).", tpl.Id);
+
+            tpl.TInvoiceCode = code;
+            tpl.NntId = nntId;
+            tpl.TInvoiceName = string.IsNullOrWhiteSpace(tInvoiceName) ? code : tInvoiceName.Trim();
+            tpl.FormNo = formNo.Trim();
+            tpl.Sign = sign.Trim();
+            tpl.TTType = ttType;
+            db.Messages.Add(new TranMessage
+            {
+                NntId = nntId, Type = MsgType.RegisterNnt, Dir = MsgDir.Out, Code = "300",
+                Text = $"Cập nhật mẫu hóa đơn {tpl.FormNo} ({tpl.TInvoiceCode}){(string.IsNullOrWhiteSpace(remark) ? "" : ": " + remark.Trim())}"
+            });
+            await db.SaveChangesAsync();
+            return (true, $"Đã cập nhật mẫu {tpl.FormNo} ({tpl.TInvoiceCode}).", tpl.Id);
+        }
+
+        // Chưa tồn tại → tạo mẫu mới ở trạng thái chờ (PENDING), dải số rỗng chờ cấp phát.
+        var created = new InvoiceTemplate
+        {
+            NntId = nntId, TInvoiceCode = code,
+            TInvoiceName = string.IsNullOrWhiteSpace(tInvoiceName) ? code : tInvoiceName.Trim(),
+            FormNo = formNo.Trim(), Sign = sign.Trim(), TTType = ttType,
+            EffDateStart = DateTime.Today, StartInvoiceNo = 0, EndInvoiceNo = 0, QtyUsed = 0,
+            TInvoiceStatus = TemplateStatus.Draft, FlagActive = true
+        };
+        db.InvoiceTemplates.Add(created);
+        db.Messages.Add(new TranMessage
+        {
+            NntId = nntId, Type = MsgType.RegisterNnt, Dir = MsgDir.Out, Code = "300",
+            Text = $"Tạo mẫu hóa đơn {created.FormNo} ({created.TInvoiceCode}){(string.IsNullOrWhiteSpace(remark) ? "" : ": " + remark.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã tạo mẫu {created.FormNo} ({created.TInvoiceCode}).", created.Id);
+    }
+
+    // Xóa mẫu hóa đơn (theo Invoice_TempInvoice_Save với FlagIsDelete của TVAN gốc):
+    // chỉ xóa được mẫu đang ở trạng thái chờ (PENDING) và chưa dùng số nào (QtyUsed = 0).
+    public async Task<(bool ok, string msg)> DeleteTemplateAsync(int templateId)
+    {
+        var tpl = await db.InvoiceTemplates.FirstOrDefaultAsync(t => t.Id == templateId);
+        if (tpl == null) return (false, "Không tìm thấy mẫu hóa đơn.");
+        if (tpl.TInvoiceStatus != TemplateStatus.Draft) return (false, "Chỉ xóa được mẫu đang ở trạng thái chờ (PENDING).");
+        if (tpl.QtyUsed > 0) return (false, "Mẫu đã dùng số hóa đơn, không thể xóa.");
+
+        db.InvoiceTemplates.Remove(tpl);
+        db.Messages.Add(new TranMessage
+        {
+            NntId = tpl.NntId, Type = MsgType.RegisterNnt, Dir = MsgDir.Out, Code = "300",
+            Text = $"Xóa mẫu hóa đơn {tpl.FormNo} ({tpl.TInvoiceCode})"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa mẫu {tpl.FormNo} ({tpl.TInvoiceCode}).");
     }
 
     // Cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc):

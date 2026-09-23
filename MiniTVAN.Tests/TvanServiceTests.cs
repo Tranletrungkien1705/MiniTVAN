@@ -3420,4 +3420,138 @@ public class TvanServiceTests
             Assert.Empty(await svc.SortColumnInvoicesAsync(null));
         }
     }
+
+    // ===== Tạo mới / cập nhật / xóa mẫu hóa đơn (theo Invoice_TempInvoice_Save của TVAN gốc) =====
+
+    [Fact]
+    public async Task SaveTemplate_Create_NewDraftWithEmptyRange()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var (ok, msg, id) = await svc.SaveTemplateAsync(null, "TINV-1C26TAE", nntId, "Hóa đơn GTGT 1C26TAE", "1C26TAE", "K26TAE", InvoiceNoRule.TT78, "tạo mẫu", "kế toán");
+            Assert.True(ok);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == id);
+            Assert.Equal("TINV-1C26TAE", tpl.TInvoiceCode);
+            Assert.Equal("1C26TAE", tpl.FormNo);
+            Assert.Equal("K26TAE", tpl.Sign);
+            Assert.Equal(InvoiceNoRule.TT78, tpl.TTType);
+            Assert.Equal(TemplateStatus.Draft, tpl.TInvoiceStatus);
+            Assert.True(tpl.FlagActive);
+            Assert.Equal(0, tpl.StartInvoiceNo);   // dải số rỗng chờ cấp phát
+            Assert.Equal(0, tpl.EndInvoiceNo);
+        }
+    }
+
+    [Fact]
+    public async Task SaveTemplate_SameCode_UpdatesDraft()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var (_, _, id) = await svc.SaveTemplateAsync(null, "TINV-1C26TAE", nntId, "Mẫu A", "1C26TAE", "K26TAE", InvoiceNoRule.TT78, null, null);
+            // Lưu lại cùng mã = cập nhật (không tạo mới).
+            var (ok, _, id2) = await svc.SaveTemplateAsync(null, "TINV-1C26TAE", nntId, "Mẫu B", "1C26TAF", "K26TAF", InvoiceNoRule.TT68, null, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            Assert.Equal(1, await db.InvoiceTemplates.CountAsync());
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == id);
+            Assert.Equal("Mẫu B", tpl.TInvoiceName);
+            Assert.Equal("1C26TAF", tpl.FormNo);
+            Assert.Equal(InvoiceNoRule.TT68, tpl.TTType);
+        }
+    }
+
+    [Fact]
+    public async Task SaveTemplate_UpdateNonDraft_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddTemplate(db, nntId);   // đã Issued
+            var (ok, msg, _) = await svc.SaveTemplateAsync(tplId, "TINV-1C26TAA", nntId, "Mẫu sửa", "1C26TAA", "K26TAA", InvoiceNoRule.TT78, null, null);
+            Assert.False(ok);
+            Assert.Contains("trạng thái chờ", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SaveTemplate_MissingCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var (ok, msg, _) = await svc.SaveTemplateAsync(null, "  ", nntId, "Mẫu", "1C26TAE", "K26TAE", InvoiceNoRule.TT78, null, null);
+            Assert.False(ok);
+            Assert.Contains("Mã mẫu", msg);
+            Assert.Equal(0, await db.InvoiceTemplates.CountAsync());
+        }
+    }
+
+    [Fact]
+    public async Task SaveTemplate_MissingFormNo_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var (ok, msg, _) = await svc.SaveTemplateAsync(null, "TINV-1C26TAE", nntId, "Mẫu", "  ", "K26TAE", InvoiceNoRule.TT78, null, null);
+            Assert.False(ok);
+            Assert.Contains("Mẫu số", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SaveTemplate_UnknownNnt_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveTemplateAsync(null, "TINV-1C26TAE", 9999, "Mẫu", "1C26TAE", "K26TAE", InvoiceNoRule.TT78, null, null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy người nộp thuế", msg);
+        }
+    }
+
+    [Fact]
+    public async Task DeleteTemplate_DraftUnused_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var (_, _, id) = await svc.SaveTemplateAsync(null, "TINV-1C26TAE", nntId, "Mẫu", "1C26TAE", "K26TAE", InvoiceNoRule.TT78, null, null);
+            var (ok, msg) = await svc.DeleteTemplateAsync(id);
+            Assert.True(ok);
+            Assert.Equal(0, await db.InvoiceTemplates.CountAsync());
+            var (ok2, msg2) = await svc.DeleteTemplateAsync(id);
+            Assert.False(ok2);
+            Assert.Contains("Không tìm thấy", msg2);
+        }
+    }
+
+    [Fact]
+    public async Task DeleteTemplate_NonDraft_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddTemplate(db, nntId);   // đã Issued
+            var (ok, msg) = await svc.DeleteTemplateAsync(tplId);
+            Assert.False(ok);
+            Assert.Contains("trạng thái chờ", msg);
+        }
+    }
+
+    [Fact]
+    public async Task DeleteTemplate_UsedRange_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddDraftTemplate(db, nntId);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            tpl.QtyUsed = 5; await db.SaveChangesAsync();
+            var (ok, msg) = await svc.DeleteTemplateAsync(tplId);
+            Assert.False(ok);
+            Assert.Contains("đã dùng số", msg);
+        }
+    }
 }

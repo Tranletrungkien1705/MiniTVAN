@@ -605,6 +605,25 @@ public class InvoiceTemplateController(ITvanService svc) : Controller
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Index));
     }
+
+    // Tạo mới/cập nhật mẫu hóa đơn (theo Invoice_TempInvoice_Save của TVAN gốc):
+    // lưu lần đầu = tạo mẫu mới ở trạng thái chờ (PENDING), lưu lại cùng mã = cập nhật.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string tInvoiceCode, int nntId, string? tInvoiceName, string formNo, string sign, InvoiceNoRule ttType, string? remark, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveTemplateAsync(id, tInvoiceCode, nntId, tInvoiceName ?? "", formNo, sign, ttType, remark, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Xóa mẫu hóa đơn đang chờ chưa dùng số (theo Invoice_TempInvoice_Save với FlagIsDelete của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteTemplateAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
 }
 
 // Cấu hình hệ thống: bật/bỏ kiểm tra ký quá 60 ngày (theo Invoice_Invoice_Support_Sign60Day của TVAN gốc).

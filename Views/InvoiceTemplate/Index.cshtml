@@ -9,7 +9,11 @@
     <div class="col-lg-8"><div class="card"><div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h6 class="fw-bold mb-0">Mẫu hóa đơn & dải số được cấp phát</h6>
-            @if (filterNnt.HasValue) { <a class="small" href="/InvoiceTemplate">Bỏ lọc</a> }
+            <div>
+                @if (filterNnt.HasValue) { <a class="small me-2" href="/InvoiceTemplate">Bỏ lọc</a> }
+                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#saveModal"
+                        data-id="" data-code="" data-name="" data-form="" data-sign="" data-tttype="TT78" data-nnt=""><i class="bi bi-plus-lg me-1"></i>Tạo mẫu hóa đơn</button>
+            </div>
         </div>
         <table class="table table-hover align-middle mb-0">
             <thead><tr><th>Mẫu</th><th>NNT</th><th>Cách đánh số</th><th class="text-end">Dải số</th><th class="text-end">Đã dùng</th><th class="text-end">Còn lại</th><th></th></tr></thead>
@@ -59,6 +63,10 @@
                                 data-accno="@t.NNTAccNo" data-bankname="@t.NNTBankName"><i class="bi bi-bank me-1"></i>Ngân hàng</button>
                         @if (t.TInvoiceStatus == TemplateStatus.Draft && t.FlagActive)
                         {
+                            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#saveModal"
+                                    data-id="@t.Id" data-code="@t.TInvoiceCode" data-name="@t.TInvoiceName" data-form="@t.FormNo" data-sign="@t.Sign" data-tttype="@t.TTType" data-nnt="@t.NntId"><i class="bi bi-pencil me-1"></i>Sửa</button>
+                            <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal"
+                                    data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode"><i class="bi bi-trash me-1"></i>Xóa</button>
                             <button class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#issueModal"
                                     data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode"><i class="bi bi-send-check me-1"></i>Phát hành</button>
                             <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#sendTctModal"
@@ -347,7 +355,55 @@
     </form>
 </div></div></div>
 
-@section Scripts {
+<!-- Tạo mới / cập nhật mẫu hóa đơn (theo Invoice_TempInvoice_Save của TVAN gốc) -->
+<div class="modal fade" id="saveModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <form method="post" action="/InvoiceTemplate/Save">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="id" id="saveId" />
+        <div class="modal-header"><h6 class="modal-title">Mẫu hóa đơn</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <p class="small text-muted mb-3">Lưu lần đầu = tạo mẫu mới ở trạng thái <b>Nháp</b> (PENDING) với dải số rỗng chờ cấp phát. Lưu lại cùng mã = cập nhật (chỉ sửa được mẫu đang ở trạng thái nháp).</p>
+            <div class="mb-2"><label class="form-label small mb-1">Người nộp thuế</label>
+                <select name="nntId" id="saveNnt" class="form-select" required>
+                    @foreach (var n in nnts) { <option value="@n.Id">@n.Name (@n.Mst)</option> }
+                </select></div>
+            <div class="mb-2"><label class="form-label small mb-1">Mã mẫu hóa đơn</label>
+                <input type="text" name="tInvoiceCode" id="saveCode" class="form-control" placeholder="VD: TINV-1C26TAE" required /></div>
+            <div class="mb-2"><label class="form-label small mb-1">Tên mẫu hóa đơn</label>
+                <input type="text" name="tInvoiceName" id="saveName" class="form-control" placeholder="VD: Hóa đơn GTGT 1C26TAE" /></div>
+            <div class="row g-2">
+                <div class="col-6 mb-2"><label class="form-label small mb-1">Mẫu số</label>
+                    <input type="text" name="formNo" id="saveForm" class="form-control" placeholder="VD: 1C26TAE" required /></div>
+                <div class="col-6 mb-2"><label class="form-label small mb-1">Ký hiệu</label>
+                    <input type="text" name="sign" id="saveSign" class="form-control" placeholder="VD: K26TAE" required /></div>
+            </div>
+            <div class="mb-2"><label class="form-label small mb-1">Cách đánh số</label>
+                <select name="ttType" id="saveTtType" class="form-select">
+                    <option value="TT78">TT78 (7 số, reset theo năm)</option>
+                    <option value="TT68">TT68 (8 số liên tục)</option>
+                </select></div>
+            <div class="mb-2"><label class="form-label small mb-1">Ghi chú / lý do</label>
+                <input type="text" name="remark" class="form-control" placeholder="VD: Tạo mẫu theo đề nghị NNT" /></div>
+            <div class="mb-2"><label class="form-label small mb-1">Người thực hiện</label>
+                <input type="text" name="by" class="form-control" placeholder="VD: kế toán" /></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-primary">Lưu mẫu</button></div>
+    </form>
+</div></div></div>
+
+<!-- Xóa mẫu hóa đơn đang chờ chưa dùng số (theo Invoice_TempInvoice_Save với FlagIsDelete của TVAN gốc) -->
+<div class="modal fade" id="deleteModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <form method="post" action="/InvoiceTemplate/Delete">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="id" id="deleteId" />
+        <div class="modal-header"><h6 class="modal-title">Xóa mẫu hóa đơn</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <p class="small text-muted mb-3">Mẫu <b id="deleteLabel"></b> sẽ bị xóa. Chỉ xóa được mẫu đang ở trạng thái nháp (PENDING) và chưa dùng số hóa đơn nào.</p>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Đóng</button><button type="submit" class="btn btn-danger">Xóa mẫu</button></div>
+    </form>
+</div></div></div>
+
 <script>
     document.getElementById('issueModal').addEventListener('show.bs.modal', e => {
         const b = e.relatedTarget;
@@ -405,6 +461,21 @@
         document.getElementById('bankLabel').textContent = b.dataset.form + ' (' + b.dataset.code + ')';
         document.getElementById('bankAccNo').value = b.dataset.accno || '';
         document.getElementById('bankBankName').value = b.dataset.bankname || '';
+    });
+    document.getElementById('saveModal').addEventListener('show.bs.modal', e => {
+        const b = e.relatedTarget;
+        document.getElementById('saveId').value = b.dataset.id || '';
+        document.getElementById('saveCode').value = b.dataset.code || '';
+        document.getElementById('saveName').value = b.dataset.name || '';
+        document.getElementById('saveForm').value = b.dataset.form || '';
+        document.getElementById('saveSign').value = b.dataset.sign || '';
+        document.getElementById('saveTtType').value = b.dataset.tttype || 'TT78';
+        if (b.dataset.nnt) document.getElementById('saveNnt').value = b.dataset.nnt;
+    });
+    document.getElementById('deleteModal').addEventListener('show.bs.modal', e => {
+        const b = e.relatedTarget;
+        document.getElementById('deleteId').value = b.dataset.id;
+        document.getElementById('deleteLabel').textContent = b.dataset.form + ' (' + b.dataset.code + ')';
     });
 </script>
 }
