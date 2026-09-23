@@ -1199,6 +1199,51 @@ public static class Seeder
             db.InvoiceImportBatches.Add(batch);
             await db.SaveChangesAsync();
         }
+
+        // Đơn hàng license + hoa hồng đại lý (theo Inos_LicOrder / RptSv_InosLicOrder_Commission của TVAN gốc — màn Mst_Order):
+        // minh họa 2 đơn hàng (1 đã duyệt kèm hoa hồng đã duyệt, 1 chờ duyệt kèm hoa hồng chờ duyệt).
+        if (!await db.LicOrders.AnyAsync())
+        {
+            var order1 = new LicOrder
+            {
+                OrderNo = "ORD-2026-001", OrgCode = "ORG001", OrgName = "Công ty CP Ô tô Đông Đô", Mst = "0101243150",
+                DlCode = "DL001", DiscountCode = "SALE10", Price = 12_000_000, TotalCost = 10_800_000,
+                PaymentCode = "PAY-001", PaymentStatusDesc = "Đã thanh toán", Status = LicOrderStatus.Approved,
+                CreateDTime = DateTime.UtcNow.AddDays(-20), ApproveDTime = DateTime.UtcNow.AddDays(-18), CreateUserId = "admin",
+                Remark = "Đơn đăng ký gói license 1 năm"
+            };
+            order1.Details.Add(new LicOrderDetail { PackageId = "PKG-BASIC", PackageName = "Gói cơ bản", OrderType = LicOrderType.RegisterLic, Price = 12_000_000, Qty = 1 });
+            db.LicOrders.Add(order1);
+
+            var order2 = new LicOrder
+            {
+                OrderNo = "ORD-2026-002", OrgCode = "ORG002", OrgName = "Công ty TNHH Miền Nam", Mst = "0312345678",
+                DlCode = "DL002", Price = 24_000_000, TotalCost = 24_000_000,
+                PaymentCode = "PAY-002", PaymentStatusDesc = "Chưa thanh toán", Status = LicOrderStatus.Pending,
+                CreateDTime = DateTime.UtcNow.AddDays(-3), CreateUserId = "admin",
+                Remark = "Đơn đăng ký gói license 2 năm"
+            };
+            order2.Details.Add(new LicOrderDetail { PackageId = "PKG-PRO", PackageName = "Gói nâng cao", OrderType = LicOrderType.RegisterLic, Price = 24_000_000, Qty = 1 });
+            db.LicOrders.Add(order2);
+            await db.SaveChangesAsync();
+
+            db.LicOrderCommissions.Add(new LicOrderCommission
+            {
+                OrderNo = "ORD-2026-001", Mst = "0101243150", DlCode = "DL001",
+                Presenter1 = "Nguyễn Văn A", Telesale = "Trần Thị B", Consultants = "Lê Văn C", Implementer = "Phạm Văn D",
+                CommissionPresenter1 = 1_000_000, CommissionTelesale = 500_000, CommissionConsultants = 300_000, CommissionImplementer = 200_000,
+                CommissionStatus = CommissionStatus.Approve, ApprDTimeUTC = DateTime.UtcNow.AddDays(-17), ApprBy = "admin",
+                Remark = "Hoa hồng đã duyệt"
+            });
+            db.LicOrderCommissions.Add(new LicOrderCommission
+            {
+                OrderNo = "ORD-2026-002", Mst = "0312345678", DlCode = "DL002",
+                Presenter1 = "Hoàng Văn E", Telesale = "Vũ Thị F",
+                CommissionPresenter1 = 2_000_000, CommissionTelesale = 1_000_000,
+                CommissionStatus = CommissionStatus.Pending, Remark = "Chờ duyệt hoa hồng"
+            });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

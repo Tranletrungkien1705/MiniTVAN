@@ -323,6 +323,18 @@ public interface ITvanService
     Task<InvoiceImportBatch?> GetInvoiceImportBatchAsync(int id);
     Task<(bool ok, string msg, int id)> CreateInvoiceImportBatchAsync(string batchNo, string fileName, ImportType importType, List<InvoiceImportRow> rows, string? remark, string? by);
     Task<List<InvoiceImportRow>> InvoiceImportRowsAsync(int batchId);
+
+    // Đơn hàng license + hoa hồng đại lý (theo Inos_LicOrder / RptSv_InosLicOrder_Commission của TVAN gốc — màn Mst_Order)
+    Task<List<LicOrder>> LicOrdersAsync(string? keyword, LicOrderStatus? status, string? dlCode, string? commissionStatus);
+    Task<LicOrder?> GetLicOrderAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveLicOrderAsync(int? id, string orderNo, string orgCode, string? orgName, string? mst, string? dlCode, string? discountCode, decimal price, decimal totalCost, string? paymentCode, string? paymentStatusDesc, LicOrderStatus status, string? remark, List<LicOrderLine> lines, string? by);
+    Task<(bool ok, string msg)> ApproveLicOrderAsync(int id, string? by);
+    Task<(bool ok, string msg)> CancelLicOrderAsync(int id, string? by);
+    Task<(bool ok, string msg)> ConfirmLicOrderPaymentAsync(int id, string? by);
+    Task<List<LicOrderCommission>> LicOrderCommissionsAsync(string? keyword, CommissionStatus? status);
+    Task<LicOrderCommission?> GetLicOrderCommissionAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveLicOrderCommissionAsync(int? id, string orderNo, string? mst, string? dlCode, string? presenter1, string? presenter2, string? telesale, string? consultants, string? implementer, decimal commissionPresenter1, decimal commissionPresenter2, decimal commissionTelesale, decimal commissionConsultants, decimal commissionImplementer, string? remark, string? by);
+    Task<(bool ok, string msg, int approvedCount)> ApproveLicOrderCommissionsAsync(List<int> ids, string? by);
 }
 
 // Hồ sơ NNT đầy đủ dùng khi lưu (theo Mst_NNT_Create/Update của TVAN gốc).
@@ -347,6 +359,9 @@ public record InvoiceInputHeader(
 // Dòng chi tiết hóa đơn đầu vào dùng khi lưu (theo Invoice_InvoiceInputDtl của TVAN gốc).
 public record InvoiceInputLine(
     string? ProductName, string? UnitCode, decimal Quantity, decimal UnitPrice, decimal VatRate, string? Remark);
+
+// Dòng chi tiết đơn hàng license dùng khi lưu (theo Inos_LicOrderDetail của TVAN gốc).
+public record LicOrderLine(string PackageId, string? PackageName, LicOrderType OrderType, decimal Price, int Qty);
 
 public class TvanService(AppDbContext db) : ITvanService
 {
@@ -6139,5 +6154,247 @@ public class TvanService(AppDbContext db) : ITvanService
         db.InvoiceImportBatches.Add(batch);
         await db.SaveChangesAsync();
         return (true, $"Đã nhập lô {batchNo}: {distinct.Count} hóa đơn ({succeeded} thành công, {failed} không thành công, {skipped} bỏ qua).", batch.Id);
+    }
+// ===== Đơn hàng license + hoa hồng đại lý (theo Inos_LicOrder / RptSv_InosLicOrder_Commission của TVAN gốc — màn Mst_Order) =====
+
+    // Danh sách đơn hàng license (lọc theo từ khóa số đơn/tổ chức/MST/đại lý, trạng thái đơn hàng,
+    // mã đại lý và trạng thái hoa hồng nếu có).
+    public async Task<List<LicOrder>> LicOrdersAsync(string? keyword, LicOrderStatus? status, string? dlCode, string? commissionStatus)
+    {
+        var q = db.LicOrders.Include(o => o.Details).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(o => o.OrderNo.Contains(k) || o.OrgCode.Contains(k) || (o.OrgName != null && o.OrgName.Contains(k))
+                || (o.Mst != null && o.Mst.Contains(k)) || (o.DlCode != null && o.DlCode.Contains(k)));
+        }
+        if (status.HasValue) q = q.Where(o => o.Status == status.Value);
+        if (!string.IsNullOrWhiteSpace(dlCode)) { var d = dlCode.Trim(); q = q.Where(o => o.DlCode == d); }
+        if (!string.IsNullOrWhiteSpace(commissionStatus))
+        {
+            var cs = ParseCommissionStatus(commissionStatus);
+            if (cs.HasValue)
+            {
+                var orderNos = db.LicOrderCommissions.Where(c => c.CommissionStatus == cs.Value).Select(c => c.OrderNo);
+                q = q.Where(o => orderNos.Contains(o.OrderNo));
+            }
+        }
+        return await q.OrderByDescending(o => o.Id).ToListAsync();
+    }
+
+    public Task<LicOrder?> GetLicOrderAsync(int id) =>
+        db.LicOrders.Include(o => o.Details).FirstOrDefaultAsync(o => o.Id == id);
+
+    // Lưu (tạo mới/cập nhật) đơn hàng license (theo Inos_OrderService_CreateOrder của TVAN gốc):
+    // lưu lần đầu = tạo đơn mới ở trạng thái chờ (PENDING), lưu lại cùng số đơn = cập nhật.
+    // Ràng buộc: cần số đơn hàng + mã tổ chức; số đơn hàng chưa tồn tại trong tổ chức (khi tạo).
+    public async Task<(bool ok, string msg, int id)> SaveLicOrderAsync(int? id, string orderNo, string orgCode, string? orgName, string? mst, string? dlCode, string? discountCode, decimal price, decimal totalCost, string? paymentCode, string? paymentStatusDesc, LicOrderStatus status, string? remark, List<LicOrderLine> lines, string? by)
+    {
+        orderNo = (orderNo ?? "").Trim();
+        orgCode = (orgCode ?? "").Trim();
+        if (orderNo.Length == 0) return (false, "Cần số đơn hàng.", 0);
+        if (orgCode.Length == 0) return (false, "Cần mã tổ chức mua.", 0);
+
+        LicOrder? o;
+        if (id.HasValue && id.Value > 0)
+        {
+            o = await db.LicOrders.Include(x => x.Details).FirstOrDefaultAsync(x => x.Id == id.Value);
+            if (o == null) return (false, "Không tìm thấy đơn hàng.", 0);
+            if (o.OrderNo != orderNo && await db.LicOrders.AnyAsync(x => x.OrderNo == orderNo))
+                return (false, "Số đơn hàng đã tồn tại.", 0);
+        }
+        else
+        {
+            if (await db.LicOrders.AnyAsync(x => x.OrderNo == orderNo))
+                return (false, "Số đơn hàng đã tồn tại.", 0);
+            o = new LicOrder { OrderNo = orderNo, Status = LicOrderStatus.Pending };
+            db.LicOrders.Add(o);
+        }
+
+        o.OrderNo = orderNo;
+        o.OrgCode = orgCode;
+        o.OrgName = orgName;
+        o.Mst = mst;
+        o.DlCode = dlCode;
+        o.DiscountCode = discountCode;
+        o.Price = price;
+        o.TotalCost = totalCost;
+        o.PaymentCode = paymentCode;
+        o.PaymentStatusDesc = paymentStatusDesc;
+        o.Status = status;
+        o.Remark = remark;
+        o.UpdatedAt = DateTime.UtcNow;
+        o.UpdatedBy = by;
+
+        // Thay thế toàn bộ dòng chi tiết (như delete-then-insert của nguồn).
+        o.Details.Clear();
+        foreach (var l in lines ?? new())
+        {
+            o.Details.Add(new LicOrderDetail
+            {
+                PackageId = (l.PackageId ?? "").Trim(),
+                PackageName = l.PackageName,
+                OrderType = l.OrderType,
+                Price = l.Price,
+                Qty = l.Qty <= 0 ? 1 : l.Qty
+            });
+        }
+
+        await db.SaveChangesAsync();
+        return (true, id.HasValue && id.Value > 0 ? $"Đã cập nhật đơn hàng {orderNo}." : $"Đã tạo đơn hàng {orderNo}.", o.Id);
+    }
+
+    // Duyệt đơn hàng license (theo OrderService.ApproveOrder của TVAN gốc — Mst_OrderController.Approved):
+    // đơn hàng chuyển APPROVED, ghi thời điểm duyệt.
+    public async Task<(bool ok, string msg)> ApproveLicOrderAsync(int id, string? by)
+    {
+        var o = await db.LicOrders.FirstOrDefaultAsync(x => x.Id == id);
+        if (o == null) return (false, "Không tìm thấy đơn hàng.");
+        if (o.Status == LicOrderStatus.Approved) return (false, "Đơn hàng đã được duyệt.");
+        if (o.Status == LicOrderStatus.Cancel) return (false, "Đơn hàng đã hủy, không thể duyệt.");
+        o.Status = LicOrderStatus.Approved;
+        o.ApproveDTime = DateTime.UtcNow;
+        o.UpdatedAt = DateTime.UtcNow;
+        o.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã duyệt đơn hàng {o.OrderNo}.");
+    }
+
+    // Hủy đơn hàng license (theo OrderService.CancelOrder của TVAN gốc — Mst_OrderController.Cancel):
+    // đơn hàng chuyển CANCEL.
+    public async Task<(bool ok, string msg)> CancelLicOrderAsync(int id, string? by)
+    {
+        var o = await db.LicOrders.FirstOrDefaultAsync(x => x.Id == id);
+        if (o == null) return (false, "Không tìm thấy đơn hàng.");
+        if (o.Status == LicOrderStatus.Cancel) return (false, "Đơn hàng đã hủy.");
+        o.Status = LicOrderStatus.Cancel;
+        o.UpdatedAt = DateTime.UtcNow;
+        o.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã hủy đơn hàng {o.OrderNo}.");
+    }
+
+    // Xác nhận thanh toán đơn hàng license (theo OrderService.ConfirmOrderPayment của TVAN gốc —
+    // Mst_OrderController.ConfirmOrderPayment): đơn hàng chuyển NOTPAID → đã thanh toán (PROCESSING).
+    public async Task<(bool ok, string msg)> ConfirmLicOrderPaymentAsync(int id, string? by)
+    {
+        var o = await db.LicOrders.FirstOrDefaultAsync(x => x.Id == id);
+        if (o == null) return (false, "Không tìm thấy đơn hàng.");
+        if (o.Status == LicOrderStatus.Cancel) return (false, "Đơn hàng đã hủy, không thể xác nhận thanh toán.");
+        o.Status = LicOrderStatus.Processing;
+        o.PaymentStatusDesc = "Đã thanh toán";
+        o.UpdatedAt = DateTime.UtcNow;
+        o.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã xác nhận thanh toán đơn hàng {o.OrderNo}.");
+    }
+
+    // Danh sách hoa hồng đơn hàng (lọc theo từ khóa số đơn/MST/đại lý/người hưởng, trạng thái hoa hồng).
+    public async Task<List<LicOrderCommission>> LicOrderCommissionsAsync(string? keyword, CommissionStatus? status)
+    {
+        var q = db.LicOrderCommissions.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(c => c.OrderNo.Contains(k) || (c.Mst != null && c.Mst.Contains(k)) || (c.DlCode != null && c.DlCode.Contains(k))
+                || (c.Presenter1 != null && c.Presenter1.Contains(k)) || (c.Presenter2 != null && c.Presenter2.Contains(k))
+                || (c.Telesale != null && c.Telesale.Contains(k)) || (c.Consultants != null && c.Consultants.Contains(k))
+                || (c.Implementer != null && c.Implementer.Contains(k)));
+        }
+        if (status.HasValue) q = q.Where(c => c.CommissionStatus == status.Value);
+        return await q.OrderByDescending(c => c.Id).ToListAsync();
+    }
+
+    public Task<LicOrderCommission?> GetLicOrderCommissionAsync(int id) =>
+        db.LicOrderCommissions.FirstOrDefaultAsync(c => c.Id == id);
+
+    // Lưu (tạo mới/cập nhật) hoa hồng đơn hàng (theo RptSv_InosLicOrder_Commission_SaveX của TVAN gốc):
+    // lưu lần đầu = tạo bản ghi hoa hồng ở trạng thái chờ (PENDING), lưu lại cùng số đơn = cập nhật.
+    // Ràng buộc: cần số đơn hàng; mỗi đơn hàng chỉ có một bản ghi hoa hồng.
+    public async Task<(bool ok, string msg, int id)> SaveLicOrderCommissionAsync(int? id, string orderNo, string? mst, string? dlCode, string? presenter1, string? presenter2, string? telesale, string? consultants, string? implementer, decimal commissionPresenter1, decimal commissionPresenter2, decimal commissionTelesale, decimal commissionConsultants, decimal commissionImplementer, string? remark, string? by)
+    {
+        orderNo = (orderNo ?? "").Trim();
+        if (orderNo.Length == 0) return (false, "Cần số đơn hàng.", 0);
+
+        LicOrderCommission? c;
+        if (id.HasValue && id.Value > 0)
+        {
+            c = await db.LicOrderCommissions.FirstOrDefaultAsync(x => x.Id == id.Value);
+            if (c == null) return (false, "Không tìm thấy bản ghi hoa hồng.", 0);
+            if (c.OrderNo != orderNo && await db.LicOrderCommissions.AnyAsync(x => x.OrderNo == orderNo))
+                return (false, "Đơn hàng đã có bản ghi hoa hồng.", 0);
+        }
+        else
+        {
+            if (await db.LicOrderCommissions.AnyAsync(x => x.OrderNo == orderNo))
+                return (false, "Đơn hàng đã có bản ghi hoa hồng.", 0);
+            c = new LicOrderCommission { OrderNo = orderNo, CommissionStatus = CommissionStatus.Pending };
+            db.LicOrderCommissions.Add(c);
+        }
+
+        c.OrderNo = orderNo;
+        c.Mst = mst;
+        c.DlCode = dlCode;
+        c.Presenter1 = presenter1;
+        c.Presenter2 = presenter2;
+        c.Telesale = telesale;
+        c.Consultants = consultants;
+        c.Implementer = implementer;
+        c.CommissionPresenter1 = commissionPresenter1;
+        c.CommissionPresenter2 = commissionPresenter2;
+        c.CommissionTelesale = commissionTelesale;
+        c.CommissionConsultants = commissionConsultants;
+        c.CommissionImplementer = commissionImplementer;
+        c.Remark = remark;
+        c.UpdatedAt = DateTime.UtcNow;
+        c.UpdatedBy = by;
+
+        await db.SaveChangesAsync();
+        return (true, id.HasValue && id.Value > 0 ? $"Đã cập nhật hoa hồng đơn {orderNo}." : $"Đã tạo hoa hồng đơn {orderNo}.", c.Id);
+    }
+
+    // Duyệt hoa hồng của danh sách đơn hàng (theo RptSv_InosLicOrder_Commission_Approve của TVAN gốc —
+    // Mst_OrderController.ApprovedHH): mỗi đơn hàng phải tồn tại và đang ở trạng thái chờ (PENDING);
+    // kiểm tra toàn bộ trước khi ghi (all-or-nothing), sau đó chuyển APPROVE + ghi thời điểm/người duyệt.
+    public async Task<(bool ok, string msg, int approvedCount)> ApproveLicOrderCommissionsAsync(List<int> ids, string? by)
+    {
+        if (ids == null || ids.Count == 0) return (false, "Chưa chọn đơn hàng cần duyệt hoa hồng.", 0);
+        var list = new List<LicOrderCommission>();
+        foreach (var id in ids)
+        {
+            var c = await db.LicOrderCommissions.FirstOrDefaultAsync(x => x.Id == id);
+            if (c == null) return (false, $"Không tìm thấy bản ghi hoa hồng #{id}.", 0);
+            if (c.CommissionStatus != CommissionStatus.Pending)
+                return (false, $"Hoa hồng đơn {c.OrderNo} không ở trạng thái chờ duyệt.", 0);
+            list.Add(c);
+        }
+        var now = DateTime.UtcNow;
+        foreach (var c in list)
+        {
+            c.CommissionStatus = CommissionStatus.Approve;
+            c.ApprDTimeUTC = now;
+            c.ApprBy = by;
+            c.UpdatedAt = now;
+            c.UpdatedBy = by;
+        }
+        await db.SaveChangesAsync();
+        return (true, list.Count == 1 ? $"Đã duyệt hoa hồng đơn {list[0].OrderNo}." : $"Đã duyệt hoa hồng {list.Count} đơn hàng.", list.Count);
+    }
+
+    // Phân tích trạng thái hoa hồng từ chuỗi (PENDING/APPROVE/CANCEL/FINISH/ERROR hoặc số).
+    private static CommissionStatus? ParseCommissionStatus(string s)
+    {
+        s = (s ?? "").Trim();
+        if (s.Length == 0) return null;
+        if (int.TryParse(s, out var n) && Enum.IsDefined(typeof(CommissionStatus), n)) return (CommissionStatus)n;
+        return s.ToUpperInvariant() switch
+        {
+            "PENDING" => CommissionStatus.Pending,
+            "APPROVE" => CommissionStatus.Approve,
+            "CANCEL" => CommissionStatus.Cancel,
+            "FINISH" => CommissionStatus.Finish,
+            "ERROR" => CommissionStatus.Error,
+            _ => null
+        };
     }
 }

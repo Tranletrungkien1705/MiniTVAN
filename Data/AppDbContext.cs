@@ -92,6 +92,9 @@ public class AppDbContext : DbContext
     public DbSet<PaymentMethodMaster> PaymentMethods => Set<PaymentMethodMaster>();
     public DbSet<InvoiceImportBatch> InvoiceImportBatches => Set<InvoiceImportBatch>();
     public DbSet<InvoiceImportRow> InvoiceImportRows => Set<InvoiceImportRow>();
+    public DbSet<LicOrder> LicOrders => Set<LicOrder>();
+    public DbSet<LicOrderDetail> LicOrderDetails => Set<LicOrderDetail>();
+    public DbSet<LicOrderCommission> LicOrderCommissions => Set<LicOrderCommission>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -580,6 +583,32 @@ public class AppDbContext : DbContext
         {
             e.Property(x => x.TotalValPmt).HasPrecision(18, 2);
             e.HasIndex(x => new { x.OrgId, x.BatchId });
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<LicOrder>(e =>
+        {
+            e.Ignore(x => x.DiscountVal);
+            e.Property(x => x.Price).HasPrecision(18, 2);
+            e.Property(x => x.TotalCost).HasPrecision(18, 2);
+            e.HasIndex(x => new { x.OrgId, x.OrderNo }).IsUnique();   // mỗi tổ chức một số đơn hàng
+            e.HasMany(x => x.Details).WithOne(d => d.Order).HasForeignKey(d => d.LicOrderId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<LicOrderDetail>(e =>
+        {
+            e.Property(x => x.Price).HasPrecision(18, 2);
+            e.HasIndex(x => new { x.OrgId, x.LicOrderId });
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<LicOrderCommission>(e =>
+        {
+            e.Ignore(x => x.TotalCommission);
+            e.Property(x => x.CommissionPresenter1).HasPrecision(18, 2);
+            e.Property(x => x.CommissionPresenter2).HasPrecision(18, 2);
+            e.Property(x => x.CommissionTelesale).HasPrecision(18, 2);
+            e.Property(x => x.CommissionConsultants).HasPrecision(18, 2);
+            e.Property(x => x.CommissionImplementer).HasPrecision(18, 2);
+            e.HasIndex(x => new { x.OrgId, x.OrderNo }).IsUnique();   // mỗi đơn hàng một bản ghi hoa hồng
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

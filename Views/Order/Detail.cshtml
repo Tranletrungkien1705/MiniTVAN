@@ -1,0 +1,108 @@
+@model LicOrder
+@{
+    ViewData["Title"] = "Đơn hàng " + Model.OrderNo;
+    var comm = ViewBag.Commission as LicOrderCommission;
+}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h6 class="fw-bold mb-0"><i class="bi bi-cart-check me-1"></i>Đơn hàng @Model.OrderNo</h6>
+    <a class="btn btn-sm btn-outline-secondary" href="/Order"><i class="bi bi-arrow-left"></i> Danh sách</a>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Thông tin đơn hàng</h6>
+            <dl class="row mb-0 small">
+                <dt class="col-sm-4">Số đơn hàng</dt><dd class="col-sm-8 fw-semibold">@Model.OrderNo</dd>
+                <dt class="col-sm-4">Mã tổ chức mua</dt><dd class="col-sm-8">@Model.OrgCode</dd>
+                <dt class="col-sm-4">Tên tổ chức</dt><dd class="col-sm-8">@Model.OrgName</dd>
+                <dt class="col-sm-4">MST</dt><dd class="col-sm-8">@Model.Mst</dd>
+                <dt class="col-sm-4">Đại lý</dt><dd class="col-sm-8">@Model.DlCode</dd>
+                <dt class="col-sm-4">Mã giảm giá</dt><dd class="col-sm-8">@Model.DiscountCode</dd>
+                <dt class="col-sm-4">Giá niêm yết</dt><dd class="col-sm-8">@Ui.Money(Model.Price)</dd>
+                <dt class="col-sm-4">Giảm giá</dt><dd class="col-sm-8">@Ui.Money(Model.DiscountVal)</dd>
+                <dt class="col-sm-4">Tổng chi phí</dt><dd class="col-sm-8 fw-semibold">@Ui.Money(Model.TotalCost)</dd>
+                <dt class="col-sm-4">Mã thanh toán</dt><dd class="col-sm-8">@Model.PaymentCode</dd>
+                <dt class="col-sm-4">Trạng thái thanh toán</dt><dd class="col-sm-8">@Model.PaymentStatusDesc</dd>
+                <dt class="col-sm-4">Trạng thái đơn</dt><dd class="col-sm-8"><span class="badge bg-@Ui.LicOrder(Model.Status).css">@Ui.LicOrder(Model.Status).text</span></dd>
+                <dt class="col-sm-4">Ngày tạo</dt><dd class="col-sm-8">@Model.CreateDTime.ToString("dd/MM/yyyy HH:mm")</dd>
+                <dt class="col-sm-4">Ngày duyệt</dt><dd class="col-sm-8">@(Model.ApproveDTime?.ToString("dd/MM/yyyy HH:mm"))</dd>
+                <dt class="col-sm-4">Ghi chú</dt><dd class="col-sm-8">@Model.Remark</dd>
+            </dl>
+        </div></div>
+
+        <div class="card mt-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Dòng chi tiết (gói license)</h6>
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Mã gói</th><th>Tên gói</th><th>Loại</th><th class="text-end">Đơn giá</th><th class="text-end">SL</th></tr></thead>
+                <tbody>
+                @foreach (var d in Model.Details)
+                {
+                    <tr>
+                        <td class="fw-semibold">@d.PackageId</td>
+                        <td>@d.PackageName</td>
+                        <td>@(d.OrderType == LicOrderType.RegisterLic ? "Đăng ký license" : d.OrderType.ToString())</td>
+                        <td class="text-end">@Ui.Money(d.Price)</td>
+                        <td class="text-end">@d.Qty</td>
+                    </tr>
+                }
+                @if (Model.Details.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-3">Chưa có dòng chi tiết.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Thao tác đơn hàng</h6>
+            <div class="d-flex flex-wrap gap-2">
+                <form method="post" action="/Order/Approve">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <input name="by" class="form-control form-control-sm mb-1" placeholder="Người duyệt" />
+                    <button class="btn btn-sm btn-success w-100"><i class="bi bi-check2"></i> Duyệt đơn hàng</button>
+                </form>
+                <form method="post" action="/Order/ConfirmPayment">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <input name="by" class="form-control form-control-sm mb-1" placeholder="Người xác nhận" />
+                    <button class="btn btn-sm btn-primary w-100"><i class="bi bi-cash-coin"></i> Xác nhận thanh toán</button>
+                </form>
+                <form method="post" action="/Order/Cancel">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <input name="by" class="form-control form-control-sm mb-1" placeholder="Người hủy" />
+                    <button class="btn btn-sm btn-outline-danger w-100"><i class="bi bi-x-circle"></i> Hủy đơn hàng</button>
+                </form>
+            </div>
+        </div></div>
+
+        <div class="card mt-3"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-cash-stack me-1"></i>Hoa hồng đơn hàng</h6>
+            @if (comm != null)
+            {
+                <div class="mb-2"><span class="badge bg-@Ui.Commission(comm.CommissionStatus).css">@Ui.Commission(comm.CommissionStatus).text</span></div>
+            }
+            <form method="post" action="/Order/SaveCommission" class="row g-2">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@(comm?.Id)" />
+                <input type="hidden" name="orderNo" value="@Model.OrderNo" />
+                <input type="hidden" name="mst" value="@Model.Mst" />
+                <input type="hidden" name="dlCode" value="@Model.DlCode" />
+                <div class="col-6"><label class="form-label small mb-1">Người trình bày 1</label><input name="presenter1" value="@comm?.Presenter1" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">HH trình bày 1</label><input name="commissionPresenter1" type="number" step="1000" value="@(comm?.CommissionPresenter1 ?? 0)" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Người trình bày 2</label><input name="presenter2" value="@comm?.Presenter2" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">HH trình bày 2</label><input name="commissionPresenter2" type="number" step="1000" value="@(comm?.CommissionPresenter2 ?? 0)" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Telesale</label><input name="telesale" value="@comm?.Telesale" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">HH telesale</label><input name="commissionTelesale" type="number" step="1000" value="@(comm?.CommissionTelesale ?? 0)" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Tư vấn</label><input name="consultants" value="@comm?.Consultants" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">HH tư vấn</label><input name="commissionConsultants" type="number" step="1000" value="@(comm?.CommissionConsultants ?? 0)" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Triển khai</label><input name="implementer" value="@comm?.Implementer" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">HH triển khai</label><input name="commissionImplementer" type="number" step="1000" value="@(comm?.CommissionImplementer ?? 0)" class="form-control form-control-sm" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Ghi chú</label><input name="remark" value="@comm?.Remark" class="form-control form-control-sm" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Người lưu</label><input name="by" class="form-control form-control-sm" placeholder="admin" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu hoa hồng</button></div>
+            </form>
+        </div></div>
+    </div>
+</div>

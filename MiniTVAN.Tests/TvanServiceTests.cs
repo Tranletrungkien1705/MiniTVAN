@@ -27,6 +27,10 @@ public class TvanServiceTests
         return (nntId, invId);
     }
 
+    // Lưu hoa hồng đơn hàng với các giá trị mặc định (tránh lặp danh sách tham số dài trong test).
+    private static Task<(bool ok, string msg, int id)> SaveComm(ITvanService svc, string orderNo, int? id = null)
+        => svc.SaveLicOrderCommissionAsync(id, orderNo, null, null, null, null, null, null, null, 0, 0, 0, 0, 0, null, null);
+
     [Fact]
     public async Task Register_SetsRegistered()
     {
@@ -6005,6 +6009,153 @@ public class DocTienTests
             await svc.CreateInvoiceImportBatchAsync("IMP-B", "thang7.xlsx", ImportType.Luu, new List<InvoiceImportRow>(), null, null);
             Assert.Equal(2, (await svc.InvoiceImportBatchesAsync(null)).Count);
             Assert.Single(await svc.InvoiceImportBatchesAsync("thang6"));
+        }
+    }
+
+    // ===== Đơn hàng license + hoa hồng đại lý (theo Inos_LicOrder / RptSv_InosLicOrder_Commission của TVAN gốc) =====
+
+    [Fact]
+    public async Task LicOrder_Save_CreatesPendingOrder()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var lines = new List<LicOrderLine> { new("PKG-BASIC", "Gói cơ bản", LicOrderType.RegisterLic, 12_000_000, 1) };
+            var (ok, _, id) = await svc.SaveLicOrderAsync(null, "ORD-1", "ORG001", "Cty A", "0101243150", "DL001", "SALE10", 12_000_000, 10_800_000, "PAY-1", "Chưa thanh toán", LicOrderStatus.Pending, null, lines, "admin");
+            Assert.True(ok);
+            var o = await svc.GetLicOrderAsync(id);
+            Assert.Equal(LicOrderStatus.Pending, o!.Status);
+            Assert.Single(o.Details);
+            Assert.Equal(1_200_000, o.DiscountVal);
+        }
+    }
+
+    [Fact]
+    public async Task LicOrder_DuplicateOrderNo_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveLicOrderAsync(null, "ORD-1", "ORG001", null, null, null, null, 0, 0, null, null, LicOrderStatus.Pending, null, new(), null);
+            var (ok, msg, _) = await svc.SaveLicOrderAsync(null, "ORD-1", "ORG002", null, null, null, null, 0, 0, null, null, LicOrderStatus.Pending, null, new(), null);
+            Assert.False(ok);
+            Assert.Contains("đã tồn tại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task LicOrder_MissingOrderNo_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveLicOrderAsync(null, "", "ORG001", null, null, null, null, 0, 0, null, null, LicOrderStatus.Pending, null, new(), null);
+            Assert.False(ok);
+            Assert.Contains("số đơn hàng", msg);
+        }
+    }
+
+    [Fact]
+    public async Task LicOrder_Approve_SetsApproved()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveLicOrderAsync(null, "ORD-1", "ORG001", null, null, null, null, 0, 0, null, null, LicOrderStatus.Pending, null, new(), null);
+            var (ok, _) = await svc.ApproveLicOrderAsync(id, "admin");
+            Assert.True(ok);
+            var o = await svc.GetLicOrderAsync(id);
+            Assert.Equal(LicOrderStatus.Approved, o!.Status);
+            Assert.NotNull(o.ApproveDTime);
+        }
+    }
+
+    [Fact]
+    public async Task LicOrder_ApproveCancelled_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveLicOrderAsync(null, "ORD-1", "ORG001", null, null, null, null, 0, 0, null, null, LicOrderStatus.Pending, null, new(), null);
+            await svc.CancelLicOrderAsync(id, "admin");
+            var (ok, msg) = await svc.ApproveLicOrderAsync(id, "admin");
+            Assert.False(ok);
+            Assert.Contains("đã hủy", msg);
+        }
+    }
+
+    [Fact]
+    public async Task LicOrder_ConfirmPayment_SetsProcessing()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveLicOrderAsync(null, "ORD-1", "ORG001", null, null, null, null, 0, 0, null, null, LicOrderStatus.NotPaid, null, new(), null);
+            var (ok, _) = await svc.ConfirmLicOrderPaymentAsync(id, "admin");
+            Assert.True(ok);
+            var o = await svc.GetLicOrderAsync(id);
+            Assert.Equal(LicOrderStatus.Processing, o!.Status);
+            Assert.Equal("Đã thanh toán", o.PaymentStatusDesc);
+        }
+    }
+
+    [Fact]
+    public async Task LicOrderCommission_Save_CreatesPending()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveLicOrderCommissionAsync(null, "ORD-1", "0101243150", "DL001", "A", "B", "C", "D", "E", 1_000_000, 0, 500_000, 300_000, 200_000, null, "admin");
+            Assert.True(ok);
+            var c = await svc.GetLicOrderCommissionAsync(id);
+            Assert.Equal(CommissionStatus.Pending, c!.CommissionStatus);
+            Assert.Equal(2_000_000, c.TotalCommission);
+        }
+    }
+
+    [Fact]
+    public async Task LicOrderCommission_DuplicateOrder_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveLicOrderCommissionAsync(null, "ORD-1", null, null, null, null, null, null, null, 0, 0, 0, 0, 0, null, null);
+            var (ok, msg, _) = await svc.SaveLicOrderCommissionAsync(null, "ORD-1", null, null, null, null, null, null, null, 0, 0, 0, 0, 0, null, null);
+            Assert.False(ok);
+            Assert.Contains("đã có bản ghi hoa hồng", msg);
+        }
+    }
+
+    [Fact]
+    public async Task LicOrderCommission_Approve_SetsApprove()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveLicOrderCommissionAsync(null, "ORD-1", null, null, null, null, null, null, null, 0, 0, 0, 0, 0, null, null);
+            var (ok, _, count) = await svc.ApproveLicOrderCommissionsAsync(new List<int> { id }, "admin");
+            Assert.True(ok);
+            Assert.Equal(1, count);
+            var c = await svc.GetLicOrderCommissionAsync(id);
+            Assert.Equal(CommissionStatus.Approve, c!.CommissionStatus);
+            Assert.NotNull(c.ApprDTimeUTC);
+        }
+    }
+
+    [Fact]
+    public async Task LicOrderCommission_ApproveNonPending_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveLicOrderCommissionAsync(null, "ORD-1", null, null, null, null, null, null, null, 0, 0, 0, 0, 0, null, null);
+            await svc.ApproveLicOrderCommissionsAsync(new List<int> { id }, "admin");
+            var (ok, msg, _) = await svc.ApproveLicOrderCommissionsAsync(new List<int> { id }, "admin");
+            Assert.False(ok);
+            Assert.Contains("không ở trạng thái chờ", msg);
+        }
+    }
+
+    [Fact]
+    public async Task LicOrder_List_FilteredByStatus()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveLicOrderAsync(null, "ORD-1", "ORG001", null, null, null, null, 0, 0, null, null, LicOrderStatus.Pending, null, new(), null);
+            var (_, _, id2) = await svc.SaveLicOrderAsync(null, "ORD-2", "ORG002", null, null, null, null, 0, 0, null, null, LicOrderStatus.Pending, null, new(), null);
+            await svc.ApproveLicOrderAsync(id2, "admin");
+            Assert.Equal(2, (await svc.LicOrdersAsync(null, null, null, null)).Count);
+            Assert.Single(await svc.LicOrdersAsync(null, LicOrderStatus.Approved, null, null));
         }
     }
 }

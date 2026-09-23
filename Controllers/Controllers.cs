@@ -2220,3 +2220,87 @@ public class InvoiceImportController(ITvanService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+// Đơn hàng license + hoa hồng đại lý (theo Inos_LicOrder / RptSv_InosLicOrder_Commission của TVAN gốc — màn Mst_Order):
+// quản lý đơn hàng đăng ký license/gói dịch vụ của tổ chức qua đại lý (tạo/duyệt/hủy/xác nhận thanh toán)
+// và hoa hồng của từng đơn hàng (người trình bày/telesale/tư vấn/triển khai) kèm duyệt hoa hồng.
+public class OrderController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword, LicOrderStatus? status, string? dlCode, string? commissionStatus)
+    {
+        ViewBag.Keyword = keyword;
+        ViewBag.Status = status;
+        ViewBag.DlCode = dlCode;
+        ViewBag.CommissionStatus = commissionStatus;
+        ViewBag.Dealers = await svc.DealersAsync(null, null);
+        ViewBag.Orders = await svc.LicOrdersAsync(keyword, status, dlCode, commissionStatus);
+        ViewBag.Commissions = await svc.LicOrderCommissionsAsync(keyword, null);
+        return View(await svc.LicOrdersAsync(keyword, status, dlCode, commissionStatus));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var o = await svc.GetLicOrderAsync(id);
+        if (o == null) return NotFound();
+        ViewBag.Commission = (await svc.LicOrderCommissionsAsync(o.OrderNo, null)).FirstOrDefault();
+        return View(o);
+    }
+
+    // Tạo mới/cập nhật đơn hàng license (theo Inos_OrderService_CreateOrder của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string orderNo, string orgCode, string? orgName, string? mst, string? dlCode,
+        string? discountCode, decimal price, decimal totalCost, string? paymentCode, string? paymentStatusDesc, LicOrderStatus status, string? remark, string? by)
+    {
+        var lines = new List<LicOrderLine>();
+        var (ok, msg, _) = await svc.SaveLicOrderAsync(id, orderNo, orgCode, orgName, mst, dlCode, discountCode, price, totalCost, paymentCode, paymentStatusDesc, status, remark, lines, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Duyệt đơn hàng license (theo Mst_OrderController.Approved của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Approve(int id, string? by)
+    {
+        var (ok, msg) = await svc.ApproveLicOrderAsync(id, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Hủy đơn hàng license (theo Mst_OrderController.Cancel của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Cancel(int id, string? by)
+    {
+        var (ok, msg) = await svc.CancelLicOrderAsync(id, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Xác nhận thanh toán đơn hàng license (theo Mst_OrderController.ConfirmOrderPayment của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ConfirmPayment(int id, string? by)
+    {
+        var (ok, msg) = await svc.ConfirmLicOrderPaymentAsync(id, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Lưu hoa hồng đơn hàng (theo RptSv_InosLicOrder_Commission_SaveX của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveCommission(int? id, string orderNo, string? mst, string? dlCode, string? presenter1, string? presenter2,
+        string? telesale, string? consultants, string? implementer, decimal commissionPresenter1, decimal commissionPresenter2,
+        decimal commissionTelesale, decimal commissionConsultants, decimal commissionImplementer, string? remark, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveLicOrderCommissionAsync(id, orderNo, mst, dlCode, presenter1, presenter2, telesale, consultants, implementer,
+            commissionPresenter1, commissionPresenter2, commissionTelesale, commissionConsultants, commissionImplementer, remark, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Duyệt hoa hồng nhiều đơn hàng cùng lúc (theo Mst_OrderController.ApprovedHH của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApproveCommissions(List<int> ids, string? by)
+    {
+        var (ok, msg, _) = await svc.ApproveLicOrderCommissionsAsync(ids ?? new(), by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}

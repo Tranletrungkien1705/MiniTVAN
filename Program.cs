@@ -1726,6 +1726,78 @@ app.MapPost("/api/invoice-imports", async (InvoiceImportDto dto, ITvanService sv
     return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
 });
 
+// Đơn hàng license + hoa hồng đại lý (theo Inos_LicOrder / RptSv_InosLicOrder_Commission của TVAN gốc — màn Mst_Order).
+app.MapGet("/api/orders", async (string? keyword, LicOrderStatus? status, string? dlCode, string? commissionStatus, ITvanService svc) =>
+{
+    var ls = await svc.LicOrdersAsync(keyword, status, dlCode, commissionStatus);
+    return Results.Ok(ls.Select(o => new { o.Id, o.OrderNo, o.OrgCode, o.OrgName, o.Mst, o.DlCode, o.DiscountCode, o.Price, o.TotalCost, discountVal = o.DiscountVal, o.PaymentCode, o.PaymentStatusDesc, status = o.Status.ToString(), o.CreateDTime, o.ApproveDTime, o.Remark, lines = o.Details.Count }));
+});
+
+// Chi tiết một đơn hàng license (kèm dòng chi tiết + hoa hồng nếu có).
+app.MapGet("/api/orders/{id:int}", async (int id, ITvanService svc) =>
+{
+    var o = await svc.GetLicOrderAsync(id);
+    if (o == null) return Results.NotFound();
+    var comm = (await svc.LicOrderCommissionsAsync(o.OrderNo, null)).FirstOrDefault();
+    return Results.Ok(new
+    {
+        o.Id, o.OrderNo, o.OrgCode, o.OrgName, o.Mst, o.DlCode, o.DiscountCode, o.Price, o.TotalCost, discountVal = o.DiscountVal,
+        o.PaymentCode, o.PaymentStatusDesc, status = o.Status.ToString(), o.CreateDTime, o.ApproveDTime, o.Remark,
+        details = o.Details.Select(d => new { d.PackageId, d.PackageName, orderType = d.OrderType.ToString(), d.Price, d.Qty }),
+        commission = comm == null ? null : new { comm.Id, comm.Presenter1, comm.Presenter2, comm.Telesale, comm.Consultants, comm.Implementer, comm.CommissionPresenter1, comm.CommissionPresenter2, comm.CommissionTelesale, comm.CommissionConsultants, comm.CommissionImplementer, total = comm.TotalCommission, status = comm.CommissionStatus.ToString() }
+    });
+});
+
+// Tạo mới/cập nhật đơn hàng license.
+app.MapPost("/api/orders", async (LicOrderDto dto, ITvanService svc) =>
+{
+    var lines = (dto.Lines ?? new()).Select(l => new LicOrderLine(l.PackageId ?? "", l.PackageName, l.OrderType, l.Price, l.Qty)).ToList();
+    var (ok, msg, id) = await svc.SaveLicOrderAsync(dto.Id, dto.OrderNo ?? "", dto.OrgCode ?? "", dto.OrgName, dto.Mst, dto.DlCode, dto.DiscountCode, dto.Price, dto.TotalCost, dto.PaymentCode, dto.PaymentStatusDesc, dto.Status, dto.Remark, lines, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Duyệt đơn hàng license.
+app.MapPost("/api/orders/{id:int}/approve", async (int id, OrderByDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.ApproveLicOrderAsync(id, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Hủy đơn hàng license.
+app.MapPost("/api/orders/{id:int}/cancel", async (int id, OrderByDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.CancelLicOrderAsync(id, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xác nhận thanh toán đơn hàng license.
+app.MapPost("/api/orders/{id:int}/confirm-payment", async (int id, OrderByDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.ConfirmLicOrderPaymentAsync(id, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Danh sách hoa hồng đơn hàng.
+app.MapGet("/api/order-commissions", async (string? keyword, CommissionStatus? status, ITvanService svc) =>
+{
+    var ls = await svc.LicOrderCommissionsAsync(keyword, status);
+    return Results.Ok(ls.Select(c => new { c.Id, c.OrderNo, c.Mst, c.DlCode, c.Presenter1, c.Presenter2, c.Telesale, c.Consultants, c.Implementer, c.CommissionPresenter1, c.CommissionPresenter2, c.CommissionTelesale, c.CommissionConsultants, c.CommissionImplementer, total = c.TotalCommission, status = c.CommissionStatus.ToString(), c.ApprDTimeUTC, c.ApprBy, c.Remark }));
+});
+
+// Lưu hoa hồng đơn hàng.
+app.MapPost("/api/order-commissions", async (LicOrderCommissionDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveLicOrderCommissionAsync(dto.Id, dto.OrderNo ?? "", dto.Mst, dto.DlCode, dto.Presenter1, dto.Presenter2, dto.Telesale, dto.Consultants, dto.Implementer, dto.CommissionPresenter1, dto.CommissionPresenter2, dto.CommissionTelesale, dto.CommissionConsultants, dto.CommissionImplementer, dto.Remark, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Duyệt hoa hồng nhiều đơn hàng cùng lúc.
+app.MapPost("/api/order-commissions/approve", async (ApproveCommissionsDto dto, ITvanService svc) =>
+{
+    var (ok, msg, count) = await svc.ApproveLicOrderCommissionsAsync(dto.Ids ?? new(), dto.By);
+    return ok ? Results.Ok(new { approvedCount = count, msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -1830,3 +1902,8 @@ record HistRegisterServiceDto(string? Mst, DateTime? NGui, string? Htdk, string?
 record HistRegisterServiceReceiveDto(string? MltDiep, bool ChapNhan, string? Mccqt, string? Message, string? By);
 record InvoiceImportRowDto(int Idx, string? InvoiceCode, string? FormNo, string? Sign, string? InvoiceNo, string? CustomerNNTName, string? CustomerMST, decimal TotalValPmt, string? InvoiceStatus, ImportFlagResult FlagResult, string? ImportResult);
 record InvoiceImportDto(string? BatchNo, string? FileName, ImportType ImportType, string? Remark, List<InvoiceImportRowDto>? Rows, string? By);
+record LicOrderLineDto(string? PackageId, string? PackageName, LicOrderType OrderType, decimal Price, int Qty);
+record LicOrderDto(int? Id, string? OrderNo, string? OrgCode, string? OrgName, string? Mst, string? DlCode, string? DiscountCode, decimal Price, decimal TotalCost, string? PaymentCode, string? PaymentStatusDesc, LicOrderStatus Status, string? Remark, List<LicOrderLineDto>? Lines, string? By);
+record OrderByDto(string? By);
+record LicOrderCommissionDto(int? Id, string? OrderNo, string? Mst, string? DlCode, string? Presenter1, string? Presenter2, string? Telesale, string? Consultants, string? Implementer, decimal CommissionPresenter1, decimal CommissionPresenter2, decimal CommissionTelesale, decimal CommissionConsultants, decimal CommissionImplementer, string? Remark, string? By);
+record ApproveCommissionsDto(List<int>? Ids, string? By);

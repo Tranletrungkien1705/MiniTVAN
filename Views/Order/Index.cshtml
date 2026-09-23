@@ -1,0 +1,140 @@
+@model List<LicOrder>
+@{
+    ViewData["Title"] = "Đơn hàng license";
+    var keyword = ViewBag.Keyword as string;
+    var status = ViewBag.Status as LicOrderStatus?;
+    var dlCode = ViewBag.DlCode as string;
+    var commissionStatus = ViewBag.CommissionStatus as string;
+    var dealers = ViewBag.Dealers as List<Dealer> ?? new();
+    var commissions = ViewBag.Commissions as List<LicOrderCommission> ?? new();
+    var commByOrder = commissions.GroupBy(c => c.OrderNo).ToDictionary(g => g.Key, g => g.First());
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-cart-check me-1"></i>Đơn hàng license</h6>
+            </div>
+            <form method="get" action="/Order" class="row g-2 mb-3">
+                <div class="col-md-3"><input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Số đơn / tổ chức / MST / đại lý" /></div>
+                <div class="col-md-2">
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="">-- Trạng thái --</option>
+                        @foreach (var s in Enum.GetValues<LicOrderStatus>())
+                        {
+                            <option value="@((int)s)" selected="@(status == s)">@Ui.LicOrder(s).text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="dlCode" class="form-select form-select-sm">
+                        <option value="">-- Đại lý --</option>
+                        @foreach (var d in dealers)
+                        {
+                            <option value="@d.DLCode" selected="@(dlCode == d.DLCode)">@d.DLName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="commissionStatus" class="form-select form-select-sm">
+                        <option value="">-- Hoa hồng --</option>
+                        @foreach (var s in Enum.GetValues<CommissionStatus>())
+                        {
+                            <option value="@s.ToString()" selected="@(commissionStatus == s.ToString())">@Ui.Commission(s).text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2"><button class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-search"></i> Lọc</button></div>
+            </form>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Số đơn</th><th>Tổ chức</th><th>Đại lý</th><th class="text-end">Giá</th><th class="text-end">Tổng chi phí</th><th>Trạng thái</th><th>Hoa hồng</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var o in Model)
+                {
+                    var comm = commByOrder.TryGetValue(o.OrderNo, out var c) ? c : null;
+                    <tr>
+                        <td class="fw-semibold">@o.OrderNo</td>
+                        <td class="small">@o.OrgName<br /><span class="text-muted">@o.Mst</span></td>
+                        <td class="small">@o.DlCode</td>
+                        <td class="text-end">@Ui.Money(o.Price)</td>
+                        <td class="text-end fw-semibold">@Ui.Money(o.TotalCost)</td>
+                        <td><span class="badge bg-@Ui.LicOrder(o.Status).css">@Ui.LicOrder(o.Status).text</span></td>
+                        <td>
+                            @if (comm != null) { <span class="badge bg-@Ui.Commission(comm.CommissionStatus).css">@Ui.Commission(comm.CommissionStatus).text</span> }
+                            else { <span class="text-muted small">—</span> }
+                        </td>
+                        <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/Order/Detail/@o.Id"><i class="bi bi-list-ul"></i> Chi tiết</a></td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="8" class="text-center text-muted py-4">Chưa có đơn hàng nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+
+        <div class="card mt-3"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-cash-stack me-1"></i>Hoa hồng đơn hàng</h6>
+            <form method="post" action="/Order/ApproveCommissions" class="mb-2">
+                @Html.AntiForgeryToken()
+                <div class="d-flex gap-2 mb-2">
+                    <input name="by" class="form-control form-control-sm" placeholder="Người duyệt" style="max-width:200px" />
+                    <button class="btn btn-sm btn-success"><i class="bi bi-check2-all"></i> Duyệt hoa hồng đã chọn</button>
+                </div>
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead><tr><th></th><th>Số đơn</th><th>Người trình bày 1</th><th>Telesale</th><th>Tư vấn</th><th>Triển khai</th><th class="text-end">Tổng HH</th><th>Trạng thái</th></tr></thead>
+                    <tbody>
+                    @foreach (var c in commissions)
+                    {
+                        <tr>
+                            <td>@if (c.CommissionStatus == CommissionStatus.Pending) { <input type="checkbox" name="ids" value="@c.Id" /> }</td>
+                            <td class="fw-semibold">@c.OrderNo</td>
+                            <td class="small">@c.Presenter1</td>
+                            <td class="small">@c.Telesale</td>
+                            <td class="small">@c.Consultants</td>
+                            <td class="small">@c.Implementer</td>
+                            <td class="text-end">@Ui.Money(c.TotalCommission)</td>
+                            <td><span class="badge bg-@Ui.Commission(c.CommissionStatus).css">@Ui.Commission(c.CommissionStatus).text</span></td>
+                        </tr>
+                    }
+                    @if (commissions.Count == 0) { <tr><td colspan="8" class="text-center text-muted py-3">Chưa có bản ghi hoa hồng nào.</td></tr> }
+                    </tbody>
+                </table>
+            </form>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Tạo đơn hàng license</h6>
+            <form method="post" action="/Order/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Số đơn hàng</label><input name="orderNo" class="form-control form-control-sm" placeholder="ORD-2026-001" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Mã tổ chức mua</label><input name="orgCode" class="form-control form-control-sm" placeholder="ORG001" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Tên tổ chức</label><input name="orgName" class="form-control form-control-sm" placeholder="Công ty CP Ô tô Đông Đô" /></div>
+                <div class="col-12"><label class="form-label small mb-1">MST</label><input name="mst" class="form-control form-control-sm" placeholder="0101243150" /></div>
+                <div class="col-12">
+                    <label class="form-label small mb-1">Đại lý</label>
+                    <select name="dlCode" class="form-select form-select-sm">
+                        <option value="">-- Không --</option>
+                        @foreach (var d in dealers) { <option value="@d.DLCode">@d.DLName</option> }
+                    </select>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Mã giảm giá</label><input name="discountCode" class="form-control form-control-sm" placeholder="SALE10" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Giá niêm yết</label><input name="price" type="number" step="1000" value="0" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Tổng chi phí</label><input name="totalCost" type="number" step="1000" value="0" class="form-control form-control-sm" /></div>
+                <div class="col-12">
+                    <label class="form-label small mb-1">Trạng thái</label>
+                    <select name="status" class="form-select form-select-sm">
+                        @foreach (var s in Enum.GetValues<LicOrderStatus>())
+                        {
+                            <option value="@((int)s)" selected="@(s == LicOrderStatus.Pending)">@Ui.LicOrder(s).text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Ghi chú</label><textarea name="remark" class="form-control form-control-sm" rows="2" maxlength="400"></textarea></div>
+                <div class="col-12"><label class="form-label small mb-1">Người tạo</label><input name="by" class="form-control form-control-sm" placeholder="admin" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Tạo đơn hàng</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Theo Inos_LicOrder của TVAN gốc (màn Mst_Order): đơn hàng đăng ký license/gói dịch vụ của tổ chức qua đại lý, kèm mã giảm giá, tổng chi phí và trạng thái đơn hàng.</p>
+        </div></div>
+    </div>
+</div>

@@ -400,4 +400,24 @@ public static class Ui
         Models.ImportFlagResult.Fail    => ("Không thành công", "danger"),
         _ => ("Bỏ qua", "secondary")
     };
+    // Trạng thái đơn hàng license (theo Inos_LicOrderStatuses của TVAN gốc — màn Mst_Order).
+    public static (string text, string css) LicOrder(Models.LicOrderStatus s) => s switch
+    {
+        Models.LicOrderStatus.Pending    => ("Chờ duyệt", "warning"),
+        Models.LicOrderStatus.Processing => ("Đang xử lý", "info"),
+        Models.LicOrderStatus.NotPaid    => ("Chưa thanh toán", "secondary"),
+        Models.LicOrderStatus.Cancel     => ("Đã hủy", "dark"),
+        Models.LicOrderStatus.Approved   => ("Đã duyệt", "success"),
+        _ => (s.ToString(), "secondary")
+    };
+    // Trạng thái hoa hồng đơn hàng (theo TConst.CommissionStatus của TVAN gốc).
+    public static (string text, string css) Commission(Models.CommissionStatus s) => s switch
+    {
+        Models.CommissionStatus.Pending  => ("Chờ duyệt", "warning"),
+        Models.CommissionStatus.Approve  => ("Đã duyệt", "success"),
+        Models.CommissionStatus.Cancel   => ("Đã hủy", "dark"),
+        Models.CommissionStatus.Finish   => ("Hoàn tất", "primary"),
+        Models.CommissionStatus.Error    => ("Lỗi", "danger"),
+        _ => (s.ToString(), "secondary")
+    };
 }

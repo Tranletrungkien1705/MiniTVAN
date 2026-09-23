@@ -2125,4 +2125,98 @@ public class InvoiceImportRow : IOrgOwned
     public ImportFlagResult FlagResult { get; set; } = ImportFlagResult.Skip;   // Kết quả xử lý dòng
     public string? ImportResult { get; set; }              // Thông báo kết quả xử lý dòng
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}// Trạng thái đơn hàng license (theo Inos_LicOrderStatuses của TVAN gốc — màn Mst_Order):
+// Pending = 1 (chờ duyệt), Processing = 2 (đang xử lý), NotPaid = 3 (chưa thanh toán),
+// Cancel = 4 (đã hủy), Approved = 10 (đã duyệt).
+public enum LicOrderStatus { Pending = 1, Processing = 2, NotPaid = 3, Cancel = 4, Approved = 10 }
+
+// Loại dòng đơn hàng license (theo Inos_LicOrderTypes của TVAN gốc): RegisterLic = 1 (đăng ký license).
+public enum LicOrderType { RegisterLic = 1 }
+
+// Trạng thái hoa hồng của đơn hàng (theo TConst.CommissionStatus của TVAN gốc):
+// Pending = "PENDING" (chờ duyệt), Approve = "APPROVE" (đã duyệt), Cancel = "CANCEL" (đã hủy),
+// Finish = "FINISH" (hoàn tất), Error = "ERROR" (lỗi).
+public enum CommissionStatus { Pending = 0, Approve = 1, Cancel = 2, Finish = 3, Error = 4 }
+
+// Đơn hàng license (theo bảng Inos_LicOrder của TVAN gốc — màn Mst_Order của WebAdmin):
+// đơn hàng đăng ký license/gói dịch vụ của một tổ chức (OrgId) qua đại lý, kèm mã giảm giá,
+// tổng chi phí, mã thanh toán, trạng thái đơn hàng và danh sách dòng chi tiết (gói license).
+// Khóa nghiệp vụ: (OrgId, OrderNo) — số đơn hàng là duy nhất trong một tổ chức.
+public class LicOrder : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string OrderNo { get; set; } = "";              // Số đơn hàng (Id của nguồn)
+    public string OrgCode { get; set; } = "";              // Mã tổ chức mua (Inos_LicOrder.OrgId)
+    public string? OrgName { get; set; }                   // Tên tổ chức mua
+    public string? Mst { get; set; }                       // MST tổ chức mua
+    public string? DlCode { get; set; }                    // Mã đại lý giới thiệu
+    public string? DiscountCode { get; set; }              // Mã giảm giá
+    public decimal Price { get; set; }                     // Giá niêm yết (InosLicOrderPrice)
+    public decimal TotalCost { get; set; }                 // Tổng chi phí sau giảm giá
+    public string? PaymentCode { get; set; }               // Mã thanh toán
+    public string? PaymentStatusDesc { get; set; }         // Mô tả trạng thái thanh toán
+    public LicOrderStatus Status { get; set; } = LicOrderStatus.Pending;   // Trạng thái đơn hàng
+    public DateTime CreateDTime { get; set; } = DateTime.UtcNow;           // Thời điểm tạo
+    public DateTime? ApproveDTime { get; set; }            // Thời điểm duyệt
+    public string? CreateUserId { get; set; }              // Người tạo
+    public string? Remark { get; set; }                    // Ghi chú
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+
+    public List<LicOrderDetail> Details { get; set; } = new();
+
+    // Giá trị giảm giá = giá niêm yết - tổng chi phí (theo InosLicOrderDiscountVal của nguồn).
+    public decimal DiscountVal => Price - TotalCost;
+}
+
+// Dòng chi tiết đơn hàng license (theo bảng Inos_LicOrderDetail của TVAN gốc):
+// mỗi dòng ứng với một gói license (PackageId) được đăng ký trong đơn hàng.
+// Khóa nghiệp vụ: (OrgId, LicOrderId, PackageId).
+public class LicOrderDetail : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int LicOrderId { get; set; }
+    public LicOrder? Order { get; set; }
+    public string PackageId { get; set; } = "";            // Mã gói license
+    public string? PackageName { get; set; }               // Tên gói license
+    public LicOrderType OrderType { get; set; } = LicOrderType.RegisterLic;   // Loại dòng đơn hàng
+    public decimal Price { get; set; }                     // Đơn giá gói
+    public int Qty { get; set; } = 1;                      // Số lượng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Hoa hồng của đơn hàng (theo bảng RptSv_InosLicOrder_Commission của TVAN gốc):
+// mỗi đơn hàng có một bản ghi hoa hồng ghi nhận những người hưởng (người trình bày 1/2, telesale,
+// tư vấn, triển khai) và số tiền hoa hồng tương ứng, kèm trạng thái duyệt hoa hồng.
+// Khóa nghiệp vụ: (OrgId, OrderNo) — mỗi đơn hàng một bản ghi hoa hồng.
+public class LicOrderCommission : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string OrderNo { get; set; } = "";              // Số đơn hàng (OrderId của nguồn)
+    public string? Mst { get; set; }                       // MST tổ chức mua
+    public string? DlCode { get; set; }                    // Mã đại lý
+    public string? Presenter1 { get; set; }                // Người trình bày 1
+    public string? Presenter2 { get; set; }                // Người trình bày 2
+    public string? Telesale { get; set; }                  // Telesale
+    public string? Consultants { get; set; }               // Tư vấn
+    public string? Implementer { get; set; }               // Triển khai
+    public decimal CommissionPresenter1 { get; set; }      // Hoa hồng người trình bày 1
+    public decimal CommissionPresenter2 { get; set; }      // Hoa hồng người trình bày 2
+    public decimal CommissionTelesale { get; set; }        // Hoa hồng telesale
+    public decimal CommissionConsultants { get; set; }     // Hoa hồng tư vấn
+    public decimal CommissionImplementer { get; set; }     // Hoa hồng triển khai
+    public CommissionStatus CommissionStatus { get; set; } = CommissionStatus.Pending;   // Trạng thái hoa hồng
+    public string? Remark { get; set; }                    // Ghi chú
+    public DateTime? ApprDTimeUTC { get; set; }            // Thời điểm duyệt hoa hồng
+    public string? ApprBy { get; set; }                    // Người duyệt hoa hồng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+
+    // Tổng hoa hồng của đơn hàng.
+    public decimal TotalCommission => CommissionPresenter1 + CommissionPresenter2 + CommissionTelesale + CommissionConsultants + CommissionImplementer;
 }
