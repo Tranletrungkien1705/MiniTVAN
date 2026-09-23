@@ -127,6 +127,10 @@ public interface ITvanService
     Task<VatRate?> GetVatRateAsync(int id);
     Task<(bool ok, string msg, int id)> SaveVatRateAsync(int? id, string code, string rate, string? desc, bool active, string? by);
     Task<(bool ok, string msg)> DeleteVatRateAsync(int id);
+    Task<List<Unit>> UnitsAsync(string? keyword);
+    Task<Unit?> GetUnitAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveUnitAsync(int? id, string code, string name, string? remark, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteUnitAsync(int id);
     Task<List<Province>> ProvincesAsync(string? keyword);
     Task<Province?> GetProvinceAsync(int id);
     Task<(bool ok, string msg, int id)> SaveProvinceAsync(int? id, string code, string name, bool active, string? by);
@@ -2796,6 +2800,73 @@ public class TvanService(AppDbContext db) : ITvanService
         db.VatRates.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa thuế suất VAT {code}.");
+    }
+
+    // Danh mục đơn vị tính (theo Mst_Unit của TVAN gốc):
+    // danh sách đơn vị tính (lọc theo từ khóa mã/tên/mô tả nếu có).
+    public Task<List<Unit>> UnitsAsync(string? keyword)
+    {
+        var q = db.Units.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.UnitCode.Contains(k) || t.UnitName.Contains(k) || (t.Remark != null && t.Remark.Contains(k)));
+        }
+        return q.OrderBy(t => t.UnitCode).ToListAsync();
+    }
+
+    public Task<Unit?> GetUnitAsync(int id) =>
+        db.Units.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) đơn vị tính theo khóa nghiệp vụ (OrgId, UnitCode)
+    // (theo Mst_Unit_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã đơn vị tính + tên đơn vị tính;
+    //  - khi tạo: mã đơn vị tính chưa tồn tại trong tổ chức (Mst_Unit_CheckDB_UnitCodeExist).
+    public async Task<(bool ok, string msg, int id)> SaveUnitAsync(int? id, string code, string name, string? remark, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã đơn vị tính.", 0);
+        if (name.Length == 0) return (false, "Cần tên đơn vị tính.", 0);
+
+        Unit? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.Units.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.Units.FirstOrDefaultAsync(t => t.UnitCode == code);
+
+        if (e == null)
+        {
+            if (await db.Units.AnyAsync(t => t.UnitCode == code))
+                return (false, "Mã đơn vị tính đã tồn tại.", 0);
+            e = new Unit { UnitCode = code };
+            db.Units.Add(e);
+        }
+        else
+        {
+            // Đổi mã đơn vị tính: chặn trùng với đơn vị tính khác.
+            if (!string.Equals(e.UnitCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.Units.AnyAsync(t => t.UnitCode == code && t.Id != e.Id))
+                return (false, "Mã đơn vị tính đã tồn tại.", 0);
+            e.UnitCode = code;
+        }
+
+        e.UnitName = name;
+        e.Remark = remark;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu đơn vị tính {code} — {name}.", e.Id);
+    }
+
+    // Xóa đơn vị tính theo id (theo Mst_Unit_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteUnitAsync(int id)
+    {
+        var e = await db.Units.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy đơn vị tính.");
+        var code = e.UnitCode;
+        db.Units.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa đơn vị tính {code}.");
     }
 
     // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):

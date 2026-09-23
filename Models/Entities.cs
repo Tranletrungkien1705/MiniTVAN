@@ -1268,6 +1268,23 @@ public class VatRate : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Danh mục đơn vị tính (theo bảng Mst_Unit của TVAN gốc): mỗi tổ chức khai báo các đơn vị tính
+// dùng cho dòng hàng hóa trên hóa đơn (VD cái, chiếc, hộp, kg, lần...). Mã đơn vị (UnitCode) là
+// khóa nghiệp vụ trong phạm vi tổ chức; UnitName là tên hiển thị.
+// Khóa nghiệp vụ: (OrgId, UnitCode). FlagActive = đơn vị tính đang dùng hay không.
+public class Unit : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string UnitCode { get; set; } = "";      // Mã đơn vị tính (VD CAI, KG)
+    public string UnitName { get; set; } = "";      // Tên đơn vị tính (VD Cái, Kilôgam)
+    public string? Remark { get; set; }               // Ghi chú
+    public bool FlagActive { get; set; } = true;      // Đơn vị tính đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 // Nhật ký đọc tiền bằng chữ (theo luồng DocTien của TVAN gốc —
 // Invoice_InvoiceController.DocTien gọi clsDocTien.DocSo). Mỗi lần đọc một số tiền
 // thành chữ tiếng Việt ghi lại để đối soát: số tiền, mã + tên tiền tệ, kết quả chữ.

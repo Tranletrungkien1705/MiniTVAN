@@ -3864,4 +3864,74 @@ public class DocTienTests
             Assert.Null(await svc.GetCurrencyExAsync(id));
         }
     }
+
+    [Fact]
+    public async Task Unit_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveUnitAsync(null, "CAI", "Cái", "Đơn vị tính hàng hóa", true, "kế toán");
+            Assert.True(ok);
+            var e = await svc.GetUnitAsync(id);
+            Assert.Equal("CAI", e!.UnitCode);
+            Assert.Equal("Cái", e.UnitName);
+            Assert.True(e.FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task Unit_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveUnitAsync(null, "CAI", "Cái", null, true, "kế toán");
+            // Lưu lại cùng mã = cập nhật (không tạo bản ghi mới, không báo trùng).
+            var (ok, _, id2) = await svc.SaveUnitAsync(null, "CAI", "Cái (bộ)", "cập nhật", true, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            Assert.Single(await svc.UnitsAsync(null));
+            Assert.Equal("Cái (bộ)", (await svc.GetUnitAsync(id))!.UnitName);
+        }
+    }
+
+    [Fact]
+    public async Task Unit_Save_MissingCodeOrName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok1, msg1, _) = await svc.SaveUnitAsync(null, "  ", "Cái", null, true, "kế toán");
+            Assert.False(ok1);
+            Assert.Contains("mã đơn vị tính", msg1);
+            var (ok2, msg2, _) = await svc.SaveUnitAsync(null, "CAI", "  ", null, true, "kế toán");
+            Assert.False(ok2);
+            Assert.Contains("tên đơn vị tính", msg2);
+        }
+    }
+
+    [Fact]
+    public async Task Unit_List_FilteredByKeyword()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveUnitAsync(null, "CAI", "Cái", null, true, "kế toán");
+            await svc.SaveUnitAsync(null, "KG", "Kilôgam", null, true, "kế toán");
+            var all = await svc.UnitsAsync(null);
+            Assert.Equal(2, all.Count);
+            var filtered = await svc.UnitsAsync("KG");
+            Assert.Single(filtered);
+            Assert.Equal("KG", filtered[0].UnitCode);
+        }
+    }
+
+    [Fact]
+    public async Task Unit_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveUnitAsync(null, "HOP", "Hộp", null, true, "kế toán");
+            var (ok, _) = await svc.DeleteUnitAsync(id);
+            Assert.True(ok);
+            Assert.Null(await svc.GetUnitAsync(id));
+        }
+    }
 }

@@ -59,6 +59,7 @@ public class AppDbContext : DbContext
     public DbSet<SortColumnInvoice> SortColumnInvoices => Set<SortColumnInvoice>();
     public DbSet<CurrencyEx> CurrencyExes => Set<CurrencyEx>();
     public DbSet<VatRate> VatRates => Set<VatRate>();
+    public DbSet<Unit> Units => Set<Unit>();
     public DbSet<DocTienLog> DocTienLogs => Set<DocTienLog>();
     public DbSet<SysGroup> SysGroups => Set<SysGroup>();
     public DbSet<SysUserInGroup> SysUserInGroups => Set<SysUserInGroup>();
@@ -359,6 +360,11 @@ public class AppDbContext : DbContext
         b.Entity<VatRate>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.VATRateCode }).IsUnique();   // mỗi tổ chức một mã thuế suất
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Unit>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.UnitCode }).IsUnique();   // mỗi tổ chức một mã đơn vị tính
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<DocTienLog>(e =>

@@ -540,6 +540,19 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Danh mục đơn vị tính (theo Mst_Unit của TVAN gốc):
+        // các đơn vị tính demo dùng cho dòng hàng hóa trên hóa đơn.
+        if (!await db.Units.AnyAsync())
+        {
+            db.Units.AddRange(
+                new Unit { UnitCode = "CAI", UnitName = "Cái", Remark = "Đơn vị tính hàng hóa", FlagActive = true, UpdatedBy = "kế toán" },
+                new Unit { UnitCode = "CHIEC", UnitName = "Chiếc", Remark = "Đơn vị tính hàng hóa", FlagActive = true, UpdatedBy = "kế toán" },
+                new Unit { UnitCode = "HOP", UnitName = "Hộp", Remark = "Đơn vị tính hàng hóa", FlagActive = true, UpdatedBy = "kế toán" },
+                new Unit { UnitCode = "KG", UnitName = "Kilôgam", Remark = "Đơn vị tính khối lượng", FlagActive = true, UpdatedBy = "kế toán" },
+                new Unit { UnitCode = "LAN", UnitName = "Lần", Remark = "Đơn vị tính dịch vụ", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+
         // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):
         // các loại khách hàng demo dùng khi khai báo danh mục khách hàng.
         if (!await db.CustomerNntTypes.AnyAsync())

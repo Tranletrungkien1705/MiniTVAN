@@ -907,6 +907,33 @@ public class VatRateController(ITvanService svc) : Controller
     }
 }
 
+// Danh mục đơn vị tính (theo Mst_Unit của TVAN gốc):
+// các đơn vị tính (cái, chiếc, hộp, kg, lần...) dùng cho dòng hàng hóa trên hóa đơn.
+public class UnitController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.UnitsAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string name, string? remark, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveUnitAsync(id, code, name, remark, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteUnitAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):
 // phân loại khách hàng (Doanh nghiệp, Cá nhân, Tổ chức nước ngoài...) dùng khi khai báo danh mục khách hàng.
 public class CustomerNntTypeController(ITvanService svc) : Controller
