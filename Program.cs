@@ -786,6 +786,27 @@ app.MapDelete("/api/departments/{id:int}", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Chứng thư số của tổ chức (theo Mst_OrgCKS của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
+app.MapGet("/api/org-cks", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.OrgCksesAsync(keyword);
+    return Results.Ok(ls.Select(c => new { c.Id, c.CANumber, c.CAOrg, c.Subject, c.CAEffDTimeUTCStart, c.CAEffDTimeUTCEnd, c.CTSPath, c.FlagActive, c.UpdatedAt, c.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) chứng thư số theo số chứng thư (theo Mst_OrgCKS_Create/Update của TVAN gốc).
+app.MapPost("/api/org-cks", async (OrgCksDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveOrgCksAsync(dto.Id, dto.CaNumber ?? "", dto.CaOrg, dto.Subject, dto.EffStart, dto.EffEnd, dto.CtsPath, dto.CtsPwd, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa chứng thư số theo id (theo Mst_OrgCKS_Delete của TVAN gốc).
+app.MapDelete("/api/org-cks/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteOrgCksAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -836,3 +857,4 @@ record DistrictDto(int? Id, string? ProvinceCode, string? Code, string? Name, bo
 record CountryDto(int? Id, string? Code, string? Name, bool Active, string? By);
 record DealerDto(int? Id, string? Code, string? Name, string? ProvinceCode, string? Address, string? PresentBy, string? GovIdNumber, string? Email, string? Phone, bool Active, string? By);
 record DepartmentDto(int? Id, string? Code, string? CodeParent, string? Mst, string? Name, bool Active, string? By);
+record OrgCksDto(int? Id, string? CaNumber, string? CaOrg, string? Subject, DateTime? EffStart, DateTime? EffEnd, string? CtsPath, string? CtsPwd, bool Active, string? By);

@@ -958,3 +958,24 @@ public class MessageTemplate : IOrgOwned
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
+
+// Chứng thư số (CKS) của tổ chức (theo bảng Mst_OrgCKS của TVAN gốc):
+// mỗi tổ chức khai báo các chứng thư số dùng để ký hóa đơn điện tử, gồm số chứng thư (CANumber),
+// tổ chức cấp (CAOrg), chủ thể (Subject), hiệu lực (CAEffDTimeUTCStart..CAEffDTimeUTCEnd)
+// và đường dẫn/mật khẩu keystore (CTSPath/CTSPwd). Khóa nghiệp vụ: (OrgId, CANumber).
+public class OrgCks : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string CANumber { get; set; } = "";              // Số chứng thư số
+    public string? CAOrg { get; set; }                       // Tổ chức cấp chứng thư số
+    public string? Subject { get; set; }                     // Chủ thể chứng thư số
+    public DateTime? CAEffDTimeUTCStart { get; set; }        // Hiệu lực từ
+    public DateTime? CAEffDTimeUTCEnd { get; set; }          // Hiệu lực đến
+    public string? CTSPath { get; set; }                     // Đường dẫn keystore (CTS)
+    public string? CTSPwd { get; set; }                      // Mật khẩu keystore (CTS)
+    public bool FlagActive { get; set; } = true;             // Chứng thư đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}

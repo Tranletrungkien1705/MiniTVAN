@@ -905,6 +905,33 @@ public class DepartmentController(ITvanService svc) : Controller
     }
 }
 
+// Chứng thư số của tổ chức (theo Mst_OrgCKS của TVAN gốc):
+// mỗi tổ chức khai báo các chứng thư số dùng để ký hóa đơn điện tử.
+public class OrgCksController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.OrgCksesAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string caNumber, string? caOrg, string? subject, DateTime? effStart, DateTime? effEnd, string? ctsPath, string? ctsPwd, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveOrgCksAsync(id, caNumber, caOrg, subject, effStart, effEnd, ctsPath, ctsPwd, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteOrgCksAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

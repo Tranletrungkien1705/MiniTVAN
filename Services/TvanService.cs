@@ -127,6 +127,10 @@ public interface ITvanService
     Task<Department?> GetDepartmentAsync(int id);
     Task<(bool ok, string msg, int id)> SaveDepartmentAsync(int? id, string code, string? codeParent, string mst, string name, bool active, string? by);
     Task<(bool ok, string msg)> DeleteDepartmentAsync(int id);
+    Task<List<OrgCks>> OrgCksesAsync(string? keyword);
+    Task<OrgCks?> GetOrgCksAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveOrgCksAsync(int? id, string caNumber, string? caOrg, string? subject, DateTime? effStart, DateTime? effEnd, string? ctsPath, string? ctsPwd, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteOrgCksAsync(int id);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -2643,7 +2647,78 @@ public class TvanService(AppDbContext db) : ITvanService
         await db.SaveChangesAsync();
     }
 
-    // Khoảng thời gian [from, to) của kỳ dữ liệu theo loại kỳ (LKDLieu).
+    // Chứng thư số của tổ chức (theo Mst_OrgCKS của TVAN gốc):
+    // danh sách chứng thư số (lọc theo từ khóa số chứng thư/tổ chức cấp/chủ thể nếu có).
+    public Task<List<OrgCks>> OrgCksesAsync(string? keyword)
+    {
+        var q = db.OrgCkses.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(c => c.CANumber.Contains(k)
+                || (c.CAOrg != null && c.CAOrg.Contains(k))
+                || (c.Subject != null && c.Subject.Contains(k)));
+        }
+        return q.OrderBy(c => c.CANumber).ToListAsync();
+    }
+
+    public Task<OrgCks?> GetOrgCksAsync(int id) =>
+        db.OrgCkses.FirstOrDefaultAsync(c => c.Id == id);
+
+    // Lưu (tạo mới/cập nhật) chứng thư số theo khóa nghiệp vụ (OrgId, CANumber)
+    // (theo Mst_OrgCKS_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần số chứng thư (CANumber);
+    //  - khi tạo: số chứng thư chưa tồn tại trong tổ chức (Mst_OrgCKS_CheckDB_OrganExist);
+    //  - khi sửa/xóa: chứng thư phải tồn tại (Mst_OrgCKS_CheckDB_OrganNotFound).
+    public async Task<(bool ok, string msg, int id)> SaveOrgCksAsync(int? id, string caNumber, string? caOrg, string? subject, DateTime? effStart, DateTime? effEnd, string? ctsPath, string? ctsPwd, bool active, string? by)
+    {
+        caNumber = (caNumber ?? "").Trim();
+        if (caNumber.Length == 0) return (false, "Cần số chứng thư số.", 0);
+
+        OrgCks? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.OrgCkses.FirstOrDefaultAsync(c => c.Id == id.Value);
+        else e = await db.OrgCkses.FirstOrDefaultAsync(c => c.CANumber == caNumber);
+
+        if (e == null)
+        {
+            if (await db.OrgCkses.AnyAsync(c => c.CANumber == caNumber))
+                return (false, "Số chứng thư số đã tồn tại.", 0);
+            e = new OrgCks { CANumber = caNumber };
+            db.OrgCkses.Add(e);
+        }
+        else
+        {
+            // Đổi số chứng thư: chặn trùng với chứng thư khác.
+            if (!string.Equals(e.CANumber, caNumber, StringComparison.OrdinalIgnoreCase)
+                && await db.OrgCkses.AnyAsync(c => c.CANumber == caNumber && c.Id != e.Id))
+                return (false, "Số chứng thư số đã tồn tại.", 0);
+            e.CANumber = caNumber;
+        }
+
+        e.CAOrg = caOrg;
+        e.Subject = subject;
+        e.CAEffDTimeUTCStart = effStart;
+        e.CAEffDTimeUTCEnd = effEnd;
+        e.CTSPath = ctsPath;
+        e.CTSPwd = ctsPwd;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu chứng thư số {caNumber}.", e.Id);
+    }
+
+    // Xóa chứng thư số theo id (theo Mst_OrgCKS_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteOrgCksAsync(int id)
+    {
+        var e = await db.OrgCkses.FirstOrDefaultAsync(c => c.Id == id);
+        if (e == null) return (false, "Không tìm thấy chứng thư số.");
+        var ca = e.CANumber;
+        db.OrgCkses.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa chứng thư số {ca}.");
+    }
+
     private static (DateTime from, DateTime to) PeriodRange(PeriodType t, string kdlieu)
     {
         switch (t)

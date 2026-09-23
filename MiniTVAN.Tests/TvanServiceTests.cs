@@ -2850,4 +2850,58 @@ public class TvanServiceTests
             Assert.Empty(await svc.DepartmentsAsync(null, null));
         }
     }
+
+    [Fact]
+    public async Task OrgCks_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveOrgCksAsync(null, "1234567890", "VNPT-CA", "CN=Cty", null, null, "/keys/a.p12", null, true, "kế toán");
+            Assert.True(ok);
+            var list = await svc.OrgCksesAsync(null);
+            Assert.Single(list);
+            Assert.Equal("1234567890", list[0].CANumber);
+            Assert.Equal(id, list[0].Id);
+        }
+    }
+
+    [Fact]
+    public async Task OrgCks_Save_SameNumber_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveOrgCksAsync(null, "1234567890", "VNPT-CA", "CN=Cty", null, null, null, null, true, null);
+            // Lưu lại cùng số chứng thư = cập nhật (không tạo mới).
+            var (ok, _, id2) = await svc.SaveOrgCksAsync(null, "1234567890", "VIETTEL-CA", "CN=Cty mới", null, null, null, null, false, null);
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            var list = await svc.OrgCksesAsync(null);
+            Assert.Single(list);
+            Assert.Equal("VIETTEL-CA", list[0].CAOrg);
+            Assert.False(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task OrgCks_Save_MissingNumber_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveOrgCksAsync(null, "  ", "VNPT-CA", null, null, null, null, null, true, null);
+            Assert.False(ok);
+            Assert.Contains("chứng thư", msg);
+        }
+    }
+
+    [Fact]
+    public async Task OrgCks_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveOrgCksAsync(null, "1234567890", "VNPT-CA", null, null, null, null, null, true, null);
+            var (ok, _) = await svc.DeleteOrgCksAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.OrgCksesAsync(null));
+        }
+    }
 }

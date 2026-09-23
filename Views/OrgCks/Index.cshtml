@@ -1,0 +1,73 @@
+@model List<OrgCks>
+@{
+    ViewData["Title"] = "Chứng thư số";
+    var keyword = ViewBag.Keyword as string;
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-shield-lock me-1"></i>Chứng thư số của tổ chức</h6>
+                <form method="get" action="/OrgCks" class="d-flex gap-2">
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm số chứng thư / tổ chức cấp / chủ thể" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Số chứng thư</th><th>Tổ chức cấp</th><th>Chủ thể</th><th>Hiệu lực</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var c in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@c.CANumber</td>
+                        <td>@(string.IsNullOrWhiteSpace(c.CAOrg) ? "—" : c.CAOrg)</td>
+                        <td class="small">@(string.IsNullOrWhiteSpace(c.Subject) ? "—" : c.Subject)</td>
+                        <td class="small text-muted">
+                            @if (c.CAEffDTimeUTCStart.HasValue || c.CAEffDTimeUTCEnd.HasValue)
+                            {
+                                <div>@(c.CAEffDTimeUTCStart?.ToLocalTime().ToString("dd/MM/yyyy") ?? "…") → @(c.CAEffDTimeUTCEnd?.ToLocalTime().ToString("dd/MM/yyyy") ?? "…")</div>
+                            }
+                            else { <span>—</span> }
+                        </td>
+                        <td>
+                            @if (c.FlagActive) { <span class="badge bg-success">Đang dùng</span> }
+                            else { <span class="badge bg-secondary">Ngừng dùng</span> }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/OrgCks/Delete" class="d-inline" onsubmit="return confirm('Xóa chứng thư số @c.CANumber?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@c.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có chứng thư số nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm / cập nhật chứng thư số</h6>
+            <form method="post" action="/OrgCks/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Số chứng thư số</label><input name="caNumber" class="form-control form-control-sm" placeholder="VD 1234567890" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Tổ chức cấp</label><input name="caOrg" class="form-control form-control-sm" placeholder="VD VNPT-CA" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Chủ thể</label><input name="subject" class="form-control form-control-sm" placeholder="CN=Công ty..., O=..., C=VN" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Hiệu lực từ</label><input type="date" name="effStart" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Hiệu lực đến</label><input type="date" name="effEnd" class="form-control form-control-sm" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Đường dẫn keystore</label><input name="ctsPath" class="form-control form-control-sm" placeholder="VD /keys/cts.p12" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Mật khẩu keystore</label><input name="ctsPwd" class="form-control form-control-sm" placeholder="••••••" /></div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="active" value="true" id="orgCksActive" checked />
+                    <label class="form-check-label small" for="orgCksActive">Đang dùng</label>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu chứng thư số</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Lưu cùng số chứng thư = cập nhật chứng thư đã có (theo khóa nghiệp vụ OrgId + số chứng thư).</p>
+        </div></div>
+    </div>
+</div>

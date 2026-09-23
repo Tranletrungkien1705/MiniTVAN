@@ -544,6 +544,19 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
         }
+
+        // Chứng thư số của tổ chức (theo Mst_OrgCKS của TVAN gốc):
+        // 1 chứng thư số demo đang dùng để ký hóa đơn điện tử.
+        if (!await db.OrgCkses.AnyAsync())
+        {
+            db.OrgCkses.Add(new OrgCks
+            {
+                CANumber = "1234567890", CAOrg = "VNPT-CA", Subject = "CN=Công ty CP Ô tô Đông Đô, O=Đông Đô, C=VN",
+                CAEffDTimeUTCStart = DateTime.UtcNow.AddYears(-1), CAEffDTimeUTCEnd = DateTime.UtcNow.AddYears(1),
+                CTSPath = "/keys/dongdo.p12", FlagActive = true, UpdatedBy = "kế toán"
+            });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
