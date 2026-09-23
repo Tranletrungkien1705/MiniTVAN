@@ -147,6 +147,14 @@ public interface ITvanService
     Task<(bool ok, string msg)> DeleteNotifyAsync(int id);
     Task<(bool ok, string msg, int id)> AddNotifyDtlAsync(int notifyId, string userCode, bool flagRead, string? by);
     Task<(bool ok, string msg)> MarkNotifyReadAsync(int notifyId, string userCode);
+
+    // Người nhận thông báo (theo Mst_ManageNotify / Map_UserInNotifyType của TVAN gốc)
+    Task<List<NotifyRecipient>> NotifyRecipientsAsync(string? keyword);
+    Task<NotifyRecipient?> GetNotifyRecipientAsync(int id);
+    Task<(bool ok, string msg, int id)> CreateNotifyRecipientAsync(string userCode, string? userName, string? by);
+    Task<(bool ok, string msg)> UpdateNotifyRecipientAsync(int id, string? userName, string? by);
+    Task<(bool ok, string msg)> DeleteNotifyRecipientAsync(int id);
+    Task<(bool ok, string msg)> SaveNotifyRecipientTypesAsync(int id, List<(string notifyType, bool flagNotify)> types, string? by);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -2923,6 +2931,101 @@ public class TvanService(AppDbContext db) : ITvanService
         d.FlagRead = true;
         await db.SaveChangesAsync();
         return (true, $"Đã đánh dấu đã đọc thông báo cho {userCode}.");
+    }
+
+    // ===== Người nhận thông báo (theo Mst_ManageNotify / Map_UserInNotifyType của TVAN gốc) =====
+
+    // Danh sách người nhận thông báo (lọc theo từ khóa mã/tên nếu có), kèm đăng ký nhận loại thông báo.
+    public Task<List<NotifyRecipient>> NotifyRecipientsAsync(string? keyword)
+    {
+        var q = db.NotifyRecipients.Include(r => r.Types).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(r => r.UserCode.Contains(k) || r.UserName.Contains(k));
+        }
+        return q.OrderBy(r => r.UserCode).ToListAsync();
+    }
+
+    public Task<NotifyRecipient?> GetNotifyRecipientAsync(int id) =>
+        db.NotifyRecipients.Include(r => r.Types).FirstOrDefaultAsync(r => r.Id == id);
+
+    // Thêm người nhận thông báo (theo Mst_ManageNotify_CreateX của TVAN gốc):
+    // chặn thiếu mã người dùng, chặn trùng mã người dùng; sau khi thêm, tự tạo đăng ký nhận
+    // cho TẤT CẢ loại thông báo với cờ mặc định lấy từ NotifyType.DefaultActive.
+    public async Task<(bool ok, string msg, int id)> CreateNotifyRecipientAsync(string userCode, string? userName, string? by)
+    {
+        userCode = (userCode ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(userCode)) return (false, "Cần mã người dùng nhận thông báo.", 0);
+        if (await db.NotifyRecipients.AnyAsync(r => r.UserCode == userCode))
+            return (false, $"Người nhận {userCode} đã tồn tại.", 0);
+
+        var e = new NotifyRecipient { UserCode = userCode, UserName = (userName ?? "").Trim(), UpdatedBy = by };
+        db.NotifyRecipients.Add(e);
+        await db.SaveChangesAsync();
+
+        // Tự tạo đăng ký nhận cho tất cả loại thông báo (theo Mst_ManageNotify_CreateX của TVAN gốc).
+        var types = await db.NotifyTypes.OrderBy(t => t.NotifyTypeCode).ToListAsync();
+        foreach (var t in types)
+            db.NotifyRecipientTypes.Add(new NotifyRecipientType
+            {
+                NotifyRecipientId = e.Id, UserCode = userCode, NotifyType = t.NotifyTypeCode,
+                FlagNotify = t.DefaultActive, UpdatedBy = by
+            });
+        await db.SaveChangesAsync();
+        return (true, $"Đã thêm người nhận thông báo {userCode}.", e.Id);
+    }
+
+    // Cập nhật tên người nhận (theo Mst_ManageNotify_UpdateX của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> UpdateNotifyRecipientAsync(int id, string? userName, string? by)
+    {
+        var e = await db.NotifyRecipients.FirstOrDefaultAsync(r => r.Id == id);
+        if (e == null) return (false, "Không tìm thấy người nhận thông báo.");
+        e.UserName = (userName ?? "").Trim();
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật người nhận {e.UserCode}.");
+    }
+
+    // Xóa người nhận (theo Mst_ManageNotify_DeleteX của TVAN gốc): chặn khi không tồn tại;
+    // xóa kèm toàn bộ đăng ký nhận loại thông báo của người này.
+    public async Task<(bool ok, string msg)> DeleteNotifyRecipientAsync(int id)
+    {
+        var e = await db.NotifyRecipients.FirstOrDefaultAsync(r => r.Id == id);
+        if (e == null) return (false, "Không tìm thấy người nhận thông báo.");
+        var code = e.UserCode;
+        var maps = await db.NotifyRecipientTypes.Where(t => t.NotifyRecipientId == id).ToListAsync();
+        db.NotifyRecipientTypes.RemoveRange(maps);
+        db.NotifyRecipients.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa người nhận {code}.");
+    }
+
+    // Lưu đăng ký nhận loại thông báo của một người nhận (theo Map_UserInNotifyType_Save của TVAN gốc):
+    // thay thế toàn bộ danh sách (UserCode, NotifyType, FlagNotify) của người nhận.
+    public async Task<(bool ok, string msg)> SaveNotifyRecipientTypesAsync(int id, List<(string notifyType, bool flagNotify)> types, string? by)
+    {
+        var e = await db.NotifyRecipients.FirstOrDefaultAsync(r => r.Id == id);
+        if (e == null) return (false, "Không tìm thấy người nhận thông báo.");
+        if (types == null || types.Count == 0) return (false, "Cần danh sách loại thông báo.");
+
+        var existing = await db.NotifyRecipientTypes.Where(t => t.NotifyRecipientId == id).ToListAsync();
+        db.NotifyRecipientTypes.RemoveRange(existing);
+        foreach (var (notifyType, flagNotify) in types)
+        {
+            var nt = (notifyType ?? "").Trim();
+            if (nt.Length == 0) continue;
+            db.NotifyRecipientTypes.Add(new NotifyRecipientType
+            {
+                NotifyRecipientId = id, UserCode = e.UserCode, NotifyType = nt,
+                FlagNotify = flagNotify, UpdatedBy = by
+            });
+        }
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu đăng ký nhận thông báo cho {e.UserCode}.");
     }
 
     private static (DateTime from, DateTime to) PeriodRange(PeriodType t, string kdlieu)

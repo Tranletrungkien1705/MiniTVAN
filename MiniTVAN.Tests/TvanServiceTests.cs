@@ -3088,4 +3088,76 @@ public class TvanServiceTests
             Assert.Empty(await svc.NotifiesAsync(null));
         }
     }
+
+    [Fact]
+    public async Task NotifyRecipient_Create_AutoRegistersAllTypes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveNotifyTypeAsync(null, "NOTIFY_ISSUED", "Phát hành", true, true, null);
+            await svc.SaveNotifyTypeAsync(null, "NOTIFY_TCT", "CQT", false, true, null);
+            var (ok, _, id) = await svc.CreateNotifyRecipientAsync("ketoan01", "Nguyễn Văn A", "quản trị");
+            Assert.True(ok);
+            var r = await svc.GetNotifyRecipientAsync(id);
+            Assert.NotNull(r);
+            Assert.Equal(2, r!.Types.Count);
+            // Cờ mặc định lấy từ NotifyType.DefaultActive.
+            Assert.True(r.Types.Single(t => t.NotifyType == "NOTIFY_ISSUED").FlagNotify);
+            Assert.False(r.Types.Single(t => t.NotifyType == "NOTIFY_TCT").FlagNotify);
+        }
+    }
+
+    [Fact]
+    public async Task NotifyRecipient_Create_DuplicateCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateNotifyRecipientAsync("ketoan01", "A", null);
+            var (ok, msg, _) = await svc.CreateNotifyRecipientAsync("ketoan01", "B", null);
+            Assert.False(ok);
+            Assert.Contains("đã tồn tại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task NotifyRecipient_Create_MissingCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.CreateNotifyRecipientAsync("  ", "A", null);
+            Assert.False(ok);
+            Assert.Contains("Cần mã người dùng", msg);
+        }
+    }
+
+    [Fact]
+    public async Task NotifyRecipient_SaveTypes_Replaces()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveNotifyTypeAsync(null, "NOTIFY_ISSUED", "Phát hành", true, true, null);
+            await svc.SaveNotifyTypeAsync(null, "NOTIFY_TCT", "CQT", false, true, null);
+            var (_, _, id) = await svc.CreateNotifyRecipientAsync("ketoan01", "A", null);
+            // Đổi: tắt NOTIFY_ISSUED, bật NOTIFY_TCT.
+            var (ok, _) = await svc.SaveNotifyRecipientTypesAsync(id, new() { ("NOTIFY_ISSUED", false), ("NOTIFY_TCT", true) }, "quản trị");
+            Assert.True(ok);
+            var r = await svc.GetNotifyRecipientAsync(id);
+            Assert.False(r!.Types.Single(t => t.NotifyType == "NOTIFY_ISSUED").FlagNotify);
+            Assert.True(r.Types.Single(t => t.NotifyType == "NOTIFY_TCT").FlagNotify);
+        }
+    }
+
+    [Fact]
+    public async Task NotifyRecipient_Delete_RemovesTypes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveNotifyTypeAsync(null, "NOTIFY_ISSUED", "Phát hành", true, true, null);
+            var (_, _, id) = await svc.CreateNotifyRecipientAsync("ketoan01", "A", null);
+            var (ok, _) = await svc.DeleteNotifyRecipientAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.NotifyRecipientsAsync(null));
+            Assert.Empty(await db.NotifyRecipientTypes.ToListAsync());
+        }
+    }
 }

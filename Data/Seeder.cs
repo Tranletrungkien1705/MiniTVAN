@@ -604,6 +604,23 @@ public static class Seeder
             db.Notifies.Add(notify);
             await db.SaveChangesAsync();
         }
+
+        // Người nhận thông báo (theo Mst_ManageNotify / Map_UserInNotifyType của TVAN gốc):
+        // 2 người nhận demo, mỗi người tự đăng ký nhận theo từng loại thông báo.
+        if (!await db.NotifyRecipients.AnyAsync())
+        {
+            var types = await db.NotifyTypes.OrderBy(t => t.NotifyTypeCode).ToListAsync();
+            var r1 = new NotifyRecipient { UserCode = "ketoan01", UserName = "Nguyễn Văn A", UpdatedBy = "quản trị" };
+            var r2 = new NotifyRecipient { UserCode = "ketoan02", UserName = "Trần Thị B", UpdatedBy = "quản trị" };
+            db.NotifyRecipients.AddRange(r1, r2);
+            await db.SaveChangesAsync();
+            foreach (var t in types)
+            {
+                db.NotifyRecipientTypes.Add(new NotifyRecipientType { NotifyRecipientId = r1.Id, UserCode = r1.UserCode, NotifyType = t.NotifyTypeCode, FlagNotify = t.DefaultActive, UpdatedBy = "quản trị" });
+                db.NotifyRecipientTypes.Add(new NotifyRecipientType { NotifyRecipientId = r2.Id, UserCode = r2.UserCode, NotifyType = t.NotifyTypeCode, FlagNotify = t.DefaultActive, UpdatedBy = "quản trị" });
+            }
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

@@ -1,0 +1,95 @@
+@model List<NotifyRecipient>
+@{
+    ViewData["Title"] = "Người nhận thông báo";
+    var keyword = ViewBag.Keyword as string;
+    var notifyTypes = ViewBag.NotifyTypes as List<NotifyType> ?? new List<NotifyType>();
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-people me-1"></i>Danh sách người nhận thông báo</h6>
+                <form method="get" action="/NotifyRecipient" class="d-flex gap-2">
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm mã / tên" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã người dùng</th><th>Tên</th><th>Đăng ký nhận loại thông báo</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var r in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@r.UserCode</td>
+                        <td>@r.UserName</td>
+                        <td>
+                            @if (r.Types.Count == 0)
+                            {
+                                <span class="text-muted small">Chưa đăng ký</span>
+                            }
+                            else
+                            {
+                                @foreach (var t in r.Types)
+                                {
+                                    <span class="badge @(t.FlagNotify ? "bg-success" : "bg-secondary") me-1 mb-1">@t.NotifyType</span>
+                                }
+                            }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/NotifyRecipient/Delete" class="d-inline" onsubmit="return confirm('Xóa người nhận @r.UserCode?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@r.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td colspan="3" class="pt-0">
+                            <form method="post" action="/NotifyRecipient/SaveTypes" class="row g-2 align-items-end">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@r.Id" />
+                                <div class="col-md-8">
+                                    <label class="form-label small mb-1">Đăng ký nhận loại thông báo</label>
+                                    <div class="d-flex flex-wrap gap-3">
+                                        @foreach (var nt in notifyTypes)
+                                        {
+                                            var on = r.Types.Any(t => t.NotifyType == nt.NotifyTypeCode && t.FlagNotify);
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="notifyType" value="@nt.NotifyTypeCode" id="nt_@(r.Id)_@nt.NotifyTypeCode" @(on ? "checked" : "") />
+                                                <label class="form-check-label small" for="nt_@(r.Id)_@nt.NotifyTypeCode">@nt.NotifyTypeCode</label>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small mb-1">Người thực hiện</label>
+                                    <input name="by" class="form-control form-control-sm" placeholder="quản trị" />
+                                </div>
+                                <div class="col-md-2">
+                                    <button class="btn btn-sm btn-outline-primary w-100">Lưu đăng ký</button>
+                                </div>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-4">Chưa có người nhận thông báo nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-person-plus me-1"></i>Thêm người nhận thông báo</h6>
+            <form method="post" action="/NotifyRecipient/Create" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã người dùng</label><input name="userCode" class="form-control form-control-sm" placeholder="VD ketoan01" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Tên người dùng</label><input name="userName" class="form-control form-control-sm" placeholder="VD Nguyễn Văn A" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="quản trị" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Thêm người nhận</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Khi thêm người nhận, hệ thống tự tạo đăng ký nhận cho TẤT CẢ loại thông báo với cờ mặc định lấy từ loại thông báo (theo Mst_ManageNotify_CreateX).</p>
+        </div></div>
+    </div>
+</div>

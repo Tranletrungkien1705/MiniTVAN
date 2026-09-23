@@ -1049,3 +1049,37 @@ public class NotifyDtl : IOrgOwned
     public bool FlagActive { get; set; } = true;            // Dòng đang dùng
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
+
+// Người nhận thông báo (theo bảng Mst_ManageNotify của TVAN gốc): danh sách người dùng
+// được phép nhận thông báo hệ thống. Khi thêm một người nhận, hệ thống tự tạo đăng ký nhận
+// cho TẤT CẢ loại thông báo (Map_UserInNotifyType) với cờ mặc định lấy từ NotifyType.DefaultActive.
+// Khóa nghiệp vụ: (OrgId, UserCode).
+public class NotifyRecipient : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string UserCode { get; set; } = "";              // Mã người dùng nhận thông báo
+    public string UserName { get; set; } = "";              // Tên người dùng nhận thông báo
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+
+    public List<NotifyRecipientType> Types { get; set; } = new();
+}
+
+// Đăng ký nhận loại thông báo của một người nhận (theo bảng Map_UserInNotifyType của TVAN gốc):
+// mỗi dòng gắn một người nhận (UserCode) với một loại thông báo (NotifyType) và cờ bật/tắt nhận
+// (FlagNotify). Khóa nghiệp vụ: (OrgId, UserCode, NotifyType).
+public class NotifyRecipientType : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int NotifyRecipientId { get; set; }
+    public NotifyRecipient? Recipient { get; set; }
+    public string UserCode { get; set; } = "";              // Mã người dùng nhận thông báo
+    public string NotifyType { get; set; } = "";            // Mã loại thông báo (NotifyTypeCode)
+    public bool FlagNotify { get; set; } = true;            // Bật/tắt nhận loại thông báo này
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}

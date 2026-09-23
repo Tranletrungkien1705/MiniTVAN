@@ -1019,6 +1019,54 @@ public class NotifyController(ITvanService svc) : Controller
     }
 }
 
+// Người nhận thông báo (theo Mst_ManageNotify / Map_UserInNotifyType của TVAN gốc):
+// quản lý danh sách người dùng nhận thông báo và đăng ký nhận theo từng loại thông báo.
+public class NotifyRecipientController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        ViewBag.NotifyTypes = await svc.NotifyTypesAsync(null);
+        return View(await svc.NotifyRecipientsAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string userCode, string? userName, string? by)
+    {
+        var (ok, msg, _) = await svc.CreateNotifyRecipientAsync(userCode, userName, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(int id, string? userName, string? by)
+    {
+        var (ok, msg) = await svc.UpdateNotifyRecipientAsync(id, userName, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteNotifyRecipientAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveTypes(int id, string? notifyType, string? by)
+    {
+        // Checkbox gửi lên danh sách loại thông báo được bật (name="notifyType").
+        var checkedTypes = Request.Form["notifyType"].ToArray();
+        var all = await svc.NotifyTypesAsync(null);
+        var types = all.Select(t => (t.NotifyTypeCode, checkedTypes.Contains(t.NotifyTypeCode))).ToList();
+        var (ok, msg) = await svc.SaveNotifyRecipientTypesAsync(id, types, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

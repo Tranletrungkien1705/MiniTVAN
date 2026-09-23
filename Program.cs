@@ -877,6 +877,42 @@ app.MapPost("/api/notifies/{id:int}/read", async (int id, MarkNotifyReadDto dto,
     return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
 });
 
+// Người nhận thông báo (theo Mst_ManageNotify của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
+app.MapGet("/api/notify-recipients", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.NotifyRecipientsAsync(keyword);
+    return Results.Ok(ls.Select(r => new { r.Id, r.UserCode, r.UserName, r.UpdatedAt, r.UpdatedBy, types = r.Types.Select(t => new { t.NotifyType, t.FlagNotify }) }));
+});
+
+// Thêm người nhận thông báo (theo Mst_ManageNotify_CreateX của TVAN gốc): tự tạo đăng ký nhận cho tất cả loại thông báo.
+app.MapPost("/api/notify-recipients", async (CreateNotifyRecipientDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.CreateNotifyRecipientAsync(dto.UserCode ?? "", dto.UserName, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Cập nhật tên người nhận (theo Mst_ManageNotify_UpdateX của TVAN gốc).
+app.MapPost("/api/notify-recipients/{id:int}/update", async (int id, UpdateNotifyRecipientDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.UpdateNotifyRecipientAsync(id, dto.UserName, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa người nhận (theo Mst_ManageNotify_DeleteX của TVAN gốc): xóa kèm đăng ký nhận loại thông báo.
+app.MapDelete("/api/notify-recipients/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteNotifyRecipientAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
+// Lưu đăng ký nhận loại thông báo của một người nhận (theo Map_UserInNotifyType_Save của TVAN gốc).
+app.MapPost("/api/notify-recipients/{id:int}/types", async (int id, SaveNotifyRecipientTypesDto dto, ITvanService svc) =>
+{
+    var types = (dto.Types ?? new()).Select(t => (t.NotifyType ?? "", t.FlagNotify)).ToList();
+    var (ok, msg) = await svc.SaveNotifyRecipientTypesAsync(id, types, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -934,3 +970,7 @@ record CreateNotifyDto(string? NotifyNo, string? Desc, DateTime EffDateStart, Da
 record UpdateNotifyDto(string? Desc, bool SendEmail, string? By);
 record AddNotifyDtlDto(string? UserCode, bool FlagRead, string? By);
 record MarkNotifyReadDto(string? UserCode);
+record CreateNotifyRecipientDto(string? UserCode, string? UserName, string? By);
+record UpdateNotifyRecipientDto(string? UserName, string? By);
+record NotifyRecipientTypeDto(string? NotifyType, bool FlagNotify);
+record SaveNotifyRecipientTypesDto(List<NotifyRecipientTypeDto>? Types, string? By);

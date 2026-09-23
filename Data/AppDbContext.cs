@@ -51,6 +51,8 @@ public class AppDbContext : DbContext
     public DbSet<NotifyType> NotifyTypes => Set<NotifyType>();
     public DbSet<Notify> Notifies => Set<Notify>();
     public DbSet<NotifyDtl> NotifyDtls => Set<NotifyDtl>();
+    public DbSet<NotifyRecipient> NotifyRecipients => Set<NotifyRecipient>();
+    public DbSet<NotifyRecipientType> NotifyRecipientTypes => Set<NotifyRecipientType>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -303,6 +305,17 @@ public class AppDbContext : DbContext
         b.Entity<NotifyDtl>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.NotifyId });
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<NotifyRecipient>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.UserCode }).IsUnique();   // mỗi tổ chức một mã người nhận
+            e.HasMany(x => x.Types).WithOne(t => t.Recipient).HasForeignKey(t => t.NotifyRecipientId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<NotifyRecipientType>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.UserCode, x.NotifyType }).IsUnique();   // mỗi người nhận một loại thông báo
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }
