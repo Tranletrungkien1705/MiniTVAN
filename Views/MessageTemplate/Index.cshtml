@@ -1,0 +1,73 @@
+@model List<MessageTemplate>
+@{
+    ViewData["Title"] = "Mẫu thông điệp gửi CQT";
+    var type = ViewBag.Type as MessageTypeCode?;
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-chat-left-text me-1"></i>Mẫu thông điệp/thông báo gửi CQT</h6>
+                <form method="get" action="/MessageTemplate" class="d-flex gap-2">
+                    <select name="type" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">— Tất cả loại thông điệp —</option>
+                        @foreach (var t in Enum.GetValues<MessageTypeCode>())
+                        {
+                            <option value="@t" selected="@(type == t)">@Ui.MessageType(t)</option>
+                        }
+                    </select>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã mẫu</th><th>Tên mẫu</th><th>Loại thông điệp</th><th>File mẫu</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var m in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@m.MessageTplCode</td>
+                        <td>@m.MessageTplName</td>
+                        <td class="small text-muted">@Ui.MessageType(m.MessageTypeCode)</td>
+                        <td class="small text-muted">@(string.IsNullOrWhiteSpace(m.MessageTplFileName) ? "—" : m.MessageTplFileName)</td>
+                        <td>
+                            @if (m.FlagActive) { <span class="badge bg-success">Đang dùng</span> }
+                            else { <span class="badge bg-secondary">Ngừng dùng</span> }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/MessageTemplate/Delete" class="d-inline" onsubmit="return confirm('Xóa mẫu thông điệp @m.MessageTplCode?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="code" value="@m.MessageTplCode" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có mẫu thông điệp nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm / cập nhật mẫu thông điệp</h6>
+            <form method="post" action="/MessageTemplate/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã mẫu</label><input name="code" class="form-control form-control-sm" placeholder="TPL100" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Tên mẫu</label><input name="name" class="form-control form-control-sm" placeholder="Thông điệp gửi tờ khai đăng ký HĐĐT" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Loại thông điệp</label>
+                    <select name="type" class="form-select form-select-sm">
+                        @foreach (var t in Enum.GetValues<MessageTypeCode>())
+                        {
+                            <option value="@t">@Ui.MessageType(t)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Nội dung mẫu</label><textarea name="content" class="form-control form-control-sm" rows="3" placeholder="{&quot;Title&quot;:&quot;...&quot;}" required></textarea></div>
+                <div class="col-12"><label class="form-label small mb-1">Tên file mẫu (.rtmpl)</label><input name="fileName" class="form-control form-control-sm" placeholder="mau100.rtmpl" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Nội dung file (base64)</label><input name="fileSpec" class="form-control form-control-sm" placeholder="UEsDBBQ..." /></div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu mẫu thông điệp</button></div>
+            </form>
+        </div></div>
+    </div>
+</div>

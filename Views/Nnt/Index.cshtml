@@ -1,38 +1,233 @@
 @model List<Nnt>
-@{ ViewData["Title"] = "Người nộp thuế"; }
+@{
+    ViewData["Title"] = "Người nộp thuế";
+    var keyword = ViewBag.Keyword as string;
+    var dlCode = ViewBag.DlCode as string;
+    var regStatus = ViewBag.RegStatus as RegStatus?;
+    var dealers = ViewBag.Dealers as List<Dealer> ?? new();
+    var provinces = ViewBag.Provinces as List<Province> ?? new();
+    var districts = ViewBag.Districts as List<District> ?? new();
+    var offices = ViewBag.TaxOffices as List<TaxOffice> ?? new();
+    string ProvName(string? code) => provinces.FirstOrDefault(p => p.ProvinceCode == code)?.ProvinceName ?? (code ?? "");
+    string DistName(string? p, string? d) => districts.FirstOrDefault(x => x.ProvinceCode == p && x.DistrictCode == d)?.DistrictName ?? (d ?? "");
+    string OfficeName(string? code) => offices.FirstOrDefault(o => o.GovTaxID == code)?.GovTaxName ?? (code ?? "");
+}
 <div class="row g-3">
-    <div class="col-lg-8"><div class="card"><div class="card-body">
-        <table class="table table-hover align-middle mb-0">
-            <thead><tr><th>MST</th><th>Tên</th><th>Đăng ký TCT</th><th></th></tr></thead>
-            <tbody>
-            @foreach (var n in Model)
-            {
-                var (t, css) = Ui.Reg(n.RegStatus);
-                <tr>
-                    <td class="fw-semibold small">@n.Mst</td>
-                    <td>@n.Name<div class="small text-muted">@n.Address</div></td>
-                    <td><span class="badge bg-@css">@t</span></td>
-                    <td class="text-end">
-                        @if (n.RegStatus != RegStatus.Registered)
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-building-check me-1"></i>Hồ sơ người nộp thuế</h6>
+                <form method="get" action="/Nnt" class="d-flex gap-2 flex-wrap">
+                    <select name="dlCode" class="form-select form-select-sm" style="width:auto">
+                        <option value="">— Tất cả đại lý —</option>
+                        @foreach (var d in dealers)
                         {
-                            <form asp-action="Register" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@n.Id" /><button class="btn btn-sm btn-outline-primary"><i class="bi bi-send me-1"></i>Đăng ký TCT</button></form>
+                            <option value="@d.DLCode" selected="@(d.DLCode == dlCode)">@d.DLCode — @d.DLName</option>
                         }
-                    </td>
-                </tr>
-            }
-            @if (Model.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-4">Chưa có NNT.</td></tr> }
-            </tbody>
-        </table>
-    </div></div></div>
-    <div class="col-lg-4"><div class="card"><div class="card-body">
-        <h6 class="fw-bold mb-3">Thêm NNT</h6>
-        <form asp-action="Create" method="post">@Html.AntiForgeryToken()
-            <div class="mb-2"><input name="mst" class="form-control" placeholder="Mã số thuế (10/13 số) *" required /></div>
-            <div class="mb-2"><input name="name" class="form-control" placeholder="Tên đơn vị *" required /></div>
-            <div class="mb-2"><input name="address" class="form-control" placeholder="Địa chỉ" /></div>
-            <div class="mb-3"><input name="email" type="email" class="form-control" placeholder="Email" /></div>
-            <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Thêm</button>
-        </form>
-        <div class="small text-muted mt-3">NNT phải <b>đăng ký</b> và được TCT chấp nhận trước khi truyền hóa đơn.</div>
-    </div></div></div>
+                    </select>
+                    <select name="regStatus" class="form-select form-select-sm" style="width:auto">
+                        <option value="">— Mọi trạng thái —</option>
+                        @foreach (var s in new[] { RegStatus.None, RegStatus.Pending, RegStatus.Registered, RegStatus.Rejected })
+                        {
+                            <option value="@((int)s)" selected="@(regStatus == s)">@Ui.Reg(s).text</option>
+                        }
+                    </select>
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm MST / tên / liên hệ" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead><tr><th>MST</th><th>Tên / Địa chỉ</th><th>Địa giới</th><th>Liên hệ</th><th>Đăng ký TCT</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var n in Model)
+                    {
+                        var (t, css) = Ui.Reg(n.RegStatus);
+                        <tr>
+                            <td class="fw-semibold small">
+                                @n.Mst
+                                @if (!string.IsNullOrWhiteSpace(n.MstParent)) { <div class="small text-muted">↳ trực thuộc @n.MstParent</div> }
+                                @if (!string.IsNullOrWhiteSpace(n.MstBuCode)) { <div class="small text-muted">BU: @n.MstBuCode (cấp @n.MstLevel)</div> }
+                            </td>
+                            <td>
+                                <div>@n.Name</div>
+                                @if (!string.IsNullOrWhiteSpace(n.Address)) { <div class="small text-muted">@n.Address</div> }
+                                @if (!string.IsNullOrWhiteSpace(n.GovTaxID)) { <div class="small text-muted"><i class="bi bi-bank me-1"></i>@OfficeName(n.GovTaxID)</div> }
+                            </td>
+                            <td class="small">
+                                @if (!string.IsNullOrWhiteSpace(n.ProvinceCode)) { <div>@ProvName(n.ProvinceCode)</div> }
+                                @if (!string.IsNullOrWhiteSpace(n.DistrictCode)) { <div class="text-muted">@DistName(n.ProvinceCode, n.DistrictCode)</div> }
+                                @if (!string.IsNullOrWhiteSpace(n.DLCode)) { <div class="text-muted"><i class="bi bi-shop me-1"></i>@n.DLCode</div> }
+                            </td>
+                            <td class="small">
+                                @if (!string.IsNullOrWhiteSpace(n.PresentBy)) { <div><i class="bi bi-person me-1"></i>@n.PresentBy @(string.IsNullOrWhiteSpace(n.NntPosition) ? "" : "— " + n.NntPosition)</div> }
+                                @if (!string.IsNullOrWhiteSpace(n.ContactPhone)) { <div><i class="bi bi-telephone me-1"></i>@n.ContactPhone</div> }
+                                @if (!string.IsNullOrWhiteSpace(n.ContactEmail)) { <div><i class="bi bi-envelope me-1"></i>@n.ContactEmail</div> }
+                            </td>
+                            <td>
+                                <span class="badge bg-@css">@t</span>
+                                @if (!n.FlagActive) { <span class="badge bg-secondary">Ngừng dùng</span> }
+                            </td>
+                            <td class="text-end text-nowrap">
+                                @if (n.RegStatus != RegStatus.Registered)
+                                {
+                                    <form asp-action="Register" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@n.Id" /><button class="btn btn-sm btn-outline-primary" title="Đăng ký TCT"><i class="bi bi-send"></i></button></form>
+                                }
+                                <button class="btn btn-sm btn-outline-secondary" title="Sửa hồ sơ"
+                                        data-bs-toggle="modal" data-bs-target="#nntModal"
+                                        data-id="@n.Id" data-mst="@n.Mst" data-name="@n.Name" data-mstparent="@n.MstParent"
+                                        data-province="@n.ProvinceCode" data-district="@n.DistrictCode" data-dlcode="@n.DLCode"
+                                        data-address="@n.Address" data-mobile="@n.Mobile" data-phone="@n.Phone" data-fax="@n.Fax"
+                                        data-presentby="@n.PresentBy" data-position="@n.NntPosition" data-idno="@n.PresentIdNo" data-idtype="@n.PresentIdType"
+                                        data-bizregno="@n.BusinessRegNo" data-govtaxid="@n.GovTaxID" data-contactname="@n.ContactName"
+                                        data-contactphone="@n.ContactPhone" data-contactemail="@n.ContactEmail" data-website="@n.Website"
+                                        data-canumber="@n.CANumber" data-caorg="@n.CAOrg" data-accno="@n.AccNo" data-accholder="@n.AccHolder"
+                                        data-bankname="@n.BankName" data-biztype="@n.BizType" data-bizfield="@n.BizFieldCode" data-bizsize="@n.BizSizeCode"
+                                        data-active="@(n.FlagActive ? "true" : "false")"><i class="bi bi-pencil"></i></button>
+                                <form asp-action="Delete" method="post" class="d-inline" onsubmit="return confirm('Xóa NNT @n.Name?');">
+                                    @Html.AntiForgeryToken()<input type="hidden" name="id" value="@n.Id" />
+                                    <button class="btn btn-sm btn-outline-danger" title="Xóa"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                    @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có người nộp thuế nào.</td></tr> }
+                    </tbody>
+                </table>
+            </div>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm nhanh NNT</h6>
+            <form asp-action="Create" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2"><input name="mst" class="form-control form-control-sm" placeholder="Mã số thuế (10/13 số) *" required /></div>
+                <div class="mb-2"><input name="name" class="form-control form-control-sm" placeholder="Tên đơn vị *" required /></div>
+                <div class="mb-2"><input name="address" class="form-control form-control-sm" placeholder="Địa chỉ" /></div>
+                <div class="mb-3"><input name="email" type="email" class="form-control form-control-sm" placeholder="Email" /></div>
+                <button class="btn btn-sm btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Thêm</button>
+            </form>
+            <p class="small text-muted mt-3 mb-0">NNT phải <b>đăng ký</b> và được TCT chấp nhận trước khi truyền hóa đơn. Dùng nút <i class="bi bi-pencil"></i> để khai báo hồ sơ đầy đủ.</p>
+        </div></div>
+    </div>
 </div>
+
+<!-- Modal hồ sơ NNT đầy đủ (theo Mst_NNT_Create/Update của TVAN gốc) -->
+<div class="modal fade" id="nntModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <form asp-action="Save" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" id="nntId" />
+                <div class="modal-header"><h6 class="modal-title fw-bold">Hồ sơ người nộp thuế</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="row g-2">
+                        <div class="col-md-4"><label class="form-label small mb-1">Mã số thuế *</label><input name="mst" id="nntMst" class="form-control form-control-sm" required /></div>
+                        <div class="col-md-8"><label class="form-label small mb-1">Tên đơn vị *</label><input name="name" id="nntName" class="form-control form-control-sm" required /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Đơn vị trực thuộc (MST cấp trên)</label><input name="mstParent" id="nntMstParent" class="form-control form-control-sm" placeholder="MST cấp trên" /></div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Tỉnh/Thành phố</label>
+                            <select name="provinceCode" id="nntProvince" class="form-select form-select-sm">
+                                <option value="">— Chọn —</option>
+                                @foreach (var p in provinces) { <option value="@p.ProvinceCode">@p.ProvinceName</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Quận/Huyện</label>
+                            <select name="districtCode" id="nntDistrict" class="form-select form-select-sm">
+                                <option value="">— Chọn —</option>
+                                @foreach (var d in districts) { <option value="@d.DistrictCode" data-province="@d.ProvinceCode">@d.DistrictName</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Đại lý</label>
+                            <select name="dlCode" id="nntDlCode" class="form-select form-select-sm">
+                                <option value="">— Không —</option>
+                                @foreach (var d in dealers) { <option value="@d.DLCode">@d.DLCode — @d.DLName</option> }
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small mb-1">Cơ quan thuế quản lý</label>
+                            <select name="govTaxID" id="nntGovTaxID" class="form-select form-select-sm">
+                                <option value="">— Không —</option>
+                                @foreach (var o in offices) { <option value="@o.GovTaxID">@o.GovTaxID — @o.GovTaxName</option> }
+                            </select>
+                        </div>
+                        <div class="col-12"><label class="form-label small mb-1">Địa chỉ *</label><input name="address" id="nntAddress" class="form-control form-control-sm" required /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">ĐT di động</label><input name="mobile" id="nntMobile" class="form-control form-control-sm" /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">ĐT cố định</label><input name="phone" id="nntPhone" class="form-control form-control-sm" /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Fax</label><input name="fax" id="nntFax" class="form-control form-control-sm" /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Người đại diện *</label><input name="presentBy" id="nntPresentBy" class="form-control form-control-sm" required /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Chức vụ *</label><input name="nntPosition" id="nntPosition" class="form-control form-control-sm" required /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Giấy phép KD</label><input name="businessRegNo" id="nntBizRegNo" class="form-control form-control-sm" /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Số giấy tờ</label><input name="presentIdNo" id="nntIdNo" class="form-control form-control-sm" /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Loại giấy tờ</label><input name="presentIdType" id="nntIdType" class="form-control form-control-sm" placeholder="CCCD / Hộ chiếu" /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Website</label><input name="website" id="nntWebsite" class="form-control form-control-sm" /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Tên người liên hệ *</label><input name="contactName" id="nntContactName" class="form-control form-control-sm" required /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">ĐT người liên hệ *</label><input name="contactPhone" id="nntContactPhone" class="form-control form-control-sm" required /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Email người liên hệ *</label><input name="contactEmail" id="nntContactEmail" class="form-control form-control-sm" required /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Số chứng thư số</label><input name="caNumber" id="nntCaNumber" class="form-control form-control-sm" /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Tổ chức cấp CTS</label><input name="caOrg" id="nntCaOrg" class="form-control form-control-sm" placeholder="VNPT-CA" /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Hiệu lực CTS từ</label><input name="caEffStart" id="nntCaEffStart" type="date" class="form-control form-control-sm" /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Hiệu lực CTS đến</label><input name="caEffEnd" id="nntCaEffEnd" type="date" class="form-control form-control-sm" /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Số tài khoản</label><input name="accNo" id="nntAccNo" class="form-control form-control-sm" /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Chủ tài khoản</label><input name="accHolder" id="nntAccHolder" class="form-control form-control-sm" /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Ngân hàng</label><input name="bankName" id="nntBankName" class="form-control form-control-sm" /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Loại hình tổ chức</label><input name="bizType" id="nntBizType" class="form-control form-control-sm" /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Lĩnh vực hoạt động</label><input name="bizFieldCode" id="nntBizField" class="form-control form-control-sm" /></div>
+                        <div class="col-md-4"><label class="form-label small mb-1">Quy mô tổ chức</label><input name="bizSizeCode" id="nntBizSize" class="form-control form-control-sm" /></div>
+                        <div class="col-12 form-check ms-1">
+                            <input class="form-check-input" type="checkbox" name="active" value="true" id="nntActive" checked />
+                            <label class="form-check-label small" for="nntActive">Đang dùng</label>
+                        </div>
+                        <div class="col-md-6"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button class="btn btn-sm btn-primary">Lưu hồ sơ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    document.getElementById('nntModal').addEventListener('show.bs.modal', function (ev) {
+        var b = ev.relatedTarget; if (!b) return;
+        function set(id, v) { var el = document.getElementById(id); if (el) el.value = v || ''; }
+        set('nntId', b.getAttribute('data-id'));
+        set('nntMst', b.getAttribute('data-mst'));
+        set('nntName', b.getAttribute('data-name'));
+        set('nntMstParent', b.getAttribute('data-mstparent'));
+        set('nntProvince', b.getAttribute('data-province'));
+        set('nntDistrict', b.getAttribute('data-district'));
+        set('nntDlCode', b.getAttribute('data-dlcode'));
+        set('nntGovTaxID', b.getAttribute('data-govtaxid'));
+        set('nntAddress', b.getAttribute('data-address'));
+        set('nntMobile', b.getAttribute('data-mobile'));
+        set('nntPhone', b.getAttribute('data-phone'));
+        set('nntFax', b.getAttribute('data-fax'));
+        set('nntPresentBy', b.getAttribute('data-presentby'));
+        set('nntPosition', b.getAttribute('data-position'));
+        set('nntBizRegNo', b.getAttribute('data-bizregno'));
+        set('nntIdNo', b.getAttribute('data-idno'));
+        set('nntIdType', b.getAttribute('data-idtype'));
+        set('nntWebsite', b.getAttribute('data-website'));
+        set('nntContactName', b.getAttribute('data-contactname'));
+        set('nntContactPhone', b.getAttribute('data-contactphone'));
+        set('nntContactEmail', b.getAttribute('data-contactemail'));
+        set('nntCaNumber', b.getAttribute('data-canumber'));
+        set('nntCaOrg', b.getAttribute('data-caorg'));
+        set('nntAccNo', b.getAttribute('data-accno'));
+        set('nntAccHolder', b.getAttribute('data-accholder'));
+        set('nntBankName', b.getAttribute('data-bankname'));
+        set('nntBizType', b.getAttribute('data-biztype'));
+        set('nntBizField', b.getAttribute('data-bizfield'));
+        set('nntBizSize', b.getAttribute('data-bizsize'));
+        document.getElementById('nntActive').checked = b.getAttribute('data-active') === 'true';
+    });
+</script>
+}
