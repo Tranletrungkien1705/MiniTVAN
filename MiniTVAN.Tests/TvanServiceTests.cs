@@ -995,6 +995,74 @@ public class TvanServiceTests
         }
     }
 
+    // Xóa NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_DeleteMulti của TVAN gốc).
+    [Fact]
+    public async Task BulkDelete_MultipleIssued_AllDeletedAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            await svc.RegisterNntAsync(nntId);
+            var (_, _, inv1) = await svc.CreateInvoiceAsync(new Invoice { NntId = nntId, Symbol = "1C26TAA", BuyerName = "Cty Mua", Amount = 10_000_000 });
+            var (_, _, inv2) = await svc.CreateInvoiceAsync(new Invoice { NntId = nntId, Symbol = "1C26TAA", BuyerName = "Cty Mua", Amount = 20_000_000 });
+            await svc.TransmitAsync(inv1);   // inv1 → Accepted (ISSUED)
+            await svc.TransmitAsync(inv2);   // inv2 → Accepted (ISSUED)
+            var (ok, msg, count) = await svc.BulkDeleteAsync(new List<int> { inv1, inv2 }, "xóa lô lập sai", "kế toán trưởng");
+            Assert.True(ok);
+            Assert.Equal(2, count);
+            Assert.Equal(InvoiceStatus.Deleted, (await svc.GetInvoiceAsync(inv1))!.Status);
+            Assert.Equal(InvoiceStatus.Deleted, (await svc.GetInvoiceAsync(inv2))!.Status);
+            var logs = await svc.BulkDeleteLogsAsync();
+            Assert.Single(logs);
+            Assert.Equal(2, logs[0].DeletedCount);
+            Assert.Equal("kế toán trưởng", logs[0].By);
+        }
+    }
+
+    [Fact]
+    public async Task BulkDelete_EmptyList_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, count) = await svc.BulkDeleteAsync(new List<int>(), null, null);
+            Assert.False(ok);
+            Assert.Equal(0, count);
+            Assert.Contains("ít nhất một", msg);
+        }
+    }
+
+    [Fact]
+    public async Task BulkDelete_OneNotIssued_NoneDeleted()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            await svc.RegisterNntAsync(nntId);
+            var (_, _, inv1) = await svc.CreateInvoiceAsync(new Invoice { NntId = nntId, Symbol = "1C26TAA", BuyerName = "Cty Mua", Amount = 10_000_000 });
+            var (_, _, inv2) = await svc.CreateInvoiceAsync(new Invoice { NntId = nntId, Symbol = "1C26TAA", BuyerName = "Cty Mua", Amount = 20_000_000 });
+            await svc.TransmitAsync(inv1);   // inv1 → Accepted (ISSUED)
+            // inv2 vẫn ở trạng thái Draft → không hợp lệ
+            var (ok, msg, count) = await svc.BulkDeleteAsync(new List<int> { inv1, inv2 }, null, null);
+            Assert.False(ok);
+            Assert.Equal(0, count);
+            Assert.Equal(InvoiceStatus.Accepted, (await svc.GetInvoiceAsync(inv1))!.Status);   // all-or-nothing
+            Assert.Empty(await svc.BulkDeleteLogsAsync());
+        }
+    }
+
+    [Fact]
+    public async Task BulkDelete_UnknownInvoice_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, inv1) = await Setup(svc);
+            var (ok, msg, count) = await svc.BulkDeleteAsync(new List<int> { inv1, 9999 }, null, null);
+            Assert.False(ok);
+            Assert.Equal(0, count);
+            Assert.Contains("không tồn tại", msg);
+        }
+    }
+
     // Cấp phát số hóa đơn (theo Invoice_Invoice_AllocatedInv của TVAN gốc).
     // Tạo HĐ nháp CHƯA có số (CreateInvoiceAsync tự cấp số nên tạo trực tiếp qua DbContext).
     private static async Task<(int nntId, int invId)> SetupNoNo(AppDbContext db, ITvanService svc)

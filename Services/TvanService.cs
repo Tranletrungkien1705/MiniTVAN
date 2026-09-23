@@ -60,6 +60,8 @@ public interface ITvanService
     Task<List<ApproveLog>> ApproveLogsAsync(int? invoiceId);
     Task<(bool ok, string msg, int approvedCount)> BulkApproveAsync(List<int> invoiceIds, string? note, string? by);
     Task<List<BulkApproveLog>> BulkApproveLogsAsync();
+    Task<(bool ok, string msg, int deletedCount)> BulkDeleteAsync(List<int> invoiceIds, string? note, string? by);
+    Task<List<BulkDeleteLog>> BulkDeleteLogsAsync();
     Task<(bool ok, string msg)> IssueAsync(int invoiceId, string? emailSend, string? note, string? by);
     Task<List<IssueLog>> IssueLogsAsync(int? invoiceId);
     Task<SystemSetting> GetSettingAsync();
@@ -1342,6 +1344,53 @@ public class TvanService(AppDbContext db) : ITvanService
 
     public Task<List<BulkApproveLog>> BulkApproveLogsAsync()
         => db.BulkApproveLogs.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+
+    // Xóa NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_DeleteMulti của TVAN gốc):
+    // xóa hàng loạt danh sách HĐ đã phát hành (ISSUED/Accepted) và đã có số hóa đơn.
+    // Mỗi HĐ đưa sang DELETED, ghi thời điểm xóa (DeleteDTimeUTC), người xóa (DeleteBy) và lý do (Remark),
+    // ghi 1 nhật ký xóa hàng loạt để đối soát. Nếu có HĐ không hợp lệ thì KHÔNG xóa HĐ nào (all-or-nothing).
+    public async Task<(bool ok, string msg, int deletedCount)> BulkDeleteAsync(List<int> invoiceIds, string? note, string? by)
+    {
+        if (invoiceIds == null || invoiceIds.Count == 0) return (false, "Cần chọn ít nhất một hóa đơn để xóa.", 0);
+        var ids = invoiceIds.Distinct().ToList();
+        var invs = await db.Invoices.Include(i => i.Nnt).Where(i => ids.Contains(i.Id)).ToListAsync();
+        if (invs.Count != ids.Count) return (false, "Có hóa đơn không tồn tại.", 0);
+
+        // Kiểm tra toàn bộ trước khi ghi (all-or-nothing).
+        foreach (var inv in invs)
+        {
+            if (inv.Status != InvoiceStatus.Accepted)
+                return (false, $"HĐ {inv.Symbol}-{inv.No} không ở trạng thái đã phát hành (ISSUED), không thể xóa.", 0);
+            if (string.IsNullOrWhiteSpace(inv.No))
+                return (false, $"HĐ {inv.Symbol} chưa có số, không thể xóa.", 0);
+        }
+
+        var now = DateTime.UtcNow;
+        var nos = new List<string>();
+        foreach (var inv in invs)
+        {
+            inv.Status = InvoiceStatus.Deleted;
+            inv.DeleteDTimeUTC = now;
+            inv.DeleteBy = by;
+            inv.Remark = note;
+            db.Messages.Add(new TranMessage
+            {
+                InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300",
+                Text = $"Xóa HĐ đã phát hành {inv.Symbol}-{inv.No}{(string.IsNullOrWhiteSpace(note) ? "" : ": " + note.Trim())}", CreatedAt = now
+            });
+            nos.Add($"{inv.Symbol}-{inv.No}");
+        }
+        db.BulkDeleteLogs.Add(new BulkDeleteLog
+        {
+            Action = BulkDeleteAction.BulkDelete, DeletedCount = invs.Count,
+            InvoiceNos = string.Join(", ", nos), Note = note, By = by, CreatedAt = now
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa {invs.Count} hóa đơn (DELETED).", invs.Count);
+    }
+
+    public Task<List<BulkDeleteLog>> BulkDeleteLogsAsync()
+        => db.BulkDeleteLogs.OrderByDescending(l => l.Id).Take(50).ToListAsync();
 
     // Phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc):
     // chỉ phát hành được hóa đơn đã duyệt (APPROVED) và đã có số hóa đơn.

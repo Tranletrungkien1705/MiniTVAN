@@ -83,6 +83,15 @@ public static class Seeder
                 Note = "Duyệt lô phát hành đầu kỳ", By = "kế toán trưởng", CreatedAt = DateTime.UtcNow.AddDays(-5)
             });
             await db.SaveChangesAsync();
+            // Xóa NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_DeleteMulti của TVAN gốc):
+            // minh họa 1 lần xóa hàng loạt 2 HĐ đã phát hành đã có số.
+            db.BulkDeleteLogs.Add(new BulkDeleteLog
+            {
+                Action = BulkDeleteAction.BulkDelete, DeletedCount = 2,
+                InvoiceNos = $"{inv1.Symbol}-{inv1.No}, {inv3.Symbol}-{inv3.No}",
+                Note = "Xóa lô hóa đơn lập sai", By = "kế toán trưởng", CreatedAt = DateTime.UtcNow.AddDays(-4)
+            });
+            await db.SaveChangesAsync();
             // Phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc): inv1 đã được phát hành (ISSUED) sau khi duyệt.
             inv1.IssuedDTimeUTC = DateTime.UtcNow.AddDays(-5);
             inv1.IssuedBy = "kế toán";

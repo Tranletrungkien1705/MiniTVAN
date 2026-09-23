@@ -341,6 +341,21 @@ app.MapGet("/api/bulk-approve-logs", async (ITvanService svc) =>
     return Results.Ok(ls.Select(l => new { l.Id, action = l.Action.ToString(), l.ApprovedCount, l.InvoiceNos, l.Note, l.By, l.CreatedAt }));
 });
 
+// Xóa NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_DeleteMulti của TVAN gốc):
+// xóa hàng loạt danh sách HĐ đã phát hành (ISSUED) đã có số → DELETED.
+app.MapPost("/api/invoices/bulk-delete", async (BulkDeleteDto dto, ITvanService svc) =>
+{
+    var (ok, msg, count) = await svc.BulkDeleteAsync(dto.Ids ?? new(), dto.Note, dto.By);
+    return ok ? Results.Ok(new { deletedCount = count, msg }) : Results.BadRequest(new { error = msg });
+});
+
+// Nhật ký xóa nhiều hóa đơn cùng lúc.
+app.MapGet("/api/bulk-delete-logs", async (ITvanService svc) =>
+{
+    var ls = await svc.BulkDeleteLogsAsync();
+    return Results.Ok(ls.Select(l => new { l.Id, action = l.Action.ToString(), l.DeletedCount, l.InvoiceNos, l.Note, l.By, l.CreatedAt }));
+});
+
 // Phát hành hóa đơn đã duyệt (theo Invoice_Invoice_Issued của TVAN gốc): APPROVED → ISSUED,
 // ghi thời điểm/người phát hành + email người nhận.
 app.MapPost("/api/invoices/{id:int}/issue", async (int id, IssueDto dto, ITvanService svc) =>
@@ -1209,6 +1224,7 @@ record ReSignDto(string? FileSpec, string? Note, string? By);
 record ApproveDto(string? FilePath, string? PdfFilePath, string? Note, string? By);
 record UnapproveDto(string? Note, string? By);
 record BulkApproveDto(List<int>? Ids, string? Note, string? By);
+record BulkDeleteDto(List<int>? Ids, string? Note, string? By);
 record IssueDto(string? EmailSend, string? Note, string? By);
 record Sign60DayDto(Sign60DayFlag Flag, string? Note);
 record DynamicCommaDto(DynamicCommaStyle FlagStyle, string? By);

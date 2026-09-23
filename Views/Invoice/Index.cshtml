@@ -22,6 +22,8 @@
                 <td onclick="event.stopPropagation()">
                     @if (i.Status == InvoiceStatus.Draft && !string.IsNullOrWhiteSpace(i.No))
                     { <input type="checkbox" class="form-check-input bulk-approve-cb" value="@i.Id" /> }
+                    else if (i.Status == InvoiceStatus.Accepted && !string.IsNullOrWhiteSpace(i.No))
+                    { <input type="checkbox" class="form-check-input bulk-delete-cb" value="@i.Id" /> }
                 </td>
                 <td class="fw-semibold small">@i.Symbol-@i.No</td><td class="small">@i.Nnt?.Name</td><td class="small">@i.BuyerName</td>
                 <td class="text-end">@Ui.Money(i.Total)</td>
@@ -50,6 +52,28 @@
             var box = document.getElementById('bulkApproveIds');
             box.innerHTML = '';
             document.querySelectorAll('.bulk-approve-cb:checked').forEach(function (cb) {
+                var h = document.createElement('input'); h.type = 'hidden'; h.name = 'ids'; h.value = cb.value; box.appendChild(h);
+            });
+        });
+    </script>
+
+    @* Xóa NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_DeleteMulti của TVAN gốc). *@
+    <form asp-action="BulkDelete" method="post" class="border rounded p-3 mt-2" onsubmit="return confirm('Xóa các hóa đơn đã chọn (ISSUED → DELETED)?')">
+        @Html.AntiForgeryToken()
+        <div class="fw-bold small mb-2"><i class="bi bi-trash3 me-1"></i>Xóa nhiều hóa đơn cùng lúc</div>
+        <div id="bulkDeleteIds"></div>
+        <div class="row g-2 align-items-end">
+            <div class="col-md-4"><label class="form-label small mb-1">Lý do (tùy chọn)</label><input name="note" class="form-control form-control-sm" placeholder="VD xóa lô hóa đơn lập sai" /></div>
+            <div class="col-md-3"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="VD kế toán trưởng" /></div>
+            <div class="col-md-3"><button class="btn btn-danger btn-sm w-100"><i class="bi bi-trash3 me-1"></i>Xóa HĐ đã chọn</button></div>
+        </div>
+        <div class="small text-muted mt-1">Chỉ xóa được HĐ đã phát hành (ISSUED) và đã có số. Nếu có HĐ không hợp lệ, không HĐ nào được xóa.</div>
+    </form>
+    <script>
+        document.querySelector('form[action$="BulkDelete"]')?.addEventListener('submit', function () {
+            var box = document.getElementById('bulkDeleteIds');
+            box.innerHTML = '';
+            document.querySelectorAll('.bulk-delete-cb:checked').forEach(function (cb) {
                 var h = document.createElement('input'); h.type = 'hidden'; h.name = 'ids'; h.value = cb.value; box.appendChild(h);
             });
         });

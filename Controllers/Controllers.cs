@@ -253,6 +253,16 @@ public class InvoiceController(ITvanService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    // Xóa NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_DeleteMulti của TVAN gốc):
+    // xóa hàng loạt danh sách HĐ đã phát hành (ISSUED) đã có số → DELETED.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> BulkDelete(int[] ids, string? note, string? by)
+    {
+        var (ok, msg, _) = await svc.BulkDeleteAsync((ids ?? Array.Empty<int>()).ToList(), note, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
     // Phát hành hóa đơn đã duyệt (theo Invoice_Invoice_Issued của TVAN gốc): APPROVED → ISSUED.
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Issue(int id, string? emailSend, string? note, string? by)
@@ -520,6 +530,12 @@ public class ApproveLogController(ITvanService svc) : Controller
 public class BulkApproveLogController(ITvanService svc) : Controller
 {
     public async Task<IActionResult> Index() => View(await svc.BulkApproveLogsAsync());
+}
+
+// Nhật ký xóa NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_DeleteMulti của TVAN gốc).
+public class BulkDeleteLogController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.BulkDeleteLogsAsync());
 }
 
 // Nhật ký phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc).

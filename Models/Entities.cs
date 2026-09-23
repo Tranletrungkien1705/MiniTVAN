@@ -54,6 +54,10 @@ public enum ApproveAction { Approve = 0, Unapprove = 1 }
 // BulkApprove = duyệt hàng loạt danh sách HĐ đang chờ (PENDING) đã có số → APPROVED.
 public enum BulkApproveAction { BulkApprove = 0 }
 
+// Loại thao tác xóa NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_DeleteMulti của TVAN gốc):
+// BulkDelete = xóa hàng loạt danh sách HĐ đã phát hành (ISSUED) đã có số → DELETED.
+public enum BulkDeleteAction { BulkDelete = 0 }
+
 // Loại thao tác hủy hóa đơn (theo Invoice_Invoice_Cancel của TVAN gốc):
 // Cancel = hủy hóa đơn đang chờ/đã duyệt (PENDING/APPROVED → CANCELED).
 public enum CancelAction { Cancel = 0 }
@@ -673,6 +677,21 @@ public class BulkApproveLog : IOrgOwned
     public BulkApproveAction Action { get; set; } = BulkApproveAction.BulkApprove;   // Loại thao tác duyệt hàng loạt
     public int ApprovedCount { get; set; }             // Số hóa đơn đã duyệt
     public string? InvoiceNos { get; set; }            // Danh sách số hóa đơn đã duyệt (cách nhau bởi dấu phẩy)
+    public string? Note { get; set; }                  // Ghi chú / lý do
+    public string? By { get; set; }                    // Người thực hiện
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Nhật ký xóa NHIỀU hóa đơn cùng lúc (theo Invoice_Invoice_DeleteMulti của TVAN gốc).
+// Mỗi lần xóa hàng loạt danh sách HĐ đã phát hành (ISSUED) đã có số ghi lại để đối soát:
+// số lượng HĐ đã xóa, danh sách số hóa đơn, lý do và người thực hiện.
+public class BulkDeleteLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public BulkDeleteAction Action { get; set; } = BulkDeleteAction.BulkDelete;   // Loại thao tác xóa hàng loạt
+    public int DeletedCount { get; set; }              // Số hóa đơn đã xóa
+    public string? InvoiceNos { get; set; }            // Danh sách số hóa đơn đã xóa (cách nhau bởi dấu phẩy)
     public string? Note { get; set; }                  // Ghi chú / lý do
     public string? By { get; set; }                    // Người thực hiện
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

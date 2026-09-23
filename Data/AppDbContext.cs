@@ -31,6 +31,7 @@ public class AppDbContext : DbContext
     public DbSet<ReSignLog> ReSignLogs => Set<ReSignLog>();
     public DbSet<ApproveLog> ApproveLogs => Set<ApproveLog>();
     public DbSet<BulkApproveLog> BulkApproveLogs => Set<BulkApproveLog>();
+    public DbSet<BulkDeleteLog> BulkDeleteLogs => Set<BulkDeleteLog>();
     public DbSet<IssueLog> IssueLogs => Set<IssueLog>();
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
     public DbSet<DynamicComma> DynamicCommas => Set<DynamicComma>();
@@ -203,6 +204,11 @@ public class AppDbContext : DbContext
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<BulkApproveLog>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.CreatedAt });
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<BulkDeleteLog>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.CreatedAt });
             e.HasQueryFilter(x => x.OrgId == _orgId);
