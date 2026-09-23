@@ -58,6 +58,7 @@ public interface ITvanService
     Task<List<InvoiceTemplate>> TemplatesAsync(int? nntId);
     Task<(bool ok, string msg)> IssueTemplateAsync(int templateId, DateTime effDateStart, string? remark);
     Task<(bool ok, string msg)> InactivateTemplateAsync(int templateId, string? remark);
+    Task<(bool ok, string msg)> CancelTemplateAsync(int templateId, string? remark, string? by);
     Task<(bool ok, string msg)> IncreaseTemplateEndNoAsync(int templateId, int newEndInvoiceNo, string? remark, string? by);
     Task<(bool ok, string msg)> UpdateTemplateQtyNoAsync(int templateId, int startInvoiceNo, int endInvoiceNo, string? remark, string? by);
     Task<List<TemplateRangeLog>> TemplateRangeLogsAsync(int? templateId);
@@ -1065,6 +1066,32 @@ public class TvanService(AppDbContext db) : ITvanService
         });
         await db.SaveChangesAsync();
         return (true, $"Đã ngừng hoạt động mẫu {tpl.FormNo} ({tpl.TInvoiceCode}).");
+    }
+
+    // Hủy mẫu hóa đơn (theo Invoice_TempInvoice_Cancel của TVAN gốc):
+    // chỉ hủy được mẫu đang sử dụng (Issued) và đang hoạt động (FlagActive).
+    // Đưa mẫu sang CANCEL, ghi thời điểm/người hủy + lý do và số lượng hủy
+    // (QtyCancel = EndInvoiceNo - QtyUsed, tức số hóa đơn còn lại chưa dùng).
+    public async Task<(bool ok, string msg)> CancelTemplateAsync(int templateId, string? remark, string? by)
+    {
+        var tpl = await db.InvoiceTemplates.Include(t => t.Nnt).FirstOrDefaultAsync(t => t.Id == templateId);
+        if (tpl == null) return (false, "Không tìm thấy mẫu hóa đơn.");
+        if (tpl.TInvoiceStatus != TemplateStatus.Issued) return (false, "Chỉ hủy được mẫu đang sử dụng (ISSUED).");
+        if (!tpl.FlagActive) return (false, "Mẫu đã ngừng hoạt động, không thể hủy.");
+
+        var qtyCancel = tpl.EndInvoiceNo - tpl.QtyUsed;
+        tpl.TInvoiceStatus = TemplateStatus.Cancel;
+        tpl.QtyCancel = qtyCancel;
+        tpl.CancelDTimeUTC = DateTime.UtcNow;
+        tpl.CancelBy = by;
+        tpl.FlagActive = false;
+        db.Messages.Add(new TranMessage
+        {
+            NntId = tpl.NntId, Type = MsgType.RegisterNnt, Dir = MsgDir.Out, Code = "300",
+            Text = $"Hủy mẫu hóa đơn {tpl.FormNo} ({tpl.TInvoiceCode}), số lượng hủy {qtyCancel}{(string.IsNullOrWhiteSpace(remark) ? "" : ": " + remark.Trim())}"
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã hủy mẫu {tpl.FormNo} ({tpl.TInvoiceCode}), số lượng hủy {qtyCancel}.");
     }
 
     // Tăng số hóa đơn cuối (EndInvoiceNo) của mẫu hóa đơn — mở rộng dải số được cấp phát

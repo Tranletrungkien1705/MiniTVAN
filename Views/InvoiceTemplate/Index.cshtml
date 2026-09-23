@@ -77,6 +77,8 @@
                                     data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode" data-end="@t.EndInvoiceNo"><i class="bi bi-arrows-expand me-1"></i>Tăng dải số</button>
                             <button class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#inactiveModal"
                                     data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode"><i class="bi bi-slash-circle me-1"></i>Ngừng</button>
+                            <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#cancelModal"
+                                    data-id="@t.Id" data-form="@t.FormNo" data-code="@t.TInvoiceCode"><i class="bi bi-x-octagon me-1"></i>Hủy mẫu</button>
                         }
                     </td>
                 </tr>
@@ -194,6 +196,23 @@
                 <input type="text" name="remark" class="form-control" placeholder="VD: Hết hiệu lực sử dụng" /></div>
         </div>
         <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button><button type="submit" class="btn btn-dark">Ngừng hoạt động</button></div>
+    </form>
+</div></div></div>
+
+<!-- Hủy mẫu hóa đơn (theo Invoice_TempInvoice_Cancel của TVAN gốc) -->
+<div class="modal fade" id="cancelModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <form method="post" action="/InvoiceTemplate/Cancel">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="id" id="cancelId" />
+        <div class="modal-header"><h6 class="modal-title">Hủy mẫu hóa đơn</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <p class="small text-muted mb-3">Mẫu <b id="cancelLabel"></b> sẽ chuyển sang trạng thái <b>Đã hủy</b> (CANCEL) và không cấp số được nữa. Số lượng hủy = số hóa đơn còn lại chưa dùng.</p>
+            <div class="mb-2"><label class="form-label small mb-1">Lý do hủy</label>
+                <input type="text" name="remark" class="form-control" placeholder="VD: Hủy mẫu theo đề nghị NNT" /></div>
+            <div class="mb-2"><label class="form-label small mb-1">Người thực hiện</label>
+                <input type="text" name="by" class="form-control" placeholder="VD: kế toán" /></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Đóng</button><button type="submit" class="btn btn-danger">Hủy mẫu</button></div>
     </form>
 </div></div></div>
 
@@ -339,6 +358,11 @@
         const b = e.relatedTarget;
         document.getElementById('inactiveId').value = b.dataset.id;
         document.getElementById('inactiveLabel').textContent = b.dataset.form + ' (' + b.dataset.code + ')';
+    });
+    document.getElementById('cancelModal').addEventListener('show.bs.modal', e => {
+        const b = e.relatedTarget;
+        document.getElementById('cancelId').value = b.dataset.id;
+        document.getElementById('cancelLabel').textContent = b.dataset.form + ' (' + b.dataset.code + ')';
     });
     document.getElementById('increaseEndModal').addEventListener('show.bs.modal', e => {
         const b = e.relatedTarget;

@@ -142,6 +142,7 @@ public static class Ui
         TemplateStatus.SentTct  => ("Đã gửi CQT", "info"),
         TemplateStatus.Issued   => ("Đang sử dụng", "success"),
         TemplateStatus.Inactive => ("Ngừng hoạt động", "dark"),
+        TemplateStatus.Cancel   => ("Đã hủy", "danger"),
         _ => (s.ToString(), "secondary")
     };
 

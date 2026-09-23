@@ -347,6 +347,25 @@ public static class Seeder
             }
         }
 
+        // Hủy mẫu hóa đơn (theo Invoice_TempInvoice_Cancel của TVAN gốc):
+        // seller có mẫu 1C26TAD đã bị hủy (CANCEL) kèm số lượng hủy + người hủy.
+        if (!await db.InvoiceTemplates.AnyAsync(t => t.FormNo == "1C26TAD"))
+        {
+            var seller = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == "0101243150");
+            if (seller != null)
+            {
+                db.InvoiceTemplates.Add(new InvoiceTemplate
+                {
+                    NntId = seller.Id, TInvoiceCode = "TINV-1C26TAD", TInvoiceName = "Hóa đơn GTGT 1C26TAD",
+                    FormNo = "1C26TAD", Sign = "K26TAD", TTType = InvoiceNoRule.TT78,
+                    EffDateStart = DateTime.Today.AddDays(-60), StartInvoiceNo = 1, EndInvoiceNo = 500,
+                    QtyUsed = 20, TInvoiceStatus = TemplateStatus.Cancel, FlagActive = false,
+                    QtyCancel = 480, CancelDTimeUTC = DateTime.UtcNow.AddDays(-5), CancelBy = "kế toán"
+                });
+                await db.SaveChangesAsync();
+            }
+        }
+
         // Trường tùy chỉnh hóa đơn (theo Invoice_CustomField / Invoice_DtlCustomField của TVAN gốc):
         // tổ chức demo định nghĩa 2 trường trên hóa đơn + 1 trường trên danh sách hàng hóa.
         if (!await db.InvoiceCustomFields.AnyAsync())

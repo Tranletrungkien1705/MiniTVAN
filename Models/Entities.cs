@@ -70,8 +70,9 @@ public enum TctMessageType { Success202 = 202, Fail204 = 204 }
 public enum TctAcceptStatus { Accept = 0, Reject = 1 }
 
 // Trạng thái mẫu hóa đơn (theo Invoice_TempInvoice.TInvoiceStatus của TVAN gốc):
-// Draft = PENDING (chờ), SentTct = SENTTCT (đã gửi CQT, chờ CQT phát hành), Issued = ISSUED (đang sử dụng), Inactive = ngừng.
-public enum TemplateStatus { Draft = 0, Issued = 1, Inactive = 2, SentTct = 3 }
+// Draft = PENDING (chờ), SentTct = SENTTCT (đã gửi CQT, chờ CQT phát hành), Issued = ISSUED (đang sử dụng),
+// Inactive = ngừng, Cancel = CANCEL (đã hủy mẫu — theo Invoice_TempInvoice_Cancel của TVAN gốc).
+public enum TemplateStatus { Draft = 0, Issued = 1, Inactive = 2, SentTct = 3, Cancel = 4 }
 
 // Loại thao tác gửi/nhận kết quả mẫu hóa đơn với CQT (theo Invoice_TempInvoice_SentTCT /
 // Invoice_TempInvoice_TCTIssued của TVAN gốc).
@@ -664,6 +665,12 @@ public class InvoiceTemplate : IOrgOwned
     // (theo Invoice_TempInvoice.NNTAccNo/NNTBankName của TVAN gốc — luồng Invoice_TempInvoice_SupportUpdAccNoAndBankName).
     public string? NNTAccNo { get; set; }
     public string? NNTBankName { get; set; }
+
+    // Hủy mẫu hóa đơn (theo Invoice_TempInvoice_Cancel của TVAN gốc):
+    // CancelDTimeUTC/CancelBy = thời điểm & người hủy mẫu; QtyCancel = số lượng hủy (số hóa đơn còn lại chưa dùng).
+    public DateTime? CancelDTimeUTC { get; set; }
+    public string? CancelBy { get; set; }
+    public int QtyCancel { get; set; }
 
     public int QtyRemain => EndInvoiceNo - StartInvoiceNo + 1 - QtyUsed;
 }

@@ -1206,6 +1206,53 @@ public class TvanServiceTests
         }
     }
 
+    // Hủy mẫu hóa đơn (theo Invoice_TempInvoice_Cancel của TVAN gốc).
+    [Fact]
+    public async Task CancelTemplate_Issued_BecomesCancel()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddTemplate(db, nntId, qtyUsed: 20);   // đã Issued, dải 1..1000
+            var (ok, msg) = await svc.CancelTemplateAsync(tplId, "Hủy theo đề nghị NNT", "kế toán");
+            Assert.True(ok);
+            var tpl = await db.InvoiceTemplates.FirstAsync(t => t.Id == tplId);
+            Assert.Equal(TemplateStatus.Cancel, tpl.TInvoiceStatus);
+            Assert.False(tpl.FlagActive);
+            Assert.Equal(980, tpl.QtyCancel);   // EndInvoiceNo(1000) - QtyUsed(20)
+            Assert.NotNull(tpl.CancelDTimeUTC);
+            Assert.Equal("kế toán", tpl.CancelBy);
+        }
+    }
+
+    [Fact]
+    public async Task CancelTemplate_Draft_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddDraftTemplate(db, nntId);
+            var (ok, msg) = await svc.CancelTemplateAsync(tplId, null, null);
+            Assert.False(ok);
+            Assert.Contains("đang sử dụng", msg);
+        }
+    }
+
+    [Fact]
+    public async Task CancelTemplate_AlreadyCancelled_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (nntId, _) = await Setup(svc);
+            var tplId = await AddTemplate(db, nntId);
+            var (first, _) = await svc.CancelTemplateAsync(tplId, null, null);
+            Assert.True(first);
+            var (ok, msg) = await svc.CancelTemplateAsync(tplId, null, null);
+            Assert.False(ok);
+            Assert.Contains("đang sử dụng", msg);
+        }
+    }
+
     // Nhận kết quả phản hồi từ CQT (theo Invoice_Invoice_TCTReceive của TVAN gốc).
     // Đưa HĐ về trạng thái Sent (chờ phản hồi) để mô phỏng luồng bất đồng bộ.
     private static async Task<int> SetupSent(AppDbContext db, ITvanService svc)

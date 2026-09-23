@@ -503,6 +503,15 @@ public class InvoiceTemplateController(ITvanService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    // Hủy mẫu hóa đơn (theo Invoice_TempInvoice_Cancel của TVAN gốc): ISSUED → CANCEL.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Cancel(int id, string? remark, string? by)
+    {
+        var (ok, msg) = await svc.CancelTemplateAsync(id, remark, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
     // Tăng số hóa đơn cuối (EndInvoiceNo) của mẫu hóa đơn — mở rộng dải số được cấp phát
     // (theo Invoice_TempInvoice_IncreaseEndInvoiceNo của TVAN gốc).
     [HttpPost, ValidateAntiForgeryToken]

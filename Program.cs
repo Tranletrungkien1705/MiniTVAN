@@ -377,6 +377,13 @@ app.MapPost("/api/templates/{id:int}/inactivate", async (int id, InactivateTempl
     return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
 });
 
+// Hủy mẫu hóa đơn (theo Invoice_TempInvoice_Cancel của TVAN gốc): ISSUED → CANCEL, ghi số lượng hủy + người hủy.
+app.MapPost("/api/templates/{id:int}/cancel", async (int id, CancelTemplateDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.CancelTemplateAsync(id, dto.Remark, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 // Tăng số hóa đơn cuối (EndInvoiceNo) của mẫu hóa đơn — mở rộng dải số được cấp phát
 // (theo Invoice_TempInvoice_IncreaseEndInvoiceNo của TVAN gốc).
 app.MapPost("/api/templates/{id:int}/increase-end-no", async (int id, IncreaseEndNoDto dto, ITvanService svc) =>
@@ -898,6 +905,7 @@ record AllocateNoDto(DateTime? InvoiceDate, string? By);
 record AllocateApproveIssueDto(DateTime? InvoiceDate, string? FilePath, string? PdfFilePath, string? EmailSend, string? Note, string? By);
 record IssueTemplateDto(DateTime? EffDateStart, string? Remark);
 record InactivateTemplateDto(string? Remark);
+record CancelTemplateDto(string? Remark, string? By);
 record IncreaseEndNoDto(int NewEndInvoiceNo, string? Remark, string? By);
 record UpdateQtyNoDto(int StartInvoiceNo, int EndInvoiceNo, string? Remark, string? By);
 record SendTemplateTctDto(string? Remark, string? By);
