@@ -573,6 +573,17 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Danh mục loại hóa đơn (theo Mst_InvoiceType của TVAN gốc):
+        // các loại hóa đơn demo dùng để phân loại hóa đơn + quy định cách đánh số (TT68/TT78).
+        if (!await db.InvoiceTypes.AnyAsync())
+        {
+            db.InvoiceTypes.AddRange(
+                new InvoiceType { InvoiceTypeCode = "GTGT", InvoiceTypeName = "Hóa đơn giá trị gia tăng", Remark = "Hóa đơn GTGT điện tử", TTType = InvoiceNoRule.TT78, FlagActive = true, UpdatedBy = "kế toán" },
+                new InvoiceType { InvoiceTypeCode = "BANHANG", InvoiceTypeName = "Hóa đơn bán hàng", Remark = "Hóa đơn bán hàng", TTType = InvoiceNoRule.TT78, FlagActive = true, UpdatedBy = "kế toán" },
+                new InvoiceType { InvoiceTypeCode = "XUATKHAU", InvoiceTypeName = "Hóa đơn xuất khẩu", Remark = "Hóa đơn xuất khẩu", TTType = InvoiceNoRule.TT68, FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+
         // Danh mục mã loại (theo Mst_TypeCode của TVAN gốc):
         // các mã loại demo dùng để phân loại giao dịch/nhật ký kết nối với cơ quan thuế.
         if (!await db.TypeCodes.AnyAsync())

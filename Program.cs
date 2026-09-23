@@ -811,6 +811,27 @@ app.MapDelete("/api/invoice-dtl-types/{id:int}", async (int id, ITvanService svc
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Danh mục loại hóa đơn (theo Mst_InvoiceType của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
+app.MapGet("/api/invoice-types", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.InvoiceTypesAsync(keyword);
+    return Results.Ok(ls.Select(t => new { t.Id, t.InvoiceTypeCode, t.InvoiceTypeName, t.Remark, ttType = t.TTType.ToString(), t.FlagActive, t.UpdatedAt, t.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) loại hóa đơn theo mã (theo Mst_InvoiceType của TVAN gốc).
+app.MapPost("/api/invoice-types", async (InvoiceTypeDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveInvoiceTypeAsync(dto.Id, dto.Code ?? "", dto.Name ?? "", dto.Remark, dto.TTType, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa loại hóa đơn theo id (theo Mst_InvoiceType của TVAN gốc).
+app.MapDelete("/api/invoice-types/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteInvoiceTypeAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 // Danh mục mã loại (theo Mst_TypeCode của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
 app.MapGet("/api/type-codes", async (string? keyword, ITvanService svc) =>
 {
@@ -1539,6 +1560,7 @@ record NntTypeDto(int? Id, string? Code, string? Name, bool Active, string? By);
 record VatRateDto(int? Id, string? Code, string? Rate, string? Desc, bool Active, string? By);
 record UnitDto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
 record InvoiceDtlTypeDto(int? Id, string? Code, string? Desc, bool Active, string? By);
+record InvoiceTypeDto(int? Id, string? Code, string? Name, string? Remark, InvoiceNoRule TTType, bool Active, string? By);
 record TypeCodeDto(int? Id, string? Code, string? Desc, string? Group, bool Active, string? By);
 record BrandDto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
 record ProductModelDto(int? Id, string? Code, string? Name, string? OrgModelCode, string? BrandCode, string? Remark, bool Active, string? By);

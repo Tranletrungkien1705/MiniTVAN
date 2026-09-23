@@ -2586,6 +2586,63 @@ public class TvanServiceTests
         }
     }
 
+    // Danh mục loại hóa đơn (theo Mst_InvoiceType của TVAN gốc).
+    [Fact]
+    public async Task InvoiceType_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveInvoiceTypeAsync(null, "GTGT", "Hóa đơn giá trị gia tăng", "Hóa đơn GTGT", InvoiceNoRule.TT78, true, "kế toán");
+            Assert.True(ok);
+            var list = await svc.InvoiceTypesAsync(null);
+            Assert.Single(list);
+            Assert.Equal("Hóa đơn giá trị gia tăng", list[0].InvoiceTypeName);
+            Assert.Equal(InvoiceNoRule.TT78, list[0].TTType);
+            Assert.True(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceType_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveInvoiceTypeAsync(null, "GTGT", "Hóa đơn GTGT", null, InvoiceNoRule.TT78, true, null);
+            // Lưu lại cùng mã loại = cập nhật (không tạo mới).
+            var (ok, _, id2) = await svc.SaveInvoiceTypeAsync(null, "GTGT", "Hóa đơn GTGT (sửa)", "Ghi chú", InvoiceNoRule.TT68, false, null);
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            var list = await svc.InvoiceTypesAsync(null);
+            Assert.Single(list);
+            Assert.Equal("Hóa đơn GTGT (sửa)", list[0].InvoiceTypeName);
+            Assert.Equal(InvoiceNoRule.TT68, list[0].TTType);
+            Assert.False(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceType_Save_MissingName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveInvoiceTypeAsync(null, "GTGT", "  ", null, InvoiceNoRule.TT78, true, null);
+            Assert.False(ok);
+            Assert.Contains("tên loại hóa đơn", msg);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceType_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveInvoiceTypeAsync(null, "BANHANG", "Hóa đơn bán hàng", null, InvoiceNoRule.TT78, true, null);
+            var (ok, _) = await svc.DeleteInvoiceTypeAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.InvoiceTypesAsync(null));
+        }
+    }
+
     // Danh mục thuế suất VAT (theo Mst_VATRate của TVAN gốc).
     [Fact]
     public async Task VatRate_Save_Creates()

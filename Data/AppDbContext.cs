@@ -62,6 +62,7 @@ public class AppDbContext : DbContext
     public DbSet<VatRate> VatRates => Set<VatRate>();
     public DbSet<Unit> Units => Set<Unit>();
     public DbSet<InvoiceDtlType> InvoiceDtlTypes => Set<InvoiceDtlType>();
+    public DbSet<InvoiceType> InvoiceTypes => Set<InvoiceType>();
     public DbSet<DocTienLog> DocTienLogs => Set<DocTienLog>();
     public DbSet<SysGroup> SysGroups => Set<SysGroup>();
     public DbSet<SysUserInGroup> SysUserInGroups => Set<SysUserInGroup>();
@@ -393,6 +394,11 @@ public class AppDbContext : DbContext
         b.Entity<InvoiceDtlType>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.InvoiceDtlTypeCode }).IsUnique();   // mỗi tổ chức một mã loại dòng
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InvoiceType>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.InvoiceTypeCode }).IsUnique();   // mỗi tổ chức một mã loại hóa đơn
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<DocTienLog>(e =>

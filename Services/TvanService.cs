@@ -138,6 +138,10 @@ public interface ITvanService
     Task<InvoiceDtlType?> GetInvoiceDtlTypeAsync(int id);
     Task<(bool ok, string msg, int id)> SaveInvoiceDtlTypeAsync(int? id, string code, string? desc, bool active, string? by);
     Task<(bool ok, string msg)> DeleteInvoiceDtlTypeAsync(int id);
+    Task<List<InvoiceType>> InvoiceTypesAsync(string? keyword);
+    Task<InvoiceType?> GetInvoiceTypeAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveInvoiceTypeAsync(int? id, string code, string name, string? remark, InvoiceNoRule ttType, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteInvoiceTypeAsync(int id);
     Task<List<Brand>> BrandsAsync(string? keyword);
     Task<Brand?> GetBrandAsync(int id);
     Task<(bool ok, string msg, int id)> SaveBrandAsync(int? id, string code, string name, string? remark, bool active, string? by);
@@ -3086,6 +3090,74 @@ public class TvanService(AppDbContext db) : ITvanService
         db.InvoiceDtlTypes.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa loại dòng hàng hóa/dịch vụ {code}.");
+    }
+
+    // Danh mục loại hóa đơn (theo Mst_InvoiceType của TVAN gốc):
+    // danh sách loại hóa đơn (lọc theo từ khóa mã/tên/ghi chú nếu có).
+    public Task<List<InvoiceType>> InvoiceTypesAsync(string? keyword)
+    {
+        var q = db.InvoiceTypes.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.InvoiceTypeCode.Contains(k) || t.InvoiceTypeName.Contains(k) || (t.Remark != null && t.Remark.Contains(k)));
+        }
+        return q.OrderBy(t => t.InvoiceTypeCode).ToListAsync();
+    }
+
+    public Task<InvoiceType?> GetInvoiceTypeAsync(int id) =>
+        db.InvoiceTypes.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) loại hóa đơn theo khóa nghiệp vụ (OrgId, InvoiceType)
+    // (theo Mst_InvoiceType của TVAN gốc). Ràng buộc:
+    //  - cần mã loại hóa đơn + tên loại hóa đơn;
+    //  - khi tạo: mã loại hóa đơn chưa tồn tại trong tổ chức (Mst_InvoiceType_CheckDB_InvoiceTypeExist).
+    public async Task<(bool ok, string msg, int id)> SaveInvoiceTypeAsync(int? id, string code, string name, string? remark, InvoiceNoRule ttType, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã loại hóa đơn.", 0);
+        if (name.Length == 0) return (false, "Cần tên loại hóa đơn.", 0);
+
+        InvoiceType? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.InvoiceTypes.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.InvoiceTypes.FirstOrDefaultAsync(t => t.InvoiceTypeCode == code);
+
+        if (e == null)
+        {
+            if (await db.InvoiceTypes.AnyAsync(t => t.InvoiceTypeCode == code))
+                return (false, "Mã loại hóa đơn đã tồn tại.", 0);
+            e = new InvoiceType { InvoiceTypeCode = code };
+            db.InvoiceTypes.Add(e);
+        }
+        else
+        {
+            // Đổi mã loại hóa đơn: chặn trùng với loại khác.
+            if (!string.Equals(e.InvoiceTypeCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.InvoiceTypes.AnyAsync(t => t.InvoiceTypeCode == code && t.Id != e.Id))
+                return (false, "Mã loại hóa đơn đã tồn tại.", 0);
+            e.InvoiceTypeCode = code;
+        }
+
+        e.InvoiceTypeName = name;
+        e.Remark = remark;
+        e.TTType = ttType;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu loại hóa đơn {code} — {name}.", e.Id);
+    }
+
+    // Xóa loại hóa đơn theo id (theo Mst_InvoiceType của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteInvoiceTypeAsync(int id)
+    {
+        var e = await db.InvoiceTypes.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy loại hóa đơn.");
+        var code = e.InvoiceTypeCode;
+        db.InvoiceTypes.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa loại hóa đơn {code}.");
     }
 
     // Danh mục Thương hiệu (theo Mst_Brand của TVAN gốc):

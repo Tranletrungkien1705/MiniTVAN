@@ -986,6 +986,33 @@ public class InvoiceDtlTypeController(ITvanService svc) : Controller
     }
 }
 
+// Danh mục loại hóa đơn (theo Mst_InvoiceType của TVAN gốc):
+// phân loại hóa đơn theo loại (GTGT, bán hàng, xuất khẩu...) + loại thông tư đánh số (TT68/TT78).
+public class InvoiceTypeController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.InvoiceTypesAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string name, string? remark, InvoiceNoRule ttType, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveInvoiceTypeAsync(id, code, name, remark, ttType, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteInvoiceTypeAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Danh mục mã loại (theo Mst_TypeCode của TVAN gốc):
 // phân loại giao dịch/nhật ký kết nối với cơ quan thuế (VD 100, 200, 300).
 public class TypeCodeController(ITvanService svc) : Controller

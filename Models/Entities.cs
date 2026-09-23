@@ -1325,6 +1325,26 @@ public class InvoiceDtlType : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Danh mục loại hóa đơn (theo bảng Mst_InvoiceType của TVAN gốc):
+// phân loại hóa đơn theo loại (VD GTGT = hóa đơn giá trị gia tăng, BANHANG = hóa đơn bán hàng,
+// XUATKHAU = hóa đơn xuất khẩu). Tên loại (InvoiceTypeName) được in trên hóa đơn phát hành
+// (theo join `mit.InvoiceTypeName iti_InvoiceTypeName` trong Invoice_Invoice_Get của TVAN gốc).
+// TTType = loại thông tư quy định cách đánh số hóa đơn của loại này (TT68/TT78).
+// Khóa nghiệp vụ: (OrgId, InvoiceType). FlagActive = loại hóa đơn đang dùng hay không.
+public class InvoiceType : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string InvoiceTypeCode { get; set; } = "";   // Mã loại hóa đơn (VD GTGT, BANHANG)
+    public string InvoiceTypeName { get; set; } = "";   // Tên loại hóa đơn (in trên hóa đơn)
+    public string? Remark { get; set; }                    // Ghi chú
+    public InvoiceNoRule TTType { get; set; } = InvoiceNoRule.TT78;   // Loại thông tư (cách đánh số)
+    public bool FlagActive { get; set; } = true;           // Loại hóa đơn đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 // Nhật ký đọc tiền bằng chữ (theo luồng DocTien của TVAN gốc —
 // Invoice_InvoiceController.DocTien gọi clsDocTien.DocSo). Mỗi lần đọc một số tiền
 // thành chữ tiếng Việt ghi lại để đối soát: số tiền, mã + tên tiền tệ, kết quả chữ.
