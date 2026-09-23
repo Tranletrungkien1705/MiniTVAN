@@ -1,0 +1,76 @@
+@model List<SortColumnInvoice>
+@{
+    ViewData["Title"] = "Cột hiển thị danh sách hóa đơn";
+    var keyword = ViewBag.Keyword as string;
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-list-columns-reverse me-1"></i>Cột hiển thị danh sách hóa đơn</h6>
+                <form method="get" action="/SortColumnInvoice" class="d-flex gap-2">
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm mã / tên cột" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Thứ tự</th><th>Mã cột</th><th>Tên hiển thị</th><th>Kiểu dữ liệu</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var c in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@c.Idx</td>
+                        <td><code>@c.ColumnCode</code></td>
+                        <td>@c.ColumnName</td>
+                        <td>@Ui.SortColumnType(c.ColumnType)</td>
+                        <td>
+                            @if (c.FlagActive) { <span class="badge bg-success">Đang hiển thị</span> }
+                            else { <span class="badge bg-secondary">Ẩn</span> }
+                        </td>
+                        <td class="small text-muted">
+                            @if (c.UpdatedAt.HasValue) { <div>@c.UpdatedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div> }
+                            @if (!string.IsNullOrWhiteSpace(c.UpdatedBy)) { <div>@c.UpdatedBy</div> }
+                            @if (!c.UpdatedAt.HasValue && string.IsNullOrWhiteSpace(c.UpdatedBy)) { <span>—</span> }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/SortColumnInvoice/Delete" class="d-inline" onsubmit="return confirm('Xóa cột @c.ColumnCode?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@c.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có cột hiển thị nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm / cập nhật cột hiển thị</h6>
+            <form method="post" action="/SortColumnInvoice/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã cột</label><input name="columnCode" class="form-control form-control-sm" placeholder="InvoiceNo" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Tên hiển thị</label><input name="columnName" class="form-control form-control-sm" placeholder="Số hóa đơn" required /></div>
+                <div class="col-6"><label class="form-label small mb-1">Thứ tự</label><input name="idx" type="number" value="0" class="form-control form-control-sm" /></div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">Kiểu dữ liệu</label>
+                    <select name="columnType" class="form-select form-select-sm">
+                        <option value="Text">Chuỗi</option>
+                        <option value="Number">Số</option>
+                        <option value="Date">Ngày tháng</option>
+                    </select>
+                </div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="active" value="true" id="scActive" checked />
+                    <label class="form-check-label small" for="scActive">Đang hiển thị</label>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu cột hiển thị</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Lưu cùng mã cột = cập nhật cột đã có (theo khóa nghiệp vụ OrgId + ColumnCode).</p>
+        </div></div>
+    </div>
+</div>

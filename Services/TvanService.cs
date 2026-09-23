@@ -166,6 +166,10 @@ public interface ITvanService
     Task<ColumnConfig?> GetColumnConfigAsync(int id);
     Task<(bool ok, string msg, int id)> SaveColumnConfigAsync(int? id, string tableName, string columnName, string? columnFormat, string? columnDesc, bool active, string? by);
     Task<(bool ok, string msg)> DeleteColumnConfigAsync(int id);
+    Task<List<SortColumnInvoice>> SortColumnInvoicesAsync(string? keyword);
+    Task<SortColumnInvoice?> GetSortColumnInvoiceAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveSortColumnInvoiceAsync(int? id, string columnCode, int idx, string columnName, SortColumnType columnType, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteSortColumnInvoiceAsync(int id);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -3232,6 +3236,59 @@ public class TvanService(AppDbContext db) : ITvanService
         db.ColumnConfigs.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa cấu hình cột {e.TableName}.{e.ColumnName}.");
+    }
+
+    // Cấu hình cột hiển thị danh sách hóa đơn theo tổ chức (theo Mst_SortColumnInvoice của TVAN gốc):
+    // danh sách cột (lọc theo từ khóa mã/tên cột), sắp theo thứ tự hiển thị (Idx).
+    public Task<List<SortColumnInvoice>> SortColumnInvoicesAsync(string? keyword)
+    {
+        var q = db.SortColumnInvoices.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(c => c.ColumnCode.Contains(k) || c.ColumnName.Contains(k));
+        }
+        return q.OrderBy(c => c.Idx).ThenBy(c => c.ColumnCode).ToListAsync();
+    }
+
+    public Task<SortColumnInvoice?> GetSortColumnInvoiceAsync(int id) => db.SortColumnInvoices.FirstOrDefaultAsync(c => c.Id == id);
+
+    // Lưu (tạo mới/cập nhật) cấu hình cột danh sách hóa đơn theo khóa nghiệp vụ (OrgId, ColumnCode)
+    // (theo Mst_SortColumnInvoice_Create / Mst_SortColumnInvoice_Update của TVAN gốc).
+    public async Task<(bool ok, string msg, int id)> SaveSortColumnInvoiceAsync(int? id, string columnCode, int idx, string columnName, SortColumnType columnType, bool active, string? by)
+    {
+        columnCode = (columnCode ?? "").Trim();
+        columnName = (columnName ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(columnCode)) return (false, "Cần mã cột.", 0);
+        if (string.IsNullOrWhiteSpace(columnName)) return (false, "Cần tên hiển thị của cột.", 0);
+
+        SortColumnInvoice? e = null;
+        if (id.HasValue) e = await db.SortColumnInvoices.FirstOrDefaultAsync(c => c.Id == id.Value);
+        e ??= await db.SortColumnInvoices.FirstOrDefaultAsync(c => c.ColumnCode == columnCode);
+
+        if (e == null)
+        {
+            e = new SortColumnInvoice { ColumnCode = columnCode };
+            db.SortColumnInvoices.Add(e);
+        }
+        e.Idx = idx;
+        e.ColumnName = columnName;
+        e.ColumnType = columnType;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu cấu hình cột {columnCode}.", e.Id);
+    }
+
+    // Xóa cấu hình cột danh sách hóa đơn theo id (theo Mst_SortColumnInvoice_Delete của TVAN gốc).
+    public async Task<(bool ok, string msg)> DeleteSortColumnInvoiceAsync(int id)
+    {
+        var e = await db.SortColumnInvoices.FirstOrDefaultAsync(c => c.Id == id);
+        if (e == null) return (false, "Không tìm thấy cấu hình cột.");
+        db.SortColumnInvoices.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa cấu hình cột {e.ColumnCode}.");
     }
 
     private static (DateTime from, DateTime to) PeriodRange(PeriodType t, string kdlieu)

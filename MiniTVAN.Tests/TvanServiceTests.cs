@@ -3344,4 +3344,80 @@ public class TvanServiceTests
             Assert.Equal(DynamicCommaStyle.Comma, (await svc.GetDynamicCommaAsync()).FlagStyle);
         }
     }
+
+    // Cột hiển thị danh sách hóa đơn theo tổ chức (theo Mst_SortColumnInvoice của TVAN gốc):
+    // tạo mới/cập nhật theo mã cột, sắp theo thứ tự hiển thị, xóa.
+    [Fact]
+    public async Task SortColumn_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveSortColumnInvoiceAsync(null, "InvoiceNo", 1, "Số hóa đơn", SortColumnType.Text, true, "kế toán");
+            Assert.True(ok);
+            var e = await svc.GetSortColumnInvoiceAsync(id);
+            Assert.NotNull(e);
+            Assert.Equal("InvoiceNo", e!.ColumnCode);
+            Assert.Equal(1, e.Idx);
+            Assert.Equal(SortColumnType.Text, e.ColumnType);
+            Assert.True(e.FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task SortColumn_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveSortColumnInvoiceAsync(null, "InvoiceNo", 1, "Số hóa đơn", SortColumnType.Text, true, "kế toán");
+            // Lưu lại cùng mã cột = cập nhật, không tạo mới.
+            var (ok, _, id2) = await svc.SaveSortColumnInvoiceAsync(null, "InvoiceNo", 5, "Số HĐ", SortColumnType.Number, false, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            var all = await svc.SortColumnInvoicesAsync(null);
+            Assert.Single(all);
+            Assert.Equal(5, all[0].Idx);
+            Assert.Equal(SortColumnType.Number, all[0].ColumnType);
+            Assert.False(all[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task SortColumn_Save_MissingCodeOrName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok1, msg1, _) = await svc.SaveSortColumnInvoiceAsync(null, "  ", 1, "Số hóa đơn", SortColumnType.Text, true, null);
+            Assert.False(ok1);
+            Assert.Contains("mã cột", msg1);
+            var (ok2, msg2, _) = await svc.SaveSortColumnInvoiceAsync(null, "InvoiceNo", 1, "  ", SortColumnType.Text, true, null);
+            Assert.False(ok2);
+            Assert.Contains("tên hiển thị", msg2);
+        }
+    }
+
+    [Fact]
+    public async Task SortColumn_List_OrderedByIdxAndFiltered()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveSortColumnInvoiceAsync(null, "TotalValPmt", 4, "Tổng tiền thanh toán", SortColumnType.Number, true, null);
+            await svc.SaveSortColumnInvoiceAsync(null, "InvoiceNo", 1, "Số hóa đơn", SortColumnType.Text, true, null);
+            await svc.SaveSortColumnInvoiceAsync(null, "InvoiceDateUTC", 2, "Ngày hóa đơn", SortColumnType.Date, true, null);
+            var all = await svc.SortColumnInvoicesAsync(null);
+            Assert.Equal(new[] { "InvoiceNo", "InvoiceDateUTC", "TotalValPmt" }, all.Select(c => c.ColumnCode).ToArray());
+            Assert.Single(await svc.SortColumnInvoicesAsync("Ngày"));
+        }
+    }
+
+    [Fact]
+    public async Task SortColumn_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveSortColumnInvoiceAsync(null, "InvoiceNo", 1, "Số hóa đơn", SortColumnType.Text, true, null);
+            var (ok, _) = await svc.DeleteSortColumnInvoiceAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.SortColumnInvoicesAsync(null));
+        }
+    }
 }

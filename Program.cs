@@ -962,6 +962,27 @@ app.MapDelete("/api/column-configs/{id:int}", async (int id, ITvanService svc) =
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Cột hiển thị danh sách hóa đơn theo tổ chức (theo Mst_SortColumnInvoice của TVAN gốc): danh sách (lọc theo từ khóa).
+app.MapGet("/api/sort-columns", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.SortColumnInvoicesAsync(keyword);
+    return Results.Ok(ls.Select(c => new { c.Id, c.ColumnCode, c.Idx, c.ColumnName, type = c.ColumnType.ToString(), c.FlagActive, c.UpdatedAt, c.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) cột hiển thị danh sách hóa đơn theo mã cột (theo Mst_SortColumnInvoice_Create/Update của TVAN gốc).
+app.MapPost("/api/sort-columns", async (SortColumnDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveSortColumnInvoiceAsync(dto.Id, dto.ColumnCode ?? "", dto.Idx, dto.ColumnName ?? "", dto.Type, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa cột hiển thị danh sách hóa đơn theo id (theo Mst_SortColumnInvoice_Delete của TVAN gốc).
+app.MapDelete("/api/sort-columns/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteSortColumnInvoiceAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -1025,4 +1046,5 @@ record UpdateNotifyRecipientDto(string? UserName, string? By);
 record NotifyRecipientTypeDto(string? NotifyType, bool FlagNotify);
 record SaveNotifyRecipientTypesDto(List<NotifyRecipientTypeDto>? Types, string? By);
 record ColumnConfigDto(int? Id, string? TableName, string? ColumnName, string? ColumnFormat, string? ColumnDesc, bool Active, string? By);
+record SortColumnDto(int? Id, string? ColumnCode, int Idx, string? ColumnName, SortColumnType Type, bool Active, string? By);
 record TaxOfficeDto(int? Id, string? Code, string? CodeParent, string? ProvinceCode, string? DistrictCode, string? Name, string? Level, string? Address, string? ContactEmail, string? ContactPhone, bool Active, string? By);

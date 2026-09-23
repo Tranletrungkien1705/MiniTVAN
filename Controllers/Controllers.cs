@@ -1145,6 +1145,31 @@ public class ColumnConfigController(ITvanService svc) : Controller
     }
 }
 
+public class SortColumnInvoiceController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.SortColumnInvoicesAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string columnCode, int idx, string columnName, SortColumnType columnType, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveSortColumnInvoiceAsync(id, columnCode, idx, columnName, columnType, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteSortColumnInvoiceAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

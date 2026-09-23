@@ -55,6 +55,7 @@ public class AppDbContext : DbContext
     public DbSet<NotifyRecipient> NotifyRecipients => Set<NotifyRecipient>();
     public DbSet<NotifyRecipientType> NotifyRecipientTypes => Set<NotifyRecipientType>();
     public DbSet<ColumnConfig> ColumnConfigs => Set<ColumnConfig>();
+    public DbSet<SortColumnInvoice> SortColumnInvoices => Set<SortColumnInvoice>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -328,6 +329,11 @@ public class AppDbContext : DbContext
         b.Entity<ColumnConfig>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.TableName, x.ColumnName }).IsUnique();   // mỗi tổ chức một cấu hình cho (bảng, cột)
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SortColumnInvoice>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ColumnCode }).IsUnique();   // mỗi tổ chức một mã cột
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

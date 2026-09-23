@@ -286,4 +286,13 @@ public static class Ui
         Models.NotifyKind.Maintenance => "Bảo trì / hệ thống",
         _ => t.ToString()
     };
+
+    // Kiểu dữ liệu cột hiển thị danh sách hóa đơn (theo Mst_SortColumnInvoice.ColumnType của TVAN gốc).
+    public static string SortColumnType(SortColumnType t) => t switch
+    {
+        Models.SortColumnType.Text => "Chuỗi",
+        Models.SortColumnType.Number => "Số",
+        Models.SortColumnType.Date => "Ngày tháng",
+        _ => t.ToString()
+    };
 }

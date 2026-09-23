@@ -660,6 +660,18 @@ public static class Seeder
                 new ColumnConfig { TableName = "Invoice_Invoice", ColumnName = "InvoiceNo", ColumnFormat = "00000000", ColumnDesc = "Số hóa đơn", FlagActive = true, UpdatedBy = "kế toán" });
             await db.SaveChangesAsync();
         }
+
+        // Cột hiển thị danh sách hóa đơn theo tổ chức (theo Mst_SortColumnInvoice của TVAN gốc):
+        // tổ chức demo khai báo thứ tự + tên hiển thị + kiểu dữ liệu cho một số cột của lưới hóa đơn.
+        if (!await db.SortColumnInvoices.AnyAsync())
+        {
+            db.SortColumnInvoices.AddRange(
+                new SortColumnInvoice { ColumnCode = "InvoiceNo", Idx = 1, ColumnName = "Số hóa đơn", ColumnType = SortColumnType.Text, FlagActive = true, UpdatedBy = "kế toán" },
+                new SortColumnInvoice { ColumnCode = "InvoiceDateUTC", Idx = 2, ColumnName = "Ngày hóa đơn", ColumnType = SortColumnType.Date, FlagActive = true, UpdatedBy = "kế toán" },
+                new SortColumnInvoice { ColumnCode = "CustomerNNTName", Idx = 3, ColumnName = "Người mua", ColumnType = SortColumnType.Text, FlagActive = true, UpdatedBy = "kế toán" },
+                new SortColumnInvoice { ColumnCode = "TotalValPmt", Idx = 4, ColumnName = "Tổng tiền thanh toán", ColumnType = SortColumnType.Number, FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

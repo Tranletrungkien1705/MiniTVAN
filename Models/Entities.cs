@@ -1131,3 +1131,25 @@ public class ColumnConfig : IOrgOwned
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
+
+// Kiểu dữ liệu vật lý của cột hóa đơn (theo Mst_SortColumnInvoice.ColumnType của TVAN gốc):
+// TEXT = chuỗi, NUMBER = số, DATE = ngày tháng.
+public enum SortColumnType { Text = 0, Number = 1, Date = 2 }
+
+// Cấu hình cột hiển thị danh sách hóa đơn theo tổ chức (theo bảng Mst_SortColumnInvoice của TVAN gốc):
+// mỗi tổ chức tự khai báo danh sách cột hiển thị trên lưới hóa đơn, gồm mã cột (ColumnCode),
+// thứ tự hiển thị (Idx), tên hiển thị (ColumnName), kiểu dữ liệu (ColumnType) và cờ đang dùng (FlagActive).
+// Khóa nghiệp vụ: (OrgId, ColumnCode). FlagActive = cột đang hiển thị hay không.
+public class SortColumnInvoice : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ColumnCode { get; set; } = "";      // Mã cột (VD InvoiceNo)
+    public int Idx { get; set; }                       // Thứ tự hiển thị
+    public string ColumnName { get; set; } = "";      // Tên hiển thị của cột (VD Số hóa đơn)
+    public SortColumnType ColumnType { get; set; } = SortColumnType.Text;   // Kiểu dữ liệu cột
+    public bool FlagActive { get; set; } = true;       // Cột đang hiển thị
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
