@@ -73,6 +73,7 @@ public class AppDbContext : DbContext
     public DbSet<ProductModel> ProductModels => Set<ProductModel>();
     public DbSet<SpecType1> SpecType1s => Set<SpecType1>();
     public DbSet<TvanInteg> TvanIntegs => Set<TvanInteg>();
+    public DbSet<MstTypeCode> TypeCodes => Set<MstTypeCode>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -442,6 +443,11 @@ public class AppDbContext : DbContext
         b.Entity<TvanInteg>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.OrgCode }).IsUnique();   // mỗi tổ chức một mã OrgID
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<MstTypeCode>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.TypeCodeValue }).IsUnique();   // mỗi tổ chức một mã loại
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

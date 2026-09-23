@@ -149,6 +149,10 @@ public interface ITvanService
     Task<SpecType1?> GetSpecType1Async(int id);
     Task<(bool ok, string msg, int id)> SaveSpecType1Async(int? id, string code, string name, string? remark, bool active, string? by);
     Task<(bool ok, string msg)> DeleteSpecType1Async(int id);
+    Task<List<MstTypeCode>> TypeCodesAsync(string? keyword);
+    Task<MstTypeCode?> GetTypeCodeAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveTypeCodeAsync(int? id, string code, string? desc, string? group, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteTypeCodeAsync(int id);
     Task<List<Province>> ProvincesAsync(string? keyword);
     Task<Province?> GetProvinceAsync(int id);
     Task<(bool ok, string msg, int id)> SaveProvinceAsync(int? id, string code, string name, bool active, string? by);
@@ -3235,6 +3239,73 @@ public class TvanService(AppDbContext db) : ITvanService
         db.SpecType1s.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa loại sản phẩm {code}.");
+    }
+
+    // Danh mục mã loại (theo Mst_TypeCode của TVAN gốc):
+    // danh sách mã loại (lọc theo từ khóa mã/mô tả/nhóm nếu có).
+    public Task<List<MstTypeCode>> TypeCodesAsync(string? keyword)
+    {
+        var q = db.TypeCodes.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.TypeCodeValue.Contains(k)
+                || (t.TypeDesc != null && t.TypeDesc.Contains(k))
+                || (t.TypeGroup != null && t.TypeGroup.Contains(k)));
+        }
+        return q.OrderBy(t => t.TypeCodeValue).ToListAsync();
+    }
+
+    public Task<MstTypeCode?> GetTypeCodeAsync(int id) =>
+        db.TypeCodes.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) mã loại theo khóa nghiệp vụ (OrgId, TypeCode)
+    // (theo Mst_TypeCode_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã loại (Mst_TypeCode_Create_InvalidTypeCode);
+    //  - khi tạo: mã loại chưa tồn tại trong tổ chức (Mst_TypeCode_CheckDB_OrganExist).
+    public async Task<(bool ok, string msg, int id)> SaveTypeCodeAsync(int? id, string code, string? desc, string? group, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã loại.", 0);
+
+        MstTypeCode? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.TypeCodes.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.TypeCodes.FirstOrDefaultAsync(t => t.TypeCodeValue == code);
+
+        if (e == null)
+        {
+            if (await db.TypeCodes.AnyAsync(t => t.TypeCodeValue == code))
+                return (false, "Mã loại đã tồn tại.", 0);
+            e = new MstTypeCode { TypeCodeValue = code };
+            db.TypeCodes.Add(e);
+        }
+        else
+        {
+            // Đổi mã loại: chặn trùng với mã loại khác.
+            if (!string.Equals(e.TypeCodeValue, code, StringComparison.OrdinalIgnoreCase)
+                && await db.TypeCodes.AnyAsync(t => t.TypeCodeValue == code && t.Id != e.Id))
+                return (false, "Mã loại đã tồn tại.", 0);
+            e.TypeCodeValue = code;
+        }
+
+        e.TypeDesc = desc;
+        e.TypeGroup = group;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu mã loại {code}.", e.Id);
+    }
+
+    // Xóa mã loại theo id (theo Mst_TypeCode_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteTypeCodeAsync(int id)
+    {
+        var e = await db.TypeCodes.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy mã loại.");
+        var code = e.TypeCodeValue;
+        db.TypeCodes.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa mã loại {code}.");
     }
 
     // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):

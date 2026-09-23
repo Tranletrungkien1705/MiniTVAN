@@ -4376,6 +4376,74 @@ public class DocTienTests
     }
 
     [Fact]
+    public async Task TypeCode_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveTypeCodeAsync(null, "100", "Tờ khai đăng ký", "TCT", true, "kế toán");
+            Assert.True(ok);
+            var e = await svc.GetTypeCodeAsync(id);
+            Assert.Equal("100", e!.TypeCodeValue);
+            Assert.Equal("Tờ khai đăng ký", e.TypeDesc);
+            Assert.Equal("TCT", e.TypeGroup);
+            Assert.True(e.FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task TypeCode_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveTypeCodeAsync(null, "100", "Tờ khai", "TCT", true, "kế toán");
+            // Lưu lại cùng mã = cập nhật (không tạo bản ghi mới, không báo trùng).
+            var (ok, _, id2) = await svc.SaveTypeCodeAsync(null, "100", "Tờ khai đăng ký", "TCT", true, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            Assert.Single(await svc.TypeCodesAsync(null));
+            Assert.Equal("Tờ khai đăng ký", (await svc.GetTypeCodeAsync(id))!.TypeDesc);
+        }
+    }
+
+    [Fact]
+    public async Task TypeCode_Save_MissingCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveTypeCodeAsync(null, "  ", "Tờ khai", "TCT", true, "kế toán");
+            Assert.False(ok);
+            Assert.Contains("mã loại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task TypeCode_List_FilteredByKeyword()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveTypeCodeAsync(null, "100", "Tờ khai đăng ký", "TCT", true, "kế toán");
+            await svc.SaveTypeCodeAsync(null, "200", "Hóa đơn điện tử", "TCT", true, "kế toán");
+            var all = await svc.TypeCodesAsync(null);
+            Assert.Equal(2, all.Count);
+            var filtered = await svc.TypeCodesAsync("200");
+            Assert.Single(filtered);
+            Assert.Equal("200", filtered[0].TypeCodeValue);
+        }
+    }
+
+    [Fact]
+    public async Task TypeCode_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveTypeCodeAsync(null, "300", "Thông báo sai sót", "TCT", true, "kế toán");
+            var (ok, _) = await svc.DeleteTypeCodeAsync(id);
+            Assert.True(ok);
+            Assert.Null(await svc.GetTypeCodeAsync(id));
+        }
+    }
+
+    [Fact]
     public async Task Brand_Save_Creates()
     {
         var (db, svc, conn) = NewSvc(); using (conn)

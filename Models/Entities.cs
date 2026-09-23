@@ -1529,3 +1529,19 @@ public class TvanInteg : IOrgOwned
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
+
+// Danh mục mã loại (theo bảng Mst_TypeCode của TVAN gốc): mỗi tổ chức khai báo các mã loại
+// dùng để phân loại giao dịch/nhật ký kết nối với cơ quan thuế (VD loại thông điệp trao đổi).
+// Khóa nghiệp vụ: (OrgId, TypeCode). FlagActive = mã loại đang dùng hay không.
+public class MstTypeCode : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string TypeCodeValue { get; set; } = "";   // Mã loại (VD 100, 200, 300)
+    public string? TypeDesc { get; set; }               // Mô tả mã loại
+    public string? TypeGroup { get; set; }              // Nhóm mã loại
+    public bool FlagActive { get; set; } = true;         // Mã loại đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}

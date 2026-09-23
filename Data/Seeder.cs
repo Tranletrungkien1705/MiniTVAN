@@ -573,6 +573,17 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Danh mục mã loại (theo Mst_TypeCode của TVAN gốc):
+        // các mã loại demo dùng để phân loại giao dịch/nhật ký kết nối với cơ quan thuế.
+        if (!await db.TypeCodes.AnyAsync())
+        {
+            db.TypeCodes.AddRange(
+                new MstTypeCode { TypeCodeValue = "100", TypeDesc = "Tờ khai đăng ký/thay đổi thông tin sử dụng HĐĐT", TypeGroup = "TCT", FlagActive = true, UpdatedBy = "kế toán" },
+                new MstTypeCode { TypeCodeValue = "200", TypeDesc = "Hóa đơn điện tử gửi cơ quan thuế", TypeGroup = "TCT", FlagActive = true, UpdatedBy = "kế toán" },
+                new MstTypeCode { TypeCodeValue = "300", TypeDesc = "Thông báo hóa đơn đã lập có sai sót", TypeGroup = "TCT", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+
         // Danh mục Thương hiệu (theo Mst_Brand của TVAN gốc):
         // các thương hiệu demo dùng để phân loại sản phẩm/hàng hóa.
         if (!await db.Brands.AnyAsync())

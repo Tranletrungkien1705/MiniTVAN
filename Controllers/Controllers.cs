@@ -977,6 +977,33 @@ public class InvoiceDtlTypeController(ITvanService svc) : Controller
     }
 }
 
+// Danh mục mã loại (theo Mst_TypeCode của TVAN gốc):
+// phân loại giao dịch/nhật ký kết nối với cơ quan thuế (VD 100, 200, 300).
+public class TypeCodeController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.TypeCodesAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string? desc, string? group, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveTypeCodeAsync(id, code, desc, group, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteTypeCodeAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Danh mục Thương hiệu (theo Mst_Brand của TVAN gốc):
 // các thương hiệu (hãng sản xuất) dùng để phân loại sản phẩm/hàng hóa.
 public class BrandController(ITvanService svc) : Controller

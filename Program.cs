@@ -803,6 +803,27 @@ app.MapDelete("/api/invoice-dtl-types/{id:int}", async (int id, ITvanService svc
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Danh mục mã loại (theo Mst_TypeCode của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
+app.MapGet("/api/type-codes", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.TypeCodesAsync(keyword);
+    return Results.Ok(ls.Select(t => new { t.Id, code = t.TypeCodeValue, t.TypeDesc, t.TypeGroup, t.FlagActive, t.UpdatedAt, t.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) mã loại theo mã (theo Mst_TypeCode của TVAN gốc).
+app.MapPost("/api/type-codes", async (TypeCodeDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveTypeCodeAsync(dto.Id, dto.Code ?? "", dto.Desc, dto.Group, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa mã loại theo id (theo Mst_TypeCode của TVAN gốc).
+app.MapDelete("/api/type-codes/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteTypeCodeAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 // Danh mục Thương hiệu (theo Mst_Brand của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
 app.MapGet("/api/brands", async (string? keyword, ITvanService svc) =>
 {
@@ -1359,6 +1380,7 @@ record NntTypeDto(int? Id, string? Code, string? Name, bool Active, string? By);
 record VatRateDto(int? Id, string? Code, string? Rate, string? Desc, bool Active, string? By);
 record UnitDto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
 record InvoiceDtlTypeDto(int? Id, string? Code, string? Desc, bool Active, string? By);
+record TypeCodeDto(int? Id, string? Code, string? Desc, string? Group, bool Active, string? By);
 record BrandDto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
 record ProductModelDto(int? Id, string? Code, string? Name, string? OrgModelCode, string? BrandCode, string? Remark, bool Active, string? By);
 record SpecType1Dto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
