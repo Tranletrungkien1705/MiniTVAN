@@ -311,6 +311,7 @@ public interface ITvanService
     Task<List<HistRegisterService>> HistRegisterServicesAsync(string? mst, string? lhDon, string? hThuc, RegServiceStatus? status, string? mlTDiep, DateTime? fromDate, DateTime? toDate);
     Task<HistRegisterService?> GetHistRegisterServiceAsync(int id);
     Task<(bool ok, string msg, int id)> CreateHistRegisterServiceAsync(string mst, DateTime ngui, string? htdk, string? lhDon, string? hThuc, bool cMa, bool cMTTien, bool kCMa, RegSendMethod ptghDon, string? mlTDiep, string? mccqt, string? xmlBase64, string? by);
+    Task<(bool ok, string msg)> ReceiveHistRegisterServiceResultAsync(int id, string mltDiep, bool chapNhan, string? mccqt, string? message, string? by);
 }
 
 // Hồ sơ NNT đầy đủ dùng khi lưu (theo Mst_NNT_Create/Update của TVAN gốc).
@@ -5966,5 +5967,57 @@ public class TvanService(AppDbContext db) : ITvanService
         db.HistRegisterServices.Add(e);
         await db.SaveChangesAsync();
         return (true, $"Đã gửi cơ quan thuế thành công! Mã thông điệp: {mtDiep}", e.Id);
+    }
+
+    // Nhận kết quả xử lý tờ khai đăng ký dịch vụ từ CQT (theo Hist_RegisterServices_TCTReceive của TVAN gốc):
+    // thông điệp 102 = CQT TIẾP NHẬN (TCTTiepNhan) → TThai = Receive/Reject;
+    // thông điệp 103 = CQT CHẤP NHẬN (TCTChapNhan) → TThai = Accept/Reject, khi chấp nhận cập nhật MCCQT cho NNT.
+    // Chỉ nhận được cho bản ghi đã gửi CQT (SENTTCT).
+    public async Task<(bool ok, string msg)> ReceiveHistRegisterServiceResultAsync(int id, string mltDiep, bool chapNhan, string? mccqt, string? message, string? by)
+    {
+        var e = await db.HistRegisterServices.FirstOrDefaultAsync(h => h.Id == id);
+        if (e == null) return (false, "Không tìm thấy bản ghi đăng ký dịch vụ.");
+        if (e.TThai != RegServiceStatus.SentTCT)
+            return (false, "Chỉ nhận kết quả cho tờ khai đã gửi CQT (SENTTCT).");
+
+        var ml = (mltDiep ?? "").Trim();
+        if (ml != "102" && ml != "103")
+            return (false, "Mã loại thông điệp không hợp lệ (chỉ nhận 102 hoặc 103).");
+
+        var now = DateTime.UtcNow;
+        e.MLTDiep = ml;
+        e.TCTMessage = message;
+        e.MTa = message;
+        e.KQua = chapNhan ? "Thành công" : "Thất bại";
+        e.UpdDTime = now;
+        e.UpdBy = by;
+        e.UpdatedAt = now;
+        e.UpdatedBy = by;
+
+        if (ml == "102")
+        {
+            // CQT tiếp nhận tờ khai.
+            e.TCTTiepNhan = chapNhan ? "ACCEPT" : "REJECT";
+            e.TThai = chapNhan ? RegServiceStatus.Receive : RegServiceStatus.Reject;
+        }
+        else
+        {
+            // CQT chấp nhận/từ chối tờ khai đăng ký.
+            e.TCTChapNhan = chapNhan ? "ACCEPT" : "REJECT";
+            e.TThai = chapNhan ? RegServiceStatus.Accept : RegServiceStatus.Reject;
+            if (chapNhan)
+            {
+                if (!string.IsNullOrWhiteSpace(mccqt)) e.MCCQT = mccqt.Trim();
+                // Khi CQT chấp nhận, cập nhật mã CQT (MCCQT) cho NNT (theo Hist_RegisterServices103_TCTReceiveX của TVAN gốc).
+                if (!string.IsNullOrWhiteSpace(mccqt))
+                {
+                    var nnt = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == e.MST);
+                    if (nnt != null) nnt.MCCQT = mccqt.Trim();
+                }
+            }
+        }
+
+        await db.SaveChangesAsync();
+        return (true, chapNhan ? "Đã ghi nhận CQT chấp nhận tờ khai." : "Đã ghi nhận CQT từ chối tờ khai.");
     }
 }

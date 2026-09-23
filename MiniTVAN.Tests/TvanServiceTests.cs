@@ -4260,6 +4260,20 @@ public class DocTienTests
         return (db, new TvanService(db), conn);
     }
 
+    // Helper tạo mẫu hóa đơn đã phát hành (dùng cho các test sửa lỗi hàng loạt theo mẫu).
+    private static async Task<int> AddTemplate(AppDbContext db, int nntId, InvoiceNoRule rule = InvoiceNoRule.TT78, string? lastNo = null, int qtyUsed = 0)
+    {
+        var tpl = new InvoiceTemplate
+        {
+            NntId = nntId, TInvoiceCode = "TINV-1C26TAA", TInvoiceName = "Mẫu 1C26TAA",
+            FormNo = "1C26TAA", Sign = "K26TAA", TTType = rule,
+            EffDateStart = DateTime.Today.AddDays(-30), StartInvoiceNo = 1, EndInvoiceNo = 1000,
+            LastInvoiceNo = lastNo, QtyUsed = qtyUsed, TInvoiceStatus = TemplateStatus.Issued, FlagActive = true
+        };
+        db.InvoiceTemplates.Add(tpl); await db.SaveChangesAsync();
+        return tpl.Id;
+    }
+
     [Fact]
     public void DocSo_Zero_ReturnsKhongDong()
     {
@@ -5704,6 +5718,80 @@ public class DocTienTests
 
             Assert.Single(await svc.HistRegisterServicesAsync(null, null, null, null, null, DateTime.Today.AddDays(-1), null));
             Assert.Equal(2, (await svc.HistRegisterServicesAsync(null, null, null, null, null, DateTime.Today.AddDays(-20), null)).Count);
+        }
+    }
+
+    [Fact]
+    public async Task HistRegister_Receive102_SetsReceiveStatus()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateHistRegisterServiceAsync("0101243150", DateTime.Today, "Mới", "1,2", "C", true, false, false, RegSendMethod.Full, "100", null, null, "kế toán");
+            var (ok, msg) = await svc.ReceiveHistRegisterServiceResultAsync(id, "102", true, null, "CQT đã tiếp nhận tờ khai.", "kế toán");
+            Assert.True(ok);
+            Assert.Contains("chấp nhận", msg);
+            var e = await svc.GetHistRegisterServiceAsync(id);
+            Assert.Equal(RegServiceStatus.Receive, e!.TThai);
+            Assert.Equal("ACCEPT", e.TCTTiepNhan);
+            Assert.Equal("102", e.MLTDiep);
+        }
+    }
+
+    [Fact]
+    public async Task HistRegister_Receive103_Accept_UpdatesNntMccqt()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            var (_, _, id) = await svc.CreateHistRegisterServiceAsync("0101243150", DateTime.Today, "Mới", "1,2", "C", true, false, false, RegSendMethod.Full, "100", null, null, "kế toán");
+            var (ok, _) = await svc.ReceiveHistRegisterServiceResultAsync(id, "103", true, "A1B2C", "CQT chấp nhận tờ khai.", "kế toán");
+            Assert.True(ok);
+            var e = await svc.GetHistRegisterServiceAsync(id);
+            Assert.Equal(RegServiceStatus.Accept, e!.TThai);
+            Assert.Equal("ACCEPT", e.TCTChapNhan);
+            Assert.Equal("A1B2C", e.MCCQT);
+            Assert.Equal("A1B2C", (await svc.GetNntAsync(nntId))!.MCCQT);
+        }
+    }
+
+    [Fact]
+    public async Task HistRegister_Receive103_Reject_SetsRejectStatus()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateHistRegisterServiceAsync("0101243150", DateTime.Today, "Mới", "1", "C", true, false, false, RegSendMethod.Full, "100", null, null, "kế toán");
+            var (ok, msg) = await svc.ReceiveHistRegisterServiceResultAsync(id, "103", false, null, "Tờ khai không hợp lệ.", "kế toán");
+            Assert.True(ok);
+            Assert.Contains("từ chối", msg);
+            var e = await svc.GetHistRegisterServiceAsync(id);
+            Assert.Equal(RegServiceStatus.Reject, e!.TThai);
+            Assert.Equal("REJECT", e.TCTChapNhan);
+        }
+    }
+
+    [Fact]
+    public async Task HistRegister_Receive_NotSentTct_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateHistRegisterServiceAsync("0101243150", DateTime.Today, "Mới", "1", "C", true, false, false, RegSendMethod.Full, "100", null, null, "kế toán");
+            // Nhận lần 1 (102) → chuyển sang Receive, không còn SENTTCT.
+            await svc.ReceiveHistRegisterServiceResultAsync(id, "102", true, null, null, "kế toán");
+            var (ok, msg) = await svc.ReceiveHistRegisterServiceResultAsync(id, "103", true, null, null, "kế toán");
+            Assert.False(ok);
+            Assert.Contains("SENTTCT", msg);
+        }
+    }
+
+    [Fact]
+    public async Task HistRegister_Receive_InvalidMltDiep_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateHistRegisterServiceAsync("0101243150", DateTime.Today, "Mới", "1", "C", true, false, false, RegSendMethod.Full, "100", null, null, "kế toán");
+            var (ok, msg) = await svc.ReceiveHistRegisterServiceResultAsync(id, "999", true, null, null, "kế toán");
+            Assert.False(ok);
+            Assert.Contains("102", msg);
         }
     }
 

@@ -807,6 +807,7 @@ public static class Seeder
                         HThuc = "C", CMa = true, CMTMTTien = true, KCMa = false, PTGHDon = RegSendMethod.BTH,
                         MTDiep = "K" + DateTime.UtcNow.AddDays(-2).ToString("yyyyMMddHHmmss") + "0002", MLTDiep = "102",
                         MCCQT = "A1B2C", KQua = "CQT đã tiếp nhận tờ khai thay đổi thông tin.",
+                        TCTTiepNhan = "ACCEPT", TCTMessage = "CQT đã tiếp nhận tờ khai thay đổi thông tin.",
                         TThai = RegServiceStatus.SentTCT, TCTRefNo = "V" + DateTime.UtcNow.AddDays(-2).ToString("yyMMddHHmmss") + "0002",
                         UpdatedBy = "kế toán"
                     });

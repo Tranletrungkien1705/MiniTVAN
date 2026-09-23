@@ -53,7 +53,7 @@
                 <div class="col-md-2"><button class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-search"></i> Lọc</button></div>
             </form>
             <table class="table table-hover align-middle mb-0">
-                <thead><tr><th>Ngày gửi</th><th>MST</th><th>Loại HĐ</th><th>Hình thức</th><th>Mã thông điệp</th><th>Kết quả</th><th>Trạng thái</th></tr></thead>
+                <thead><tr><th>Ngày gửi</th><th>MST</th><th>Loại HĐ</th><th>Hình thức</th><th>Mã thông điệp</th><th>Kết quả</th><th>Trạng thái</th><th></th></tr></thead>
                 <tbody>
                 @foreach (var h in Model)
                 {
@@ -76,11 +76,49 @@
                         <td class="small">
                             @(string.IsNullOrWhiteSpace(h.KQua) ? "—" : h.KQua)
                             @if (!string.IsNullOrWhiteSpace(h.TCTRefNo)) { <div class="text-muted">Mã V: @h.TCTRefNo</div> }
+                            @if (!string.IsNullOrWhiteSpace(h.TCTTiepNhan)) { <div class="text-muted">Tiếp nhận: @h.TCTTiepNhan</div> }
+                            @if (!string.IsNullOrWhiteSpace(h.TCTChapNhan)) { <div class="text-muted">Chấp nhận: @h.TCTChapNhan</div> }
                         </td>
                         <td><span class="badge bg-@stCss">@stText</span></td>
+                        <td class="text-end">
+                            @if (h.TThai == RegServiceStatus.SentTCT)
+                            {
+                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#recv-@h.Id"><i class="bi bi-inbox"></i> Nhận KQ</button>
+                                <div class="modal fade" id="recv-@h.Id" tabindex="-1">
+                                    <div class="modal-dialog"><div class="modal-content">
+                                        <form method="post" action="/HistRegisterService/Receive">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@h.Id" />
+                                            <div class="modal-header"><h6 class="modal-title">Nhận kết quả CQT — @h.MTDiep</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                                            <div class="modal-body text-start">
+                                                <div class="mb-2">
+                                                    <label class="form-label small mb-1">Mã loại thông điệp</label>
+                                                    <select name="mltDiep" class="form-select form-select-sm">
+                                                        <option value="102">102 — CQT tiếp nhận</option>
+                                                        <option value="103">103 — CQT chấp nhận</option>
+                                                    </select>
+                                                </div>
+                                                <div class="mb-2">
+                                                    <label class="form-label small mb-1">Kết quả</label>
+                                                    <select name="chapNhan" class="form-select form-select-sm">
+                                                        <option value="true">Chấp nhận</option>
+                                                        <option value="false">Từ chối</option>
+                                                    </select>
+                                                </div>
+                                                <div class="mb-2"><label class="form-label small mb-1">Mã CQT (MCCQT — khi chấp nhận)</label><input name="mccqt" class="form-control form-control-sm" placeholder="(tùy chọn)" /></div>
+                                                <div class="mb-2"><label class="form-label small mb-1">Thông báo / lý do</label><input name="message" class="form-control form-control-sm" placeholder="(tùy chọn)" /></div>
+                                                <div class="mb-2"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                                            </div>
+                                            <div class="modal-footer"><button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Hủy</button><button class="btn btn-sm btn-primary">Ghi nhận</button></div>
+                                        </form>
+                                    </div></div>
+                                </div>
+                            }
+                            else { <span class="text-muted small">—</span> }
+                        </td>
                     </tr>
                 }
-                @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có bản ghi đăng ký dịch vụ nào.</td></tr> }
+                @if (Model.Count == 0) { <tr><td colspan="8" class="text-center text-muted py-4">Chưa có bản ghi đăng ký dịch vụ nào.</td></tr> }
                 </tbody>
             </table>
         </div></div>

@@ -2041,6 +2041,9 @@ public class HistRegisterService : IOrgOwned
     public string? MTa { get; set; }                       // Mô tả
     public RegServiceStatus TThai { get; set; } = RegServiceStatus.Pending;   // Trạng thái xử lý
     public string? TCTRefNo { get; set; }                  // Mã tham chiếu TCT (mã V)
+    public string? TCTTiepNhan { get; set; }               // Trạng thái CQT tiếp nhận (thông điệp 102): ACCEPT/REJECT
+    public string? TCTChapNhan { get; set; }               // Trạng thái CQT chấp nhận (thông điệp 103): ACCEPT/REJECT
+    public string? TCTMessage { get; set; }                // Thông báo/lý do CQT trả về
     public string? XmlBase64 { get; set; }                 // Nội dung tờ khai (base64 XML)
     public DateTime? UpdDTime { get; set; }                // Thời điểm cập nhật kết quả
     public string? UpdBy { get; set; }                     // Người cập nhật kết quả

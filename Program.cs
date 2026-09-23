@@ -1670,6 +1670,14 @@ app.MapPost("/api/hist-register-services", async (HistRegisterServiceDto dto, IT
     return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
 });
 
+// Nhận kết quả xử lý tờ khai đăng ký dịch vụ từ CQT (theo Hist_RegisterServices_TCTReceive của TVAN gốc):
+// 102 = CQT tiếp nhận, 103 = CQT chấp nhận (khi chấp nhận cập nhật MCCQT cho NNT).
+app.MapPost("/api/hist-register-services/{id:int}/receive", async (int id, HistRegisterServiceReceiveDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.ReceiveHistRegisterServiceResultAsync(id, dto.MltDiep ?? "", dto.ChapNhan, dto.Mccqt, dto.Message, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -1771,3 +1779,4 @@ record InvoiceInputDto(int? Id, string? Mst, string? InvoiceCode, string? RefNo,
 record InvoiceInputDeleteDto(string? Reason, string? By);
 record ProductIdDto(int? Id, string? ProductId, string? SpecCode, DateTime? ProductionDate, string? LotNo, DateTime? BuyDate, string? SecretNo, DateTime? WarrantyStartDate, DateTime? WarrantyExpiredDate, int? WarrantyDuration, string? RefNo1, string? RefBiz1, string? RefNo2, string? RefBiz2, string? RefNo3, string? RefBiz3, string? Buyer, ProductIdStatus Status, string? CustomField1, string? CustomField2, string? CustomField3, string? CustomField4, string? CustomField5, string? By);
 record HistRegisterServiceDto(string? Mst, DateTime? NGui, string? Htdk, string? LhDon, string? HThuc, bool CMa, bool CMTTien, bool KCMa, RegSendMethod PtghDon, string? MlTDiep, string? Mccqt, string? XmlBase64, string? By);
+record HistRegisterServiceReceiveDto(string? MltDiep, bool ChapNhan, string? Mccqt, string? Message, string? By);

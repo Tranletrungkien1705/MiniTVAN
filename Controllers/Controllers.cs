@@ -2160,4 +2160,14 @@ public class HistRegisterServiceController(ITvanService svc) : Controller
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Index));
     }
+
+    // Nhận kết quả xử lý tờ khai đăng ký dịch vụ từ CQT (theo Hist_RegisterServices_TCTReceive của TVAN gốc):
+    // 102 = CQT tiếp nhận, 103 = CQT chấp nhận (khi chấp nhận cập nhật MCCQT cho NNT).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Receive(int id, string mltDiep, bool chapNhan, string? mccqt, string? message, string? by)
+    {
+        var (ok, msg) = await svc.ReceiveHistRegisterServiceResultAsync(id, mltDiep, chapNhan, mccqt, message, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
 }
