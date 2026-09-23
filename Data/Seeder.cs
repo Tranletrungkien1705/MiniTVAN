@@ -636,6 +636,28 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Danh mục loại tờ khai/thuế (theo Mst_TaxType của TVAN gốc):
+        // các loại tờ khai/thuế demo dùng để phân loại danh mục thuế.
+        if (!await db.TaxTypes.AnyAsync())
+        {
+            db.TaxTypes.AddRange(
+                new TaxType { TaxTypeCode = "GTGT", TaxTypeName = "Thuế giá trị gia tăng", FlagActive = true, UpdatedBy = "kế toán" },
+                new TaxType { TaxTypeCode = "TNDN", TaxTypeName = "Thuế thu nhập doanh nghiệp", FlagActive = true, UpdatedBy = "kế toán" },
+                new TaxType { TaxTypeCode = "TNCN", TaxTypeName = "Thuế thu nhập cá nhân", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+
+        // Danh mục thuế/tờ khai (theo Mst_Tax của TVAN gốc):
+        // các tờ khai demo thuộc loại tờ khai ở trên, kèm mẫu + phiên bản XML + hiệu lực.
+        if (!await db.Taxes.AnyAsync())
+        {
+            db.Taxes.AddRange(
+                new Tax { TaxId = "GTGT01", TaxType = "GTGT", TaxName = "Tờ khai thuế GTGT khấu trừ", TaxTemplate = "01/GTGT", TaxVerXmlB = "1.0", TaxVerXmlC = "1.0", FlagHasAppendix = true, EffDateStart = new DateTime(2025, 1, 1), FlagActive = true, UpdatedBy = "kế toán" },
+                new Tax { TaxId = "GTGT02", TaxType = "GTGT", TaxName = "Tờ khai thuế GTGT trực tiếp", TaxTemplate = "04/GTGT", TaxVerXmlB = "1.0", FlagHasAppendix = false, EffDateStart = new DateTime(2025, 1, 1), FlagActive = true, UpdatedBy = "kế toán" },
+                new Tax { TaxId = "TNDN01", TaxType = "TNDN", TaxName = "Tờ khai quyết toán thuế TNDN", TaxTemplate = "03/TNDN", TaxVerXmlB = "1.0", FlagHasAppendix = true, EffDateStart = new DateTime(2025, 1, 1), FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+
         // Danh mục Thương hiệu (theo Mst_Brand của TVAN gốc):
         // các thương hiệu demo dùng để phân loại sản phẩm/hàng hóa.
         if (!await db.Brands.AnyAsync())

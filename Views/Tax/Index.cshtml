@@ -1,0 +1,102 @@
+@model List<Tax>
+@{
+    ViewData["Title"] = "Danh mục thuế / tờ khai";
+    var taxType = ViewBag.TaxType as string;
+    var keyword = ViewBag.Keyword as string;
+    var taxTypes = ViewBag.TaxTypes as List<TaxType> ?? new();
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-file-earmark-text me-1"></i>Danh mục thuế / tờ khai</h6>
+                <form method="get" action="/Tax" class="d-flex gap-2">
+                    <select name="taxType" class="form-select form-select-sm">
+                        <option value="">— Tất cả loại —</option>
+                        @foreach (var tt in taxTypes)
+                        {
+                            <option value="@tt.TaxTypeCode" selected="@(tt.TaxTypeCode == taxType)">@tt.TaxTypeCode — @tt.TaxTypeName</option>
+                        }
+                    </select>
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm mã / tên / mẫu" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã thuế</th><th>Tên thuế / tờ khai</th><th>Loại</th><th>Mẫu / XML</th><th>Hiệu lực</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var t in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@t.TaxId</td>
+                        <td>@t.TaxName</td>
+                        <td><span class="badge bg-light text-dark border">@t.TaxType</span></td>
+                        <td class="small">
+                            @if (!string.IsNullOrWhiteSpace(t.TaxTemplate)) { <div>Mẫu: @t.TaxTemplate</div> }
+                            @if (!string.IsNullOrWhiteSpace(t.TaxVerXmlB) || !string.IsNullOrWhiteSpace(t.TaxVerXmlC))
+                            {
+                                <div class="text-muted">XML: @t.TaxVerXmlB / @t.TaxVerXmlC</div>
+                            }
+                            @if (t.FlagHasAppendix) { <span class="badge bg-info">Có phụ lục</span> }
+                        </td>
+                        <td class="small text-muted">
+                            @if (t.EffDateStart.HasValue) { <div>Từ @t.EffDateStart.Value.ToString("dd/MM/yyyy")</div> }
+                            @if (t.EffDateEnd.HasValue) { <div>Đến @t.EffDateEnd.Value.ToString("dd/MM/yyyy")</div> }
+                            @if (!t.EffDateStart.HasValue && !t.EffDateEnd.HasValue) { <span>—</span> }
+                        </td>
+                        <td>
+                            @if (t.FlagActive) { <span class="badge bg-success">Đang dùng</span> }
+                            else { <span class="badge bg-secondary">Ngừng dùng</span> }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/Tax/Delete" class="d-inline" onsubmit="return confirm('Xóa thuế/tờ khai @t.TaxId?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@t.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có thuế/tờ khai nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm / cập nhật thuế / tờ khai</h6>
+            <form method="post" action="/Tax/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã thuế / tờ khai</label><input name="taxId" class="form-control form-control-sm" placeholder="GTGT01" required /></div>
+                <div class="col-12">
+                    <label class="form-label small mb-1">Loại tờ khai / thuế</label>
+                    <select name="taxType" class="form-select form-select-sm" required>
+                        <option value="">— Chọn loại —</option>
+                        @foreach (var tt in taxTypes)
+                        {
+                            <option value="@tt.TaxTypeCode">@tt.TaxTypeCode — @tt.TaxTypeName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Tên thuế / tờ khai</label><input name="name" class="form-control form-control-sm" placeholder="Tờ khai thuế GTGT" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Mẫu tờ khai</label><input name="template" class="form-control form-control-sm" placeholder="01/GTGT" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Phiên bản XML B</label><input name="verXmlB" class="form-control form-control-sm" placeholder="1.0" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Phiên bản XML C</label><input name="verXmlC" class="form-control form-control-sm" placeholder="1.0" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Hiệu lực từ</label><input type="date" name="effStart" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Hiệu lực đến</label><input type="date" name="effEnd" class="form-control form-control-sm" /></div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="hasAppendix" value="true" id="taxAppendix" />
+                    <label class="form-check-label small" for="taxAppendix">Có phụ lục</label>
+                </div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="active" value="true" id="taxActive" checked />
+                    <label class="form-check-label small" for="taxActive">Đang dùng</label>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu thuế / tờ khai</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Lưu cùng mã thuế = cập nhật bản ghi đã có. Loại tờ khai phải tồn tại và đang dùng.</p>
+        </div></div>
+    </div>
+</div>

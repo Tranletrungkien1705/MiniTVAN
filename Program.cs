@@ -914,6 +914,48 @@ app.MapDelete("/api/invoice-types/{id:int}", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Danh mục loại tờ khai/thuế (theo Mst_TaxType của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
+app.MapGet("/api/tax-types", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.TaxTypesAsync(keyword);
+    return Results.Ok(ls.Select(t => new { t.Id, t.TaxTypeCode, t.TaxTypeName, t.FlagActive, t.UpdatedAt, t.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) loại tờ khai/thuế theo mã (theo Mst_TaxType của TVAN gốc).
+app.MapPost("/api/tax-types", async (TaxTypeDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveTaxTypeAsync(dto.Id, dto.Code ?? "", dto.Name ?? "", dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa loại tờ khai/thuế theo id (theo Mst_TaxType của TVAN gốc).
+app.MapDelete("/api/tax-types/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteTaxTypeAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
+// Danh mục thuế/tờ khai (theo Mst_Tax của TVAN gốc): danh sách (lọc theo loại tờ khai + từ khóa nếu có).
+app.MapGet("/api/taxes", async (string? taxType, string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.TaxesAsync(taxType, keyword);
+    return Results.Ok(ls.Select(t => new { t.Id, t.TaxId, t.TaxType, t.TaxName, t.TaxTemplate, t.TaxVerXmlB, t.TaxVerXmlC, t.FlagHasAppendix, t.EffDateStart, t.EffDateEnd, t.FlagActive, t.UpdatedAt, t.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) thuế/tờ khai theo mã (theo Mst_Tax của TVAN gốc).
+app.MapPost("/api/taxes", async (TaxDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveTaxAsync(dto.Id, dto.TaxId ?? "", dto.TaxType ?? "", dto.Name ?? "", dto.Template, dto.VerXmlB, dto.VerXmlC, dto.HasAppendix, dto.EffStart, dto.EffEnd, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa thuế/tờ khai theo id (theo Mst_Tax của TVAN gốc).
+app.MapDelete("/api/taxes/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteTaxAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 // Danh mục mã loại (theo Mst_TypeCode của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
 app.MapGet("/api/type-codes", async (string? keyword, ITvanService svc) =>
 {
@@ -1922,6 +1964,8 @@ record VatRateDto(int? Id, string? Code, string? Rate, string? Desc, bool Active
 record UnitDto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
 record InvoiceDtlTypeDto(int? Id, string? Code, string? Desc, bool Active, string? By);
 record InvoiceTypeDto(int? Id, string? Code, string? Name, string? Remark, InvoiceNoRule TTType, bool Active, string? By);
+record TaxTypeDto(int? Id, string? Code, string? Name, bool Active, string? By);
+record TaxDto(int? Id, string? TaxId, string? TaxType, string? Name, string? Template, string? VerXmlB, string? VerXmlC, bool HasAppendix, DateTime? EffStart, DateTime? EffEnd, bool Active, string? By);
 record TypeCodeDto(int? Id, string? Code, string? Desc, string? Group, bool Active, string? By);
 record BrandDto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
 record ProductModelDto(int? Id, string? Code, string? Name, string? OrgModelCode, string? BrandCode, string? Remark, bool Active, string? By);

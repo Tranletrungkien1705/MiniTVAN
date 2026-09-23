@@ -2299,3 +2299,43 @@ public class TctMessageTemplateDtl : IOrgOwned
     public string? FieldDesc { get; set; }                  // Mô tả trường
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
+
+// Danh mục loại tờ khai/thuế (theo bảng Mst_TaxType của TVAN gốc):
+// phân loại các loại tờ khai/thuế (VD GTGT = thuế giá trị gia tăng, TNDN = thuế thu nhập doanh nghiệp,
+// TNCN = thuế thu nhập cá nhân) dùng để gán loại cho danh mục thuế (Tax.TaxType).
+// Khóa nghiệp vụ: (OrgId, TaxType). FlagActive = loại tờ khai đang dùng hay không.
+public class TaxType : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string TaxTypeCode { get; set; } = "";      // Mã loại tờ khai/thuế (VD GTGT, TNDN)
+    public string TaxTypeName { get; set; } = "";      // Tên loại tờ khai/thuế
+    public bool FlagActive { get; set; } = true;        // Loại tờ khai đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
+// Danh mục thuế/tờ khai (theo bảng Mst_Tax của TVAN gốc):
+// mỗi bản ghi khai báo một loại tờ khai/thuế cụ thể (TaxName) thuộc một loại tờ khai (TaxType),
+// kèm mẫu tờ khai (TaxTemplate), phiên bản XML (TaxVerXMLB/TaxVerXMLC), cờ có phụ lục
+// (FlagHasAppendix) và khoảng hiệu lực (EffDateStart..EffDateEnd).
+// Khóa nghiệp vụ: (OrgId, TaxId). FlagActive = thuế/tờ khai đang dùng hay không.
+public class Tax : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string TaxId { get; set; } = "";             // Mã thuế/tờ khai (khóa nghiệp vụ)
+    public string TaxType { get; set; } = "";           // Loại tờ khai/thuế (FK → TaxType.TaxTypeCode)
+    public string TaxName { get; set; } = "";           // Tên thuế/tờ khai
+    public string? TaxTemplate { get; set; }             // Mẫu tờ khai
+    public string? TaxVerXmlB { get; set; }              // Phiên bản XML B
+    public string? TaxVerXmlC { get; set; }              // Phiên bản XML C
+    public bool FlagHasAppendix { get; set; }            // Có phụ lục hay không
+    public DateTime? EffDateStart { get; set; }          // Ngày bắt đầu hiệu lực
+    public DateTime? EffDateEnd { get; set; }            // Ngày kết thúc hiệu lực
+    public bool FlagActive { get; set; } = true;         // Thuế/tờ khai đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}

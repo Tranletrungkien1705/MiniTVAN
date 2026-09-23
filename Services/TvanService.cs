@@ -148,6 +148,14 @@ public interface ITvanService
     Task<InvoiceType?> GetInvoiceTypeAsync(int id);
     Task<(bool ok, string msg, int id)> SaveInvoiceTypeAsync(int? id, string code, string name, string? remark, InvoiceNoRule ttType, bool active, string? by);
     Task<(bool ok, string msg)> DeleteInvoiceTypeAsync(int id);
+    Task<List<TaxType>> TaxTypesAsync(string? keyword);
+    Task<TaxType?> GetTaxTypeAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveTaxTypeAsync(int? id, string code, string name, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteTaxTypeAsync(int id);
+    Task<List<Tax>> TaxesAsync(string? taxType, string? keyword);
+    Task<Tax?> GetTaxAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveTaxAsync(int? id, string taxId, string taxType, string name, string? template, string? verXmlB, string? verXmlC, bool hasAppendix, DateTime? effStart, DateTime? effEnd, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteTaxAsync(int id);
     Task<List<Brand>> BrandsAsync(string? keyword);
     Task<Brand?> GetBrandAsync(int id);
     Task<(bool ok, string msg, int id)> SaveBrandAsync(int? id, string code, string name, string? remark, bool active, string? by);
@@ -6668,5 +6676,159 @@ public class TvanService(AppDbContext db) : ITvanService
         db.TctMessageTemplates.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa mẫu thông điệp '{e.MessageTplCode}'.");
+    }
+
+    // Danh mục loại tờ khai/thuế (theo Mst_TaxType của TVAN gốc):
+    // danh sách loại tờ khai (lọc theo từ khóa mã/tên nếu có).
+    public Task<List<TaxType>> TaxTypesAsync(string? keyword)
+    {
+        var q = db.TaxTypes.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.TaxTypeCode.Contains(k) || t.TaxTypeName.Contains(k));
+        }
+        return q.OrderBy(t => t.TaxTypeCode).ToListAsync();
+    }
+
+    public Task<TaxType?> GetTaxTypeAsync(int id) =>
+        db.TaxTypes.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) loại tờ khai/thuế theo khóa nghiệp vụ (OrgId, TaxType)
+    // (theo Mst_TaxType của TVAN gốc). Ràng buộc:
+    //  - cần mã loại tờ khai + tên loại tờ khai;
+    //  - khi tạo: mã loại tờ khai chưa tồn tại trong tổ chức (Mst_TaxType_CheckDB_TaxTypeExist).
+    public async Task<(bool ok, string msg, int id)> SaveTaxTypeAsync(int? id, string code, string name, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã loại tờ khai/thuế.", 0);
+        if (name.Length == 0) return (false, "Cần tên loại tờ khai/thuế.", 0);
+
+        TaxType? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.TaxTypes.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.TaxTypes.FirstOrDefaultAsync(t => t.TaxTypeCode == code);
+
+        if (e == null)
+        {
+            if (await db.TaxTypes.AnyAsync(t => t.TaxTypeCode == code))
+                return (false, "Mã loại tờ khai/thuế đã tồn tại.", 0);
+            e = new TaxType { TaxTypeCode = code };
+            db.TaxTypes.Add(e);
+        }
+        else
+        {
+            // Đổi mã loại tờ khai: chặn trùng với loại khác.
+            if (!string.Equals(e.TaxTypeCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.TaxTypes.AnyAsync(t => t.TaxTypeCode == code && t.Id != e.Id))
+                return (false, "Mã loại tờ khai/thuế đã tồn tại.", 0);
+            e.TaxTypeCode = code;
+        }
+
+        e.TaxTypeName = name;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu loại tờ khai/thuế {code} — {name}.", e.Id);
+    }
+
+    // Xóa loại tờ khai/thuế theo id (theo Mst_TaxType của TVAN gốc):
+    // chặn khi không tồn tại; chặn khi còn thuế/tờ khai (Mst_Tax) đang tham chiếu loại này.
+    public async Task<(bool ok, string msg)> DeleteTaxTypeAsync(int id)
+    {
+        var e = await db.TaxTypes.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy loại tờ khai/thuế.");
+        if (await db.Taxes.AnyAsync(t => t.TaxType == e.TaxTypeCode))
+            return (false, $"Không thể xóa: còn thuế/tờ khai đang dùng loại {e.TaxTypeCode}.");
+        var code = e.TaxTypeCode;
+        db.TaxTypes.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa loại tờ khai/thuế {code}.");
+    }
+
+    // Danh mục thuế/tờ khai (theo Mst_Tax của TVAN gốc):
+    // danh sách thuế/tờ khai (lọc theo loại tờ khai + từ khóa mã/tên nếu có).
+    public Task<List<Tax>> TaxesAsync(string? taxType, string? keyword)
+    {
+        var q = db.Taxes.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(taxType))
+        {
+            var tt = taxType.Trim();
+            q = q.Where(t => t.TaxType == tt);
+        }
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.TaxId.Contains(k) || t.TaxName.Contains(k) || (t.TaxTemplate != null && t.TaxTemplate.Contains(k)));
+        }
+        return q.OrderBy(t => t.TaxId).ToListAsync();
+    }
+
+    public Task<Tax?> GetTaxAsync(int id) =>
+        db.Taxes.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) thuế/tờ khai theo khóa nghiệp vụ (OrgId, TaxId)
+    // (theo Mst_Tax của TVAN gốc). Ràng buộc:
+    //  - cần mã thuế/tờ khai + tên thuế/tờ khai;
+    //  - loại tờ khai (TaxType) phải tồn tại + đang dùng trong danh mục Mst_TaxType;
+    //  - khi tạo: mã thuế/tờ khai chưa tồn tại trong tổ chức (Mst_Tax_CheckDB_TaxExist).
+    public async Task<(bool ok, string msg, int id)> SaveTaxAsync(int? id, string taxId, string taxType, string name, string? template, string? verXmlB, string? verXmlC, bool hasAppendix, DateTime? effStart, DateTime? effEnd, bool active, string? by)
+    {
+        taxId = (taxId ?? "").Trim();
+        taxType = (taxType ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (taxId.Length == 0) return (false, "Cần mã thuế/tờ khai.", 0);
+        if (name.Length == 0) return (false, "Cần tên thuế/tờ khai.", 0);
+        if (taxType.Length == 0) return (false, "Cần chọn loại tờ khai/thuế.", 0);
+
+        var tt = await db.TaxTypes.FirstOrDefaultAsync(t => t.TaxTypeCode == taxType);
+        if (tt == null) return (false, $"Loại tờ khai/thuế {taxType} không tồn tại.", 0);
+        if (!tt.FlagActive) return (false, $"Loại tờ khai/thuế {taxType} đã ngừng dùng.", 0);
+
+        Tax? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.Taxes.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.Taxes.FirstOrDefaultAsync(t => t.TaxId == taxId);
+
+        if (e == null)
+        {
+            if (await db.Taxes.AnyAsync(t => t.TaxId == taxId))
+                return (false, "Mã thuế/tờ khai đã tồn tại.", 0);
+            e = new Tax { TaxId = taxId };
+            db.Taxes.Add(e);
+        }
+        else
+        {
+            // Đổi mã thuế/tờ khai: chặn trùng với bản ghi khác.
+            if (!string.Equals(e.TaxId, taxId, StringComparison.OrdinalIgnoreCase)
+                && await db.Taxes.AnyAsync(t => t.TaxId == taxId && t.Id != e.Id))
+                return (false, "Mã thuế/tờ khai đã tồn tại.", 0);
+            e.TaxId = taxId;
+        }
+
+        e.TaxType = taxType;
+        e.TaxName = name;
+        e.TaxTemplate = template;
+        e.TaxVerXmlB = verXmlB;
+        e.TaxVerXmlC = verXmlC;
+        e.FlagHasAppendix = hasAppendix;
+        e.EffDateStart = effStart;
+        e.EffDateEnd = effEnd;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu thuế/tờ khai {taxId} — {name}.", e.Id);
+    }
+
+    // Xóa thuế/tờ khai theo id (theo Mst_Tax của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteTaxAsync(int id)
+    {
+        var e = await db.Taxes.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy thuế/tờ khai.");
+        var code = e.TaxId;
+        db.Taxes.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa thuế/tờ khai {code}.");
     }
 }

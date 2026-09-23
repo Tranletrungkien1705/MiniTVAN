@@ -1084,6 +1084,63 @@ public class InvoiceTypeController(ITvanService svc) : Controller
     }
 }
 
+// Danh mục loại tờ khai/thuế (theo Mst_TaxType của TVAN gốc):
+// phân loại các loại tờ khai/thuế (GTGT, TNDN, TNCN...) dùng để gán loại cho danh mục thuế.
+public class TaxTypeController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.TaxTypesAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string name, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveTaxTypeAsync(id, code, name, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteTaxTypeAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
+// Danh mục thuế/tờ khai (theo Mst_Tax của TVAN gốc):
+// mỗi bản ghi khai báo một loại tờ khai/thuế cụ thể thuộc một loại tờ khai (TaxType),
+// kèm mẫu tờ khai, phiên bản XML, cờ có phụ lục và khoảng hiệu lực.
+public class TaxController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? taxType, string? keyword)
+    {
+        ViewBag.TaxType = taxType;
+        ViewBag.Keyword = keyword;
+        ViewBag.TaxTypes = await svc.TaxTypesAsync(null);
+        return View(await svc.TaxesAsync(taxType, keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string taxId, string taxType, string name, string? template, string? verXmlB, string? verXmlC, bool hasAppendix, DateTime? effStart, DateTime? effEnd, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveTaxAsync(id, taxId, taxType, name, template, verXmlB, verXmlC, hasAppendix, effStart, effEnd, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteTaxAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Danh mục mã loại (theo Mst_TypeCode của TVAN gốc):
 // phân loại giao dịch/nhật ký kết nối với cơ quan thuế (VD 100, 200, 300).
 public class TypeCodeController(ITvanService svc) : Controller

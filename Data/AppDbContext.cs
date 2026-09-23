@@ -99,6 +99,8 @@ public class AppDbContext : DbContext
     public DbSet<LicOrderCommission> LicOrderCommissions => Set<LicOrderCommission>();
     public DbSet<TctMessageTemplate> TctMessageTemplates => Set<TctMessageTemplate>();
     public DbSet<TctMessageTemplateDtl> TctMessageTemplateDtls => Set<TctMessageTemplateDtl>();
+    public DbSet<TaxType> TaxTypes => Set<TaxType>();
+    public DbSet<Tax> Taxes => Set<Tax>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -634,6 +636,16 @@ public class AppDbContext : DbContext
         b.Entity<TctMessageTemplateDtl>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.MessageTemplateId });
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<TaxType>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.TaxTypeCode }).IsUnique();   // mỗi tổ chức một mã loại tờ khai
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Tax>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.TaxId }).IsUnique();   // mỗi tổ chức một mã thuế/tờ khai
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }
