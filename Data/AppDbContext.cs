@@ -68,6 +68,7 @@ public class AppDbContext : DbContext
     public DbSet<SysGroup> SysGroups => Set<SysGroup>();
     public DbSet<SysUserInGroup> SysUserInGroups => Set<SysUserInGroup>();
     public DbSet<SysUser> SysUsers => Set<SysUser>();
+    public DbSet<PasswordChangeLog> PasswordChangeLogs => Set<PasswordChangeLog>();
     public DbSet<SysModule> SysModules => Set<SysModule>();
     public DbSet<SysSolution> SysSolutions => Set<SysSolution>();
     public DbSet<SysObject> SysObjects => Set<SysObject>();
@@ -440,6 +441,11 @@ public class AppDbContext : DbContext
         b.Entity<SysUser>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.UserCode }).IsUnique();   // mỗi tổ chức một mã người dùng
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PasswordChangeLog>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.UserCode });   // nhật ký đổi mật khẩu theo người dùng
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<SysModule>(e =>

@@ -420,4 +420,12 @@ public static class Ui
         Models.CommissionStatus.Error    => ("Lỗi", "danger"),
         _ => (s.ToString(), "secondary")
     };
+
+    // Kết quả một lần đổi mật khẩu người dùng (theo Sys_User_ChangePassword của TVAN gốc).
+    public static (string text, string css) PasswordChange(Models.PasswordChangeResult r) => r switch
+    {
+        Models.PasswordChangeResult.Success => ("Thành công", "success"),
+        Models.PasswordChangeResult.Failed  => ("Thất bại", "danger"),
+        _ => (r.ToString(), "secondary")
+    };
 }

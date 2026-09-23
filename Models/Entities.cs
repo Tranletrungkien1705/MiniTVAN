@@ -2138,6 +2138,10 @@ public enum LicOrderType { RegisterLic = 1 }
 // Finish = "FINISH" (hoàn tất), Error = "ERROR" (lỗi).
 public enum CommissionStatus { Pending = 0, Approve = 1, Cancel = 2, Finish = 3, Error = 4 }
 
+// Kết quả một lần đổi mật khẩu người dùng (theo Sys_User_ChangePassword của TVAN gốc):
+// Success = đổi thành công, Failed = thất bại (sai mật khẩu cũ / mật khẩu mới không hợp lệ).
+public enum PasswordChangeResult { Success = 0, Failed = 1 }
+
 // Đơn hàng license (theo bảng Inos_LicOrder của TVAN gốc — màn Mst_Order của WebAdmin):
 // đơn hàng đăng ký license/gói dịch vụ của một tổ chức (OrgId) qua đại lý, kèm mã giảm giá,
 // tổng chi phí, mã thanh toán, trạng thái đơn hàng và danh sách dòng chi tiết (gói license).
@@ -2219,4 +2223,17 @@ public class LicOrderCommission : IOrgOwned
 
     // Tổng hoa hồng của đơn hàng.
     public decimal TotalCommission => CommissionPresenter1 + CommissionPresenter2 + CommissionTelesale + CommissionConsultants + CommissionImplementer;
+}// Nhật ký đổi mật khẩu người dùng (theo luồng Sys_User_ChangePassword của TVAN gốc):
+// mỗi lần người dùng đổi mật khẩu ghi lại một dòng để đối soát — mã người dùng, kết quả
+// (thành công/thất bại), lý do (nếu thất bại) và người/thời điểm thực hiện.
+// Khóa nghiệp vụ: (OrgId, UserCode) — nhiều dòng theo thời gian.
+public class PasswordChangeLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string UserCode { get; set; } = "";             // Mã người dùng đổi mật khẩu
+    public PasswordChangeResult Result { get; set; } = PasswordChangeResult.Success;   // Kết quả
+    public string? Message { get; set; }                   // Lý do / mô tả kết quả
+    public string? By { get; set; }                        // Người thực hiện
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

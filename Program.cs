@@ -1531,6 +1531,21 @@ app.MapDelete("/api/sys-users/{id:int}", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Đổi mật khẩu người dùng (theo Sys_User_ChangePassword của TVAN gốc):
+// kiểm tra mật khẩu cũ + chính sách mật khẩu mới, cập nhật mật khẩu (băm) và ghi nhật ký.
+app.MapPost("/api/users/change-password", async (ChangePasswordDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.ChangePasswordAsync(dto.UserCode ?? "", dto.OldPassword ?? "", dto.NewPassword ?? "", dto.By);
+    return ok ? Results.Ok(new { ok, msg }) : Results.BadRequest(new { ok, error = msg });
+});
+
+// Nhật ký đổi mật khẩu người dùng (lọc theo mã người dùng nếu có).
+app.MapGet("/api/password-change-logs", async (string? userCode, ITvanService svc) =>
+{
+    var ls = await svc.PasswordChangeLogsAsync(userCode);
+    return Results.Ok(ls.Select(l => new { l.Id, l.UserCode, result = l.Result.ToString(), l.Message, l.By, l.CreatedAt }));
+});
+
 // Gói Module (theo Sys_Modules của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
 app.MapGet("/api/sys-modules", async (string? keyword, ITvanService svc) =>
 {
@@ -1886,6 +1901,7 @@ record DocTienDto(decimal Amount, string? CurrencyCode, string? By);
 record SysGroupDto(int? Id, string? Code, string? Name, bool Active, string? By);
 record SaveSysGroupMembersDto(List<string>? UserCodes, string? By);
 record SysUserDto(int? Id, string? UserCode, string? UserName, string? Password, string? PhoneNo, string? EMail, string? MST, string? DepartmentCode, string? Position, bool FlagDLAdmin, bool FlagSysAdmin, bool FlagNNTAdmin, bool Active, string? By);
+record ChangePasswordDto(string? UserCode, string? OldPassword, string? NewPassword, string? By);
 record SysModuleDto(int? Id, string? ModuleCode, string? SolutionCode, string? ModuleName, string? Description, double QtyInvoice, double ValCapacity, bool Active, string? By);
 record SysModuleActiveDto(bool Active, string? By);
 record SysObjectDto(int? Id, string? ObjectCode, string? ObjectName, string? ServiceCode, SysObjectType ObjectType, bool Active, string? By);

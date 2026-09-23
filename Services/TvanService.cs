@@ -242,6 +242,9 @@ public interface ITvanService
     Task<SysUser?> GetSysUserAsync(int id);
     Task<(bool ok, string msg, int id)> SaveSysUserAsync(int? id, string userCode, string userName, string? password, string? phoneNo, string? email, string? mst, string? departmentCode, string? position, bool flagDlAdmin, bool flagSysAdmin, bool flagNntAdmin, bool active, string? by);
     Task<(bool ok, string msg)> DeleteSysUserAsync(int id);
+    // Đổi mật khẩu người dùng (theo Sys_User_ChangePassword của TVAN gốc)
+    Task<(bool ok, string msg)> ChangePasswordAsync(string userCode, string oldPassword, string newPassword, string? by);
+    Task<List<PasswordChangeLog>> PasswordChangeLogsAsync(string? userCode);
 
     // Gói Module (theo Sys_Modules / Sys_Solution của TVAN gốc)
     Task<List<SysModule>> SysModulesAsync(string? keyword);
@@ -5072,6 +5075,78 @@ public class TvanService(AppDbContext db) : ITvanService
         db.SysUsers.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa người dùng {code}.");
+    }
+
+    // Đổi mật khẩu người dùng (theo Sys_User_ChangePassword của TVAN gốc):
+    // - Người dùng phải tồn tại và đang dùng (Sys_User_CheckDB với FlagActive=Active).
+    // - Mật khẩu cũ phải khớp (so hash) — sai thì báo lỗi (Sys_User_ChangePassword_InvalidPasswordOld).
+    // - Mật khẩu mới phải đạt chính sách (PasswordPolicy: >= 8 ký tự, >= 1 chữ HOA, >= 1 chữ số)
+    //   — không đạt thì báo lỗi (Sys_User_ChangePassword_InvalidPasswordNew).
+    // - Cập nhật mật khẩu (băm) và ghi nhật ký đổi mật khẩu (thành công/thất bại).
+    public async Task<(bool ok, string msg)> ChangePasswordAsync(string userCode, string oldPassword, string newPassword, string? by)
+    {
+        userCode = (userCode ?? "").Trim();
+        if (userCode.Length == 0) return (false, "Cần mã người dùng.");
+
+        var u = await db.SysUsers.FirstOrDefaultAsync(x => x.UserCode == userCode);
+        if (u == null || !u.FlagActive)
+        {
+            await LogPasswordChangeAsync(userCode, PasswordChangeResult.Failed, "Không tìm thấy người dùng đang dùng.", by);
+            return (false, $"Không tìm thấy người dùng {userCode} đang dùng.");
+        }
+
+        // Kiểm tra mật khẩu cũ (so hash) — theo Sys_User_ChangePassword_InvalidPasswordOld.
+        if (string.IsNullOrEmpty(oldPassword) || HashPassword(oldPassword) != u.UserPasswordHash)
+        {
+            await LogPasswordChangeAsync(userCode, PasswordChangeResult.Failed, "Mật khẩu cũ không đúng.", by);
+            return (false, "Mật khẩu cũ không đúng.");
+        }
+
+        // Kiểm tra chính sách mật khẩu mới — theo PasswordPolicy.IsValid của TVAN gốc.
+        if (!IsValidPassword(newPassword))
+        {
+            await LogPasswordChangeAsync(userCode, PasswordChangeResult.Failed, "Mật khẩu mới không đạt chính sách.", by);
+            return (false, "Mật khẩu mới phải có tối thiểu 8 ký tự, ít nhất 1 chữ HOA và 1 chữ số.");
+        }
+
+        u.UserPasswordHash = HashPassword(newPassword);
+        u.UpdatedAt = DateTime.UtcNow;
+        u.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        await LogPasswordChangeAsync(userCode, PasswordChangeResult.Success, "Đổi mật khẩu thành công.", by);
+        return (true, $"Đã đổi mật khẩu cho người dùng {userCode}.");
+    }
+
+    // Nhật ký đổi mật khẩu (lọc theo mã người dùng nếu có).
+    public Task<List<PasswordChangeLog>> PasswordChangeLogsAsync(string? userCode)
+    {
+        var q = db.PasswordChangeLogs.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(userCode))
+        {
+            var k = userCode.Trim();
+            q = q.Where(l => l.UserCode == k);
+        }
+        return q.OrderByDescending(l => l.CreatedAt).ToListAsync();
+    }
+
+    private async Task LogPasswordChangeAsync(string userCode, PasswordChangeResult result, string message, string? by)
+    {
+        db.PasswordChangeLogs.Add(new PasswordChangeLog { UserCode = userCode, Result = result, Message = message, By = by });
+        await db.SaveChangesAsync();
+    }
+
+    // Chính sách mật khẩu (theo PasswordPolicy.IsValid của TVAN gốc): tối thiểu 8 ký tự,
+    // ít nhất 1 chữ HOA và 1 chữ số.
+    private static bool IsValidPassword(string? password)
+    {
+        if (string.IsNullOrEmpty(password) || password.Length < 8) return false;
+        bool hasUpper = false, hasDigit = false;
+        foreach (var c in password)
+        {
+            if (char.IsUpper(c)) hasUpper = true;
+            else if (char.IsDigit(c)) hasDigit = true;
+        }
+        return hasUpper && hasDigit;
     }
 
     // Băm mật khẩu (SHA-256) — KHÔNG lưu plaintext như nguồn (theo C0-bug9).

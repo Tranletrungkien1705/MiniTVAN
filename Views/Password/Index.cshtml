@@ -1,0 +1,60 @@
+@model List<PasswordChangeLog>
+@{
+    ViewData["Title"] = "Đổi mật khẩu người dùng";
+    var userCode = ViewBag.UserCode as string;
+    var users = ViewBag.Users as List<SysUser> ?? new List<SysUser>();
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-key me-1"></i>Nhật ký đổi mật khẩu</h6>
+                <form method="get" action="/Password" class="d-flex gap-2">
+                    <input name="userCode" value="@userCode" class="form-control form-control-sm" placeholder="Lọc theo mã người dùng" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã người dùng</th><th>Kết quả</th><th>Mô tả</th><th>Người thực hiện</th><th>Thời điểm</th></tr></thead>
+                <tbody>
+                @foreach (var l in Model)
+                {
+                    var (text, css) = Ui.PasswordChange(l.Result);
+                    <tr>
+                        <td class="fw-semibold">@l.UserCode</td>
+                        <td><span class="badge bg-@css">@text</span></td>
+                        <td class="small text-muted">@l.Message</td>
+                        <td class="small">@l.By</td>
+                        <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-4">Chưa có lần đổi mật khẩu nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-shield-lock me-1"></i>Đổi mật khẩu</h6>
+            <form method="post" action="/Password/Change" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12">
+                    <label class="form-label small mb-1">Người dùng</label>
+                    <select name="userCode" class="form-select form-select-sm" required>
+                        <option value="">— Chọn người dùng —</option>
+                        @foreach (var u in users)
+                        {
+                            <option value="@u.UserCode" selected="@(u.UserCode == userCode)">@u.UserCode — @u.UserName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Mật khẩu cũ</label><input name="oldPassword" type="password" class="form-control form-control-sm" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Mật khẩu mới</label><input name="newPassword" type="password" class="form-control form-control-sm" placeholder="Tối thiểu 8 ký tự, 1 chữ HOA, 1 chữ số" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="quản trị" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Đổi mật khẩu</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Theo Sys_User_ChangePassword: kiểm tra mật khẩu cũ, mật khẩu mới phải đạt chính sách (tối thiểu 8 ký tự, ít nhất 1 chữ HOA và 1 chữ số). Mật khẩu được băm, không lưu thô. Mọi lần đổi đều ghi nhật ký.</p>
+        </div></div>
+    </div>
+</div>

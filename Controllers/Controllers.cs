@@ -1756,6 +1756,26 @@ public class SysUserController(ITvanService svc) : Controller
     }
 }
 
+// Đổi mật khẩu người dùng (theo Sys_User_ChangePassword của TVAN gốc):
+// kiểm tra mật khẩu cũ + chính sách mật khẩu mới, cập nhật mật khẩu (băm) và ghi nhật ký đổi mật khẩu.
+public class PasswordController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? userCode)
+    {
+        ViewBag.UserCode = userCode;
+        ViewBag.Users = await svc.SysUsersAsync(null);
+        return View(await svc.PasswordChangeLogsAsync(userCode));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Change(string userCode, string oldPassword, string newPassword, string? by)
+    {
+        var (ok, msg) = await svc.ChangePasswordAsync(userCode, oldPassword, newPassword, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index), new { userCode });
+    }
+}
+
 // Gói Module (theo Sys_Modules / Sys_Solution của TVAN gốc):
 // mỗi gói Module thuộc một giải pháp, quy định hạn mức số hóa đơn + dung lượng, có vòng đời bật/ngừng.
 public class SysModuleController(ITvanService svc) : Controller

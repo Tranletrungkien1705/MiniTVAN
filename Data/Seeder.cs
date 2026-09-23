@@ -1053,6 +1053,13 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Nhật ký đổi mật khẩu người dùng (theo Sys_User_ChangePassword của TVAN gốc): 1 dòng demo.
+        if (!await db.PasswordChangeLogs.AnyAsync())
+        {
+            db.PasswordChangeLogs.Add(new PasswordChangeLog { UserCode = "ketoan01", Result = PasswordChangeResult.Success, Message = "Đổi mật khẩu thành công.", By = "ketoan01", CreatedAt = DateTime.UtcNow.AddDays(-5) });
+            await db.SaveChangesAsync();
+        }
+
         // Gói Module (theo Sys_Modules / Sys_Solution của TVAN gốc):
         // 1 giải pháp demo + 2 gói Module thuộc giải pháp đó.
         if (!await db.SysSolutions.AnyAsync())

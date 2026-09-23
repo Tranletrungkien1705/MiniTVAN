@@ -3500,6 +3500,63 @@ public class TvanServiceTests
     }
 
     [Fact]
+    public async Task ChangePassword_Valid_UpdatesHashAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveSysUserAsync(null, "ketoan01", "A", "OldPass1", null, null, null, null, null, false, false, false, true, null);
+            var hash1 = (await svc.GetSysUserAsync(id))!.UserPasswordHash;
+            var (ok, msg) = await svc.ChangePasswordAsync("ketoan01", "OldPass1", "NewPass2", "ketoan01");
+            Assert.True(ok);
+            Assert.Contains("Đã đổi mật khẩu", msg);
+            var u = await svc.GetSysUserAsync(id);
+            Assert.NotEqual(hash1, u!.UserPasswordHash);
+            var logs = await svc.PasswordChangeLogsAsync("ketoan01");
+            Assert.Single(logs);
+            Assert.Equal(PasswordChangeResult.Success, logs[0].Result);
+        }
+    }
+
+    [Fact]
+    public async Task ChangePassword_WrongOldPassword_BlockedAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveSysUserAsync(null, "ketoan01", "A", "OldPass1", null, null, null, null, null, false, false, false, true, null);
+            var (ok, msg) = await svc.ChangePasswordAsync("ketoan01", "WrongPass1", "NewPass2", null);
+            Assert.False(ok);
+            Assert.Contains("Mật khẩu cũ không đúng", msg);
+            var logs = await svc.PasswordChangeLogsAsync("ketoan01");
+            Assert.Single(logs);
+            Assert.Equal(PasswordChangeResult.Failed, logs[0].Result);
+        }
+    }
+
+    [Fact]
+    public async Task ChangePassword_WeakNewPassword_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveSysUserAsync(null, "ketoan01", "A", "OldPass1", null, null, null, null, null, false, false, false, true, null);
+            // Thiếu chữ HOA và quá ngắn → không đạt chính sách.
+            var (ok, msg) = await svc.ChangePasswordAsync("ketoan01", "OldPass1", "abc", null);
+            Assert.False(ok);
+            Assert.Contains("Mật khẩu mới phải có", msg);
+        }
+    }
+
+    [Fact]
+    public async Task ChangePassword_UnknownUser_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.ChangePasswordAsync("khongton", "OldPass1", "NewPass2", null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
+
+    [Fact]
     public async Task TvanInteg_Save_Creates()
     {
         var (db, svc, conn) = NewSvc(); using (conn)
