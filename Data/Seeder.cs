@@ -628,6 +628,35 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Danh mục Sản phẩm / hàng hóa (theo Mst_Spec của TVAN gốc):
+        // các sản phẩm demo gắn với model / loại SP / nhóm SP / đơn vị tính ở trên.
+        if (!await db.Specs.AnyAsync())
+        {
+            db.Specs.AddRange(
+                new Spec
+                {
+                    SpecCode = "SP-A54", SpecName = "Điện thoại Galaxy A54", SpecDesc = "Điện thoại thông minh Samsung",
+                    ModelCode = "A54", SpecType1 = "DIENTU", SpecType2 = "DT01", Color = "Đen",
+                    FlagHasSerial = true, FlagHasLOT = false, DefaultUnitCode = "CHIEC", StandardUnitCode = "CHIEC",
+                    Remark = "Hàng điện tử", FlagActive = true, UpdatedBy = "kế toán"
+                },
+                new Spec
+                {
+                    SpecCode = "SP-IP15", SpecName = "iPhone 15", SpecDesc = "Điện thoại thông minh Apple",
+                    ModelCode = "IP15", SpecType1 = "DIENTU", SpecType2 = "DT01", Color = "Titan",
+                    FlagHasSerial = true, FlagHasLOT = false, DefaultUnitCode = "CHIEC", StandardUnitCode = "CHIEC",
+                    Remark = "Hàng điện tử", FlagActive = true, UpdatedBy = "kế toán"
+                },
+                new Spec
+                {
+                    SpecCode = "SP-WH1000", SpecName = "Tai nghe WH-1000XM5", SpecDesc = "Tai nghe chống ồn Sony",
+                    ModelCode = "WH1000", SpecType1 = "DIENTU", SpecType2 = "DT01", Color = "Bạc",
+                    FlagHasSerial = false, FlagHasLOT = true, DefaultUnitCode = "HOP", StandardUnitCode = "HOP",
+                    Remark = "Hàng điện tử", FlagActive = true, UpdatedBy = "kế toán"
+                });
+            await db.SaveChangesAsync();
+        }
+
         // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):
         // các loại khách hàng demo dùng khi khai báo danh mục khách hàng.
         if (!await db.CustomerNntTypes.AnyAsync())

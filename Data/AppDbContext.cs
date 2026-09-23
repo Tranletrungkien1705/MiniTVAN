@@ -73,6 +73,7 @@ public class AppDbContext : DbContext
     public DbSet<ProductModel> ProductModels => Set<ProductModel>();
     public DbSet<SpecType1> SpecType1s => Set<SpecType1>();
     public DbSet<SpecType2> SpecType2s => Set<SpecType2>();
+    public DbSet<Spec> Specs => Set<Spec>();
     public DbSet<TvanInteg> TvanIntegs => Set<TvanInteg>();
     public DbSet<MstTypeCode> TypeCodes => Set<MstTypeCode>();
     public DbSet<TctTransactionLog> TctTransactionLogs => Set<TctTransactionLog>();
@@ -445,6 +446,11 @@ public class AppDbContext : DbContext
         b.Entity<SpecType2>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.SpecType2Code }).IsUnique();   // mỗi tổ chức một mã nhóm sản phẩm
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Spec>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.SpecCode }).IsUnique();   // mỗi tổ chức một mã sản phẩm
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<TvanInteg>(e =>

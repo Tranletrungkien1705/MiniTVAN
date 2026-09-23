@@ -1530,6 +1530,44 @@ public class SpecType2 : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Danh mục Sản phẩm / hàng hóa (theo bảng Mst_Spec của TVAN gốc — màn OS_PrdCenter_Mst_SpecController):
+// mỗi tổ chức khai báo các sản phẩm/hàng hóa dùng khi lập hóa đơn: mã sản phẩm, tên, mô tả,
+// model (Mst_Model), loại sản phẩm (Mst_SpecType1), nhóm sản phẩm (Mst_SpecType2), màu sắc,
+// cờ quản lý serial (FlagHasSerial) / lô (FlagHasLOT), đơn vị tính mặc định + đơn vị chuẩn (Mst_Unit)
+// và 10 trường tùy chỉnh (CustomField1..10 — theo Mst_SpecCustomField).
+// Khóa nghiệp vụ: (OrgId, SpecCode). FlagActive = sản phẩm đang dùng hay không.
+public class Spec : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string SpecCode { get; set; } = "";          // Mã sản phẩm (VD SP-A54)
+    public string SpecName { get; set; } = "";          // Tên sản phẩm
+    public string? SpecDesc { get; set; }                 // Mô tả sản phẩm
+    public string? ModelCode { get; set; }                // Model sản phẩm (Mst_Model)
+    public string? SpecType1 { get; set; }                // Loại sản phẩm (Mst_SpecType1)
+    public string? SpecType2 { get; set; }                // Nhóm sản phẩm (Mst_SpecType2)
+    public string? Color { get; set; }                    // Màu sắc
+    public bool FlagHasSerial { get; set; }               // Quản lý theo serial
+    public bool FlagHasLOT { get; set; }                  // Quản lý theo lô (LOT)
+    public string? DefaultUnitCode { get; set; }          // Đơn vị tính mặc định (Mst_Unit)
+    public string? StandardUnitCode { get; set; }         // Đơn vị tính chuẩn (Mst_Unit)
+    public string? CustomField1 { get; set; }             // Trường tùy chỉnh 1 (Mst_SpecCustomField)
+    public string? CustomField2 { get; set; }
+    public string? CustomField3 { get; set; }
+    public string? CustomField4 { get; set; }
+    public string? CustomField5 { get; set; }
+    public string? CustomField6 { get; set; }
+    public string? CustomField7 { get; set; }
+    public string? CustomField8 { get; set; }
+    public string? CustomField9 { get; set; }
+    public string? CustomField10 { get; set; }
+    public string? Remark { get; set; }                   // Ghi chú
+    public bool FlagActive { get; set; } = true;          // Sản phẩm đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 // Tích hợp TVAN (theo bảng Mst_TVANInteg của TVAN gốc): mỗi tổ chức (OrgID) khai báo tổ chức
 // giải pháp TVAN tương ứng để trao đổi hóa đơn — MSTTCTN_In (hóa đơn đầu vào) và MSTTCTN_Out
 // (hóa đơn đầu ra). Lưu theo kiểu upsert theo OrgID (theo Mst_TVANInteg_Save của TVAN gốc:

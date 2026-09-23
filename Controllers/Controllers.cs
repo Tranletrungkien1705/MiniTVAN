@@ -1149,6 +1149,40 @@ public class SpecType2Controller(ITvanService svc) : Controller
     }
 }
 
+// Danh mục Sản phẩm / hàng hóa (theo Mst_Spec của TVAN gốc — màn OS_PrdCenter_Mst_SpecController):
+// mỗi sản phẩm gắn với model, loại sản phẩm, nhóm sản phẩm, đơn vị tính và cờ quản lý serial/lô.
+public class SpecController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword, string? specType1, string? specType2, string? modelCode)
+    {
+        ViewBag.Keyword = keyword;
+        ViewBag.SpecType1 = specType1;
+        ViewBag.SpecType2 = specType2;
+        ViewBag.ModelCode = modelCode;
+        ViewBag.SpecType1s = await svc.SpecType1sAsync(null);
+        ViewBag.SpecType2s = await svc.SpecType2sAsync(null);
+        ViewBag.Models = await svc.ProductModelsAsync(null, null);
+        ViewBag.Units = await svc.UnitsAsync(null);
+        return View(await svc.SpecsAsync(keyword, specType1, specType2, modelCode));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string name, string? desc, string? modelCode, string? specType1, string? specType2, string? color, bool hasSerial, bool hasLot, string? defaultUnitCode, string? standardUnitCode, string? remark, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveSpecAsync(id, code, name, desc, modelCode, specType1, specType2, color, hasSerial, hasLot, defaultUnitCode, standardUnitCode, remark, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteSpecAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):
 // phân loại khách hàng (Doanh nghiệp, Cá nhân, Tổ chức nước ngoài...) dùng khi khai báo danh mục khách hàng.
 public class CustomerNntTypeController(ITvanService svc) : Controller

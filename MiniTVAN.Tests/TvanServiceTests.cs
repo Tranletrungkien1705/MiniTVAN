@@ -4379,6 +4379,106 @@ public class DocTienTests
     }
 
     [Fact]
+    public async Task Spec_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveSpecType1Async(null, "DIENTU", "Điện tử", null, true, "kế toán");
+            await svc.SaveSpecType2Async(null, "DT01", "Điện thoại", null, true, "kế toán");
+            await svc.SaveUnitAsync(null, "CHIEC", "Chiếc", null, true, "kế toán");
+            var (ok, _, id) = await svc.SaveSpecAsync(null, "SP-A54", "Điện thoại Galaxy A54", "Mô tả", null, "DIENTU", "DT01", "Đen", true, false, "CHIEC", "CHIEC", "Hàng điện tử", true, "kế toán");
+            Assert.True(ok);
+            var e = await svc.GetSpecAsync(id);
+            Assert.Equal("SP-A54", e!.SpecCode);
+            Assert.Equal("Điện thoại Galaxy A54", e.SpecName);
+            Assert.Equal("DIENTU", e.SpecType1);
+            Assert.Equal("DT01", e.SpecType2);
+            Assert.True(e.FlagHasSerial);
+            Assert.False(e.FlagHasLOT);
+            Assert.Equal("CHIEC", e.DefaultUnitCode);
+            Assert.True(e.FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task Spec_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            // Lưu lại cùng mã = cập nhật (không tạo bản ghi mới, không báo trùng).
+            var (ok, _, id2) = await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54 (bản mới)", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            Assert.Single(await svc.SpecsAsync(null, null, null, null));
+            Assert.Equal("Galaxy A54 (bản mới)", (await svc.GetSpecAsync(id))!.SpecName);
+        }
+    }
+
+    [Fact]
+    public async Task Spec_Save_MissingCodeOrName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok1, msg1, _) = await svc.SaveSpecAsync(null, "  ", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            Assert.False(ok1);
+            Assert.Contains("mã sản phẩm", msg1);
+            var (ok2, msg2, _) = await svc.SaveSpecAsync(null, "SP-A54", "  ", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            Assert.False(ok2);
+            Assert.Contains("tên sản phẩm", msg2);
+        }
+    }
+
+    [Fact]
+    public async Task Spec_Save_InvalidReferences_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            // Loại sản phẩm chưa tồn tại → chặn.
+            var (ok1, msg1, _) = await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, "DIENTU", null, null, false, false, null, null, null, true, "kế toán");
+            Assert.False(ok1);
+            Assert.Contains("Loại sản phẩm", msg1);
+            // Đơn vị tính chưa tồn tại → chặn.
+            var (ok2, msg2, _) = await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, "CHIEC", null, null, true, "kế toán");
+            Assert.False(ok2);
+            Assert.Contains("Đơn vị tính", msg2);
+            // Loại sản phẩm đã ngừng dùng → chặn.
+            await svc.SaveSpecType1Async(null, "DIENTU", "Điện tử", null, false, "kế toán");
+            var (ok3, msg3, _) = await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, "DIENTU", null, null, false, false, null, null, null, true, "kế toán");
+            Assert.False(ok3);
+            Assert.Contains("ngừng dùng", msg3);
+        }
+    }
+
+    [Fact]
+    public async Task Spec_List_FilteredByKeywordAndType()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveSpecType1Async(null, "DIENTU", "Điện tử", null, true, "kế toán");
+            await svc.SaveSpecType1Async(null, "GIAYDEP", "Giày dép", null, true, "kế toán");
+            await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, "DIENTU", null, null, false, false, null, null, null, true, "kế toán");
+            await svc.SaveSpecAsync(null, "SP-IP15", "iPhone 15", null, null, "DIENTU", null, null, false, false, null, null, null, true, "kế toán");
+            await svc.SaveSpecAsync(null, "SP-GD01", "Giày chạy bộ", null, null, "GIAYDEP", null, null, false, false, null, null, null, true, "kế toán");
+            Assert.Equal(3, (await svc.SpecsAsync(null, null, null, null)).Count);
+            Assert.Single(await svc.SpecsAsync("IP15", null, null, null));
+            Assert.Equal(2, (await svc.SpecsAsync(null, "DIENTU", null, null)).Count);
+        }
+    }
+
+    [Fact]
+    public async Task Spec_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            var (ok, _) = await svc.DeleteSpecAsync(id);
+            Assert.True(ok);
+            Assert.Null(await svc.GetSpecAsync(id));
+        }
+    }
+
+    [Fact]
     public async Task InvoiceDtlType_Save_Creates()
     {
         var (db, svc, conn) = NewSvc(); using (conn)

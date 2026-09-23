@@ -908,6 +908,27 @@ app.MapDelete("/api/spec-type2s/{id:int}", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Danh mục sản phẩm / hàng hóa (theo Mst_Spec của TVAN gốc): danh sách (lọc theo từ khóa + loại/nhóm SP + model nếu có).
+app.MapGet("/api/specs", async (string? keyword, string? specType1, string? specType2, string? modelCode, ITvanService svc) =>
+{
+    var ls = await svc.SpecsAsync(keyword, specType1, specType2, modelCode);
+    return Results.Ok(ls.Select(t => new { t.Id, t.SpecCode, t.SpecName, t.SpecDesc, t.ModelCode, t.SpecType1, t.SpecType2, t.Color, t.FlagHasSerial, t.FlagHasLOT, t.DefaultUnitCode, t.StandardUnitCode, t.Remark, t.FlagActive, t.UpdatedAt, t.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) sản phẩm theo mã (theo Mst_Spec_Add/Update của TVAN gốc).
+app.MapPost("/api/specs", async (SpecDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveSpecAsync(dto.Id, dto.Code ?? "", dto.Name ?? "", dto.Desc, dto.ModelCode, dto.SpecType1, dto.SpecType2, dto.Color, dto.HasSerial, dto.HasLot, dto.DefaultUnitCode, dto.StandardUnitCode, dto.Remark, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa sản phẩm theo id (theo Mst_Spec_Delete của TVAN gốc).
+app.MapDelete("/api/specs/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteSpecAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
 app.MapGet("/api/customer-nnt-types", async (string? keyword, ITvanService svc) =>
 {
@@ -1430,6 +1451,7 @@ record BrandDto(int? Id, string? Code, string? Name, string? Remark, bool Active
 record ProductModelDto(int? Id, string? Code, string? Name, string? OrgModelCode, string? BrandCode, string? Remark, bool Active, string? By);
 record SpecType1Dto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
 record SpecType2Dto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
+record SpecDto(int? Id, string? Code, string? Name, string? Desc, string? ModelCode, string? SpecType1, string? SpecType2, string? Color, bool HasSerial, bool HasLot, string? DefaultUnitCode, string? StandardUnitCode, string? Remark, bool Active, string? By);
 record CustomerNntTypeDto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
 record ProvinceDto(int? Id, string? Code, string? Name, bool Active, string? By);
 record DistrictDto(int? Id, string? ProvinceCode, string? Code, string? Name, bool Active, string? By);

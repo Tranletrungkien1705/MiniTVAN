@@ -1,0 +1,170 @@
+@model List<Spec>
+@{
+    ViewData["Title"] = "Sản phẩm / hàng hóa";
+    var keyword = ViewBag.Keyword as string;
+    var specType1 = ViewBag.SpecType1 as string;
+    var specType2 = ViewBag.SpecType2 as string;
+    var modelCode = ViewBag.ModelCode as string;
+    var specType1s = ViewBag.SpecType1s as List<SpecType1> ?? new List<SpecType1>();
+    var specType2s = ViewBag.SpecType2s as List<SpecType2> ?? new List<SpecType2>();
+    var models = ViewBag.Models as List<ProductModel> ?? new List<ProductModel>();
+    var units = ViewBag.Units as List<Unit> ?? new List<Unit>();
+    string T1(string? c) => specType1s.FirstOrDefault(x => x.SpecType1Code == c)?.SpecType1Name ?? c ?? "";
+    string T2(string? c) => specType2s.FirstOrDefault(x => x.SpecType2Code == c)?.SpecType2Name ?? c ?? "";
+    string Md(string? c) => models.FirstOrDefault(x => x.ModelCode == c)?.ModelName ?? c ?? "";
+    string Un(string? c) => units.FirstOrDefault(x => x.UnitCode == c)?.UnitName ?? c ?? "";
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-box-seam me-1"></i>Danh mục sản phẩm / hàng hóa</h6>
+                <form method="get" action="/Spec" class="d-flex gap-2 flex-wrap">
+                    <select name="specType1" class="form-select form-select-sm" style="width:auto">
+                        <option value="">— Tất cả loại SP —</option>
+                        @foreach (var t in specType1s)
+                        {
+                            <option value="@t.SpecType1Code" selected="@(t.SpecType1Code == specType1)">@t.SpecType1Code — @t.SpecType1Name</option>
+                        }
+                    </select>
+                    <select name="specType2" class="form-select form-select-sm" style="width:auto">
+                        <option value="">— Tất cả nhóm SP —</option>
+                        @foreach (var t in specType2s)
+                        {
+                            <option value="@t.SpecType2Code" selected="@(t.SpecType2Code == specType2)">@t.SpecType2Code — @t.SpecType2Name</option>
+                        }
+                    </select>
+                    <select name="modelCode" class="form-select form-select-sm" style="width:auto">
+                        <option value="">— Tất cả model —</option>
+                        @foreach (var m in models)
+                        {
+                            <option value="@m.ModelCode" selected="@(m.ModelCode == modelCode)">@m.ModelCode — @m.ModelName</option>
+                        }
+                    </select>
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm mã / tên sản phẩm" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã SP</th><th>Tên sản phẩm</th><th>Model</th><th>Loại / Nhóm</th><th>ĐVT</th><th>Serial/Lô</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var t in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@t.SpecCode</td>
+                        <td>
+                            @t.SpecName
+                            @if (!string.IsNullOrWhiteSpace(t.Color)) { <span class="small text-muted">· @t.Color</span> }
+                        </td>
+                        <td class="small">@(string.IsNullOrWhiteSpace(t.ModelCode) ? "—" : $"{t.ModelCode} — {Md(t.ModelCode)}")</td>
+                        <td class="small">
+                            @if (!string.IsNullOrWhiteSpace(t.SpecType1)) { <span class="badge bg-info-subtle text-info-emphasis">@T1(t.SpecType1)</span> }
+                            @if (!string.IsNullOrWhiteSpace(t.SpecType2)) { <span class="badge bg-primary-subtle text-primary-emphasis">@T2(t.SpecType2)</span> }
+                            @if (string.IsNullOrWhiteSpace(t.SpecType1) && string.IsNullOrWhiteSpace(t.SpecType2)) { <span class="text-muted">—</span> }
+                        </td>
+                        <td class="small">@(string.IsNullOrWhiteSpace(t.DefaultUnitCode) ? "—" : Un(t.DefaultUnitCode))</td>
+                        <td class="small">
+                            @if (t.FlagHasSerial) { <span class="badge bg-warning-subtle text-warning-emphasis">Serial</span> }
+                            @if (t.FlagHasLOT) { <span class="badge bg-secondary-subtle text-secondary-emphasis">Lô</span> }
+                            @if (!t.FlagHasSerial && !t.FlagHasLOT) { <span class="text-muted">—</span> }
+                        </td>
+                        <td>
+                            @if (t.FlagActive) { <span class="badge bg-success">Đang dùng</span> }
+                            else { <span class="badge bg-secondary">Ngừng dùng</span> }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/Spec/Delete" class="d-inline" onsubmit="return confirm('Xóa sản phẩm @t.SpecCode?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@t.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="8" class="text-center text-muted py-4">Chưa có sản phẩm nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm / cập nhật sản phẩm</h6>
+            <form method="post" action="/Spec/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã sản phẩm</label><input name="code" class="form-control form-control-sm" placeholder="SP-A54" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Tên sản phẩm</label><input name="name" class="form-control form-control-sm" placeholder="Điện thoại Galaxy A54" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Mô tả</label><input name="desc" class="form-control form-control-sm" placeholder="(tùy chọn)" /></div>
+                <div class="col-12">
+                    <label class="form-label small mb-1">Model</label>
+                    <select name="modelCode" class="form-select form-select-sm">
+                        <option value="">— Không chọn —</option>
+                        @foreach (var m in models.Where(x => x.FlagActive))
+                        {
+                            <option value="@m.ModelCode">@m.ModelCode — @m.ModelName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">Loại sản phẩm</label>
+                    <select name="specType1" class="form-select form-select-sm">
+                        <option value="">— Không chọn —</option>
+                        @foreach (var t in specType1s.Where(x => x.FlagActive))
+                        {
+                            <option value="@t.SpecType1Code">@t.SpecType1Code — @t.SpecType1Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">Nhóm sản phẩm</label>
+                    <select name="specType2" class="form-select form-select-sm">
+                        <option value="">— Không chọn —</option>
+                        @foreach (var t in specType2s.Where(x => x.FlagActive))
+                        {
+                            <option value="@t.SpecType2Code">@t.SpecType2Code — @t.SpecType2Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6"><label class="form-label small mb-1">Màu sắc</label><input name="color" class="form-control form-control-sm" placeholder="(tùy chọn)" /></div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">ĐVT mặc định</label>
+                    <select name="defaultUnitCode" class="form-select form-select-sm">
+                        <option value="">— Không chọn —</option>
+                        @foreach (var u in units.Where(x => x.FlagActive))
+                        {
+                            <option value="@u.UnitCode">@u.UnitCode — @u.UnitName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">ĐVT chuẩn</label>
+                    <select name="standardUnitCode" class="form-select form-select-sm">
+                        <option value="">— Không chọn —</option>
+                        @foreach (var u in units.Where(x => x.FlagActive))
+                        {
+                            <option value="@u.UnitCode">@u.UnitCode — @u.UnitName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6 d-flex align-items-end gap-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="hasSerial" value="true" id="specSerial" />
+                        <label class="form-check-label small" for="specSerial">Quản lý serial</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="hasLot" value="true" id="specLot" />
+                        <label class="form-check-label small" for="specLot">Quản lý lô</label>
+                    </div>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Ghi chú</label><textarea name="remark" class="form-control form-control-sm" rows="2" maxlength="400"></textarea></div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="active" value="true" id="specActive" checked />
+                    <label class="form-check-label small" for="specActive">Đang dùng</label>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu sản phẩm</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Model / loại SP / nhóm SP / đơn vị tính (nếu chọn) phải tồn tại và đang dùng. Lưu cùng mã sản phẩm = cập nhật sản phẩm đã có.</p>
+        </div></div>
+    </div>
+</div>
