@@ -6,6 +6,7 @@
    var approveLogs = (List<ApproveLog>)ViewBag.ApproveLogs;
    var issueLogs = (List<IssueLog>)ViewBag.IssueLogs;
    var tctLogs = (List<TctReceiveLog>)ViewBag.TctLogs;
+   var tct300Logs = (List<Tct300Log>)ViewBag.Tct300Logs;
    var updateLogs = (List<InvoiceUpdateLog>)ViewBag.UpdateLogs;
    var cancelLogs = (List<CancelInvoiceLog>)ViewBag.CancelLogs;
    var recordLogs = (List<InvoiceRecordLog>)ViewBag.RecordLogs;
@@ -360,6 +361,32 @@
         {
             <hr /><div class="small text-muted mb-1">Link tra cứu công khai</div>
             <div class="border rounded p-2 small text-break">@lookupUrl</div>
+            <hr />
+            <div class="small text-muted mb-1">Thông báo sai sót CQT
+                @{ var (sdt, sdcss) = Ui.SuaDoi(Model.FlagSuaDoi); }
+                <span class="badge bg-@sdcss">@sdt</span>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.TCTSuaDoiRefNo))
+            {
+                <div class="small text-break mb-2">Mã V: <span class="fw-semibold">@Model.TCTSuaDoiRefNo</span></div>
+            }
+            <button class="btn btn-outline-warning w-100" type="button" data-bs-toggle="collapse" data-bs-target="#tct300Form"><i class="bi bi-exclamation-triangle me-1"></i>Gửi thông báo hóa đơn sai sót (300)</button>
+            <div class="collapse" id="tct300Form"><div class="border rounded p-2">
+                <form asp-action="SendTct300" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                    <div class="mb-2"><label class="form-label small mb-1">Cờ xử lý (TCTBao)</label>
+                        <select name="flagReplaceOrAdjust" class="form-select form-select-sm">
+                            <option value="0">0 — Hóa đơn bình thường</option>
+                            <option value="1">1 — Thay thế</option>
+                            <option value="2">2 — Điều chỉnh</option>
+                        </select></div>
+                    <div class="mb-2"><label class="form-label small mb-1">Loại thông báo</label><input name="loaiTb" class="form-control form-control-sm" placeholder="VD 1" /></div>
+                    <div class="mb-2"><label class="form-label small mb-1">Số thông báo CQT</label><input name="soTb" class="form-control form-control-sm" placeholder="VD 04/SS" /></div>
+                    <div class="mb-2"><label class="form-label small mb-1">Ngày thông báo CQT</label><input name="ngayTb" type="date" class="form-control form-control-sm" /></div>
+                    <div class="mb-2"><label class="form-label small mb-1">Lý do sai sót</label><input name="lyDo" class="form-control form-control-sm" placeholder="VD sai MST người mua" required /></div>
+                    <div class="mb-2"><label class="form-label small mb-1">Người gửi</label><input name="by" class="form-control form-control-sm" placeholder="VD kế toán" /></div>
+                    <button class="btn btn-warning btn-sm w-100">Gửi thông báo 300 tới CQT</button>
+                </form>
+            </div></div>
         }
     </div></div>
 
@@ -464,6 +491,29 @@
                 </tr>
             }
             @if (tctLogs.Count == 0) { <tr><td colspan="6" class="text-muted small">Chưa nhận kết quả CQT.</td></tr> }
+            </tbody>
+        </table>
+    </div></div>
+
+    <div class="card mt-3"><div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="bi bi-exclamation-triangle me-1"></i>Nhật ký gửi thông báo sai sót (300) tới CQT</h6>
+        <table class="table table-sm align-middle mb-0">
+            <thead><tr><th>Thời điểm</th><th>Mã V</th><th>Cờ TCT báo</th><th>Loại TB</th><th>Số TB</th><th>Lý do</th><th>Người gửi</th></tr></thead>
+            <tbody>
+            @foreach (var l in tct300Logs)
+            {
+                var (at, acss) = Ui.ReplaceOrAdjust(l.FlagReplaceOrAdjust);
+                <tr>
+                    <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM HH:mm")</td>
+                    <td class="small text-break">@l.TCTRefNo</td>
+                    <td><span class="badge bg-@acss">@at</span></td>
+                    <td class="small">@l.LoaiTB</td>
+                    <td class="small">@l.SoTB</td>
+                    <td class="small">@l.LyDo</td>
+                    <td class="small text-muted">@l.By</td>
+                </tr>
+            }
+            @if (tct300Logs.Count == 0) { <tr><td colspan="7" class="text-muted small">Chưa gửi thông báo sai sót.</td></tr> }
             </tbody>
         </table>
     </div></div>

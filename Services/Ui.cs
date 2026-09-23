@@ -203,6 +203,23 @@ public static class Ui
         _ => (s.ToString(), "secondary")
     };
 
+    // Cờ xử lý thay thế/điều chỉnh của hóa đơn (theo Invoice_Invoice.FlagReplaceOrAdjust của TVAN gốc).
+    public static (string text, string css) ReplaceOrAdjust(ReplaceOrAdjustFlag f) => f switch
+    {
+        ReplaceOrAdjustFlag.Replace => ("Thay thế", "warning"),
+        ReplaceOrAdjustFlag.Adjust  => ("Điều chỉnh", "info"),
+        _ => ("Bình thường", "secondary")
+    };
+
+    // Trạng thái gửi thông báo sai sót tới CQT (theo Invoice_Invoice.FlagSuaDoi của TVAN gốc).
+    public static (string text, string css) SuaDoi(SuaDoiFlag? f) => f switch
+    {
+        SuaDoiFlag.Sent    => ("Đã gửi thông báo", "info"),
+        SuaDoiFlag.Allowed => ("TCT cho phép", "success"),
+        SuaDoiFlag.Error   => ("TCT trả lỗi", "danger"),
+        _ => ("Chưa gửi", "secondary")
+    };
+
     // Phương thức thanh toán (theo Mst_PaymentMethods của TVAN gốc).
     public static string Payment(PaymentMethod p) => p switch
     {

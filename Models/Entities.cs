@@ -73,6 +73,16 @@ public enum TctMessageType { Success202 = 202, Fail204 = 204 }
 // Trạng thái CQT chấp nhận/từ chối (theo TConst.TCTStatus của TVAN gốc: ACCEPT/REJECT)
 public enum TctAcceptStatus { Accept = 0, Reject = 1 }
 
+// Cờ xử lý thay thế/điều chỉnh của hóa đơn (theo Invoice_Invoice.FlagReplaceOrAdjust của TVAN gốc):
+// Normal = 0/null hóa đơn bình thường, Replace = 1 thay thế, Adjust = 2 điều chỉnh.
+// Giá trị này được TCT trả về trong thông điệp 300 (TCTBao) và lưu lại trên hóa đơn.
+public enum ReplaceOrAdjustFlag { Normal = 0, Replace = 1, Adjust = 2 }
+
+// Cờ trạng thái gửi thông báo sai sót tới TCT (theo Invoice_Invoice.FlagSuaDoi của TVAN gốc):
+// Sent = 0 (đã gửi thông báo, chờ TCT trả lời), Allowed = 1 (TCT cho phép tạo HĐ thay thế/điều chỉnh),
+// Error = 2 (TCT trả lỗi 204).
+public enum SuaDoiFlag { Sent = 0, Allowed = 1, Error = 2 }
+
 // Trạng thái mẫu hóa đơn (theo Invoice_TempInvoice.TInvoiceStatus của TVAN gốc):
 // Draft = PENDING (chờ), SentTct = SENTTCT (đã gửi CQT, chờ CQT phát hành), Issued = ISSUED (đang sử dụng),
 // Inactive = ngừng, Cancel = CANCEL (đã hủy mẫu — theo Invoice_TempInvoice_Cancel của TVAN gốc).
@@ -392,6 +402,13 @@ public class Invoice : IOrgOwned
     public string? TctMaLoi { get; set; }
     public string? TctLyDo { get; set; }
     public DateTime? TctReceiveDTimeUTC { get; set; }
+
+    // Gửi thông báo hóa đơn sai sót tới CQT (theo Invoice_Invoice_SentTCT_300 của TVAN gốc):
+    // TCTSuaDoiRefNo = mã V tham chiếu file thông báo 300 đã gửi; FlagReplaceOrAdjust = cờ thay thế/điều chỉnh
+    // do TCT trả về (TCTBao); FlagSuaDoi = trạng thái gửi thông báo sai sót (0 đã gửi, 1 TCT cho phép, 2 lỗi).
+    public string? TCTSuaDoiRefNo { get; set; }
+    public ReplaceOrAdjustFlag FlagReplaceOrAdjust { get; set; } = ReplaceOrAdjustFlag.Normal;
+    public SuaDoiFlag? FlagSuaDoi { get; set; }
 
     // Phương thức thanh toán (theo Invoice_Invoice.PaymentMethodCode của TVAN gốc):
     // dùng cho cập nhật nội dung hóa đơn sau khi đã cấp số (Invoice_Invoice_UpdAfterAllocated).
@@ -754,6 +771,26 @@ public class TctReceiveLog : IOrgOwned
     public string? MaLoi { get; set; }                 // Mã lỗi CQT
     public string? LyDo { get; set; }                  // Lý do CQT
     public string? Message { get; set; }               // Thông báo kết quả
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Nhật ký gửi thông báo hóa đơn sai sót tới CQT (theo Invoice_Invoice_SentTCT_300 của TVAN gốc).
+// Mỗi lần gửi thông điệp 300 (04/SS — thông báo hóa đơn đã lập có sai sót) ghi lại để đối soát:
+// mã V tham chiếu file đã gửi, cờ thay thế/điều chỉnh TCT trả về, loại thông báo, số/ngày thông báo CQT.
+public class Tct300Log : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InvoiceId { get; set; }
+    public Invoice? Invoice { get; set; }
+    public string? TCTRefNo { get; set; }              // Mã V tham chiếu file thông báo 300 đã gửi
+    public ReplaceOrAdjustFlag FlagReplaceOrAdjust { get; set; } = ReplaceOrAdjustFlag.Normal;  // Cờ TCT trả về (TCTBao)
+    public string? LoaiTB { get; set; }                // Loại thông báo (Loai)
+    public string? SoTB { get; set; }                  // Số thông báo CQT (So)
+    public DateTime? NgayTB { get; set; }              // Ngày thông báo CQT (NTBCCQT)
+    public string? LyDo { get; set; }                  // Lý do sai sót
+    public string? Message { get; set; }               // Thông báo kết quả
+    public string? By { get; set; }                    // Người thực hiện
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 

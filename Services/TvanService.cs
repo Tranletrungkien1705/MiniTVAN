@@ -78,6 +78,8 @@ public interface ITvanService
     Task<(bool ok, string msg, string? mccqtmtt)> GenMccqtMttAsync(int invoiceId);
     Task<(bool ok, string msg)> ReceiveTctResultAsync(int invoiceId, TctMessageType mltDiep, string? maCQT, string? maLoi, string? lyDo);
     Task<List<TctReceiveLog>> TctReceiveLogsAsync(int? invoiceId);
+    Task<(bool ok, string msg, string? tctRefNo)> SendTct300Async(int invoiceId, ReplaceOrAdjustFlag flagReplaceOrAdjust, string? loaiTb, string? soTb, DateTime? ngayTb, string? lyDo, string? by);
+    Task<List<Tct300Log>> Tct300LogsAsync(int? invoiceId);
     Task<(bool ok, string msg)> UpdateAfterAllocatedAsync(int invoiceId, string? buyerName, string? buyerMst, string? buyerAddress, PaymentMethod paymentMethod, decimal amount, decimal vatRate, DateTime invoiceDate, string? note, string? by);
     Task<List<InvoiceUpdateLog>> UpdateLogsAsync(int? invoiceId);
     Task<(bool ok, string msg)> CancelInvoiceAsync(int invoiceId, string? remark, string? by);
@@ -1793,6 +1795,44 @@ public class TvanService(AppDbContext db) : ITvanService
     public Task<List<TctReceiveLog>> TctReceiveLogsAsync(int? invoiceId)
     {
         var q = db.TctReceiveLogs.Include(l => l.Invoice).AsQueryable();
+        if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
+        return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
+
+    // Gửi thông báo hóa đơn đã lập có sai sót tới CQT (theo Invoice_Invoice_SentTCT_300 của TVAN gốc):
+    // dựng thông điệp loại 300 (mẫu 04/SS) cho một hóa đơn đã phát hành, gửi tới CQT rồi lưu lại
+    // mã V tham chiếu (TCTSuaDoiRefNo), cờ thay thế/điều chỉnh TCT trả về (FlagReplaceOrAdjust = TCTBao)
+    // và đánh dấu FlagSuaDoi = Sent (đã gửi thông báo, chờ TCT trả lời). Mọi lần gửi ghi nhật ký (Tct300Log).
+    public async Task<(bool ok, string msg, string? tctRefNo)> SendTct300Async(
+        int invoiceId, ReplaceOrAdjustFlag flagReplaceOrAdjust, string? loaiTb, string? soTb, DateTime? ngayTb, string? lyDo, string? by)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.", null);
+        // Chỉ gửi thông báo sai sót cho hóa đơn đã được CQT chấp nhận phát hành (có mã tra cứu).
+        if (inv.Status != InvoiceStatus.Accepted) return (false, "Chỉ gửi thông báo sai sót cho hóa đơn đã được CQT chấp nhận (ACCEPTED).", null);
+        if (string.IsNullOrWhiteSpace(inv.TctCode)) return (false, "Hóa đơn thiếu mã tra cứu CQT, không thể gửi thông báo sai sót.", null);
+        if (string.IsNullOrWhiteSpace(lyDo)) return (false, "Cần nhập lý do sai sót.", null);
+
+        // Mã V tham chiếu file thông báo 300 đã gửi (mô phỏng round-trip tới CQT).
+        var tctRefNo = $"V{DateTime.UtcNow:yyyyMMddHHmmss}{inv.Id:D4}";
+        inv.TCTSuaDoiRefNo = tctRefNo;
+        inv.FlagReplaceOrAdjust = flagReplaceOrAdjust;
+        inv.FlagSuaDoi = SuaDoiFlag.Sent;
+
+        var msg = $"Đã gửi thông báo hóa đơn sai sót (300) cho HĐ {inv.Symbol}-{inv.No}. Mã V: {tctRefNo}";
+        db.Messages.Add(new TranMessage { InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out, Code = "300", Text = msg });
+        db.Tct300Logs.Add(new Tct300Log
+        {
+            InvoiceId = inv.Id, TCTRefNo = tctRefNo, FlagReplaceOrAdjust = flagReplaceOrAdjust,
+            LoaiTB = loaiTb, SoTB = soTb, NgayTB = ngayTb, LyDo = lyDo, Message = msg, By = by,
+        });
+        await db.SaveChangesAsync();
+        return (true, msg, tctRefNo);
+    }
+
+    public Task<List<Tct300Log>> Tct300LogsAsync(int? invoiceId)
+    {
+        var q = db.Tct300Logs.Include(l => l.Invoice).AsQueryable();
         if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
     }

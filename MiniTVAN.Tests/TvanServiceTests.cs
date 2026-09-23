@@ -3554,4 +3554,75 @@ public class TvanServiceTests
             Assert.Contains("đã dùng số", msg);
         }
     }
+
+    // Gửi thông báo hóa đơn sai sót tới CQT (theo Invoice_Invoice_SentTCT_300 của TVAN gốc).
+    // Đưa HĐ về trạng thái Accepted (đã được CQT chấp nhận, có mã tra cứu) để gửi thông báo 300.
+    private static async Task<int> SetupAccepted(AppDbContext db, ITvanService svc)
+    {
+        var (_, invId) = await Setup(svc);
+        var inv = await db.Invoices.FirstAsync(i => i.Id == invId);
+        inv.Status = InvoiceStatus.Accepted;
+        inv.TctCode = "0026082512345678";
+        inv.SentAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return invId;
+    }
+
+    [Fact]
+    public async Task SendTct300_Accepted_SetsRefAndFlagAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var invId = await SetupAccepted(db, svc);
+            var (ok, msg, tctRefNo) = await svc.SendTct300Async(invId, ReplaceOrAdjustFlag.Adjust, "1", "04/SS", DateTime.Today, "Sai MST người mua", "kế toán");
+            Assert.True(ok);
+            Assert.False(string.IsNullOrWhiteSpace(tctRefNo));
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(tctRefNo, inv!.TCTSuaDoiRefNo);
+            Assert.Equal(ReplaceOrAdjustFlag.Adjust, inv.FlagReplaceOrAdjust);
+            Assert.Equal(SuaDoiFlag.Sent, inv.FlagSuaDoi);
+            var logs = await svc.Tct300LogsAsync(invId);
+            Assert.Single(logs);
+            Assert.Equal(tctRefNo, logs[0].TCTRefNo);
+            Assert.Equal(ReplaceOrAdjustFlag.Adjust, logs[0].FlagReplaceOrAdjust);
+            Assert.Equal("Sai MST người mua", logs[0].LyDo);
+        }
+    }
+
+    [Fact]
+    public async Task SendTct300_NotAccepted_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);   // HĐ đang Draft
+            var (ok, msg, _) = await svc.SendTct300Async(invId, ReplaceOrAdjustFlag.Replace, null, null, null, "Sai sót", null);
+            Assert.False(ok);
+            Assert.Contains("chấp nhận", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SendTct300_MissingReason_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var invId = await SetupAccepted(db, svc);
+            var (ok, msg, _) = await svc.SendTct300Async(invId, ReplaceOrAdjustFlag.Adjust, null, null, null, "  ", null);
+            Assert.False(ok);
+            Assert.Contains("lý do", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SendTct300_ReplaceFlag_Stored()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var invId = await SetupAccepted(db, svc);
+            var (ok, _, _) = await svc.SendTct300Async(invId, ReplaceOrAdjustFlag.Replace, "1", "04/SS", DateTime.Today, "Thay thế HĐ", "kế toán");
+            Assert.True(ok);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(ReplaceOrAdjustFlag.Replace, inv!.FlagReplaceOrAdjust);
+        }
+    }
 }

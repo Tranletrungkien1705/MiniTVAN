@@ -104,6 +104,19 @@ public static class Seeder
                 CreatedAt = DateTime.UtcNow.AddDays(-5)
             });
             await db.SaveChangesAsync();
+            // Gửi thông báo hóa đơn sai sót tới CQT (theo Invoice_Invoice_SentTCT_300 của TVAN gốc):
+            // inv1 đã được CQT chấp nhận → đã gửi thông báo 300 (04/SS) báo sai sót, lưu mã V + cờ điều chỉnh.
+            inv1.TCTSuaDoiRefNo = $"V{DateTime.UtcNow.AddDays(-4):yyyyMMddHHmmss}{inv1.Id:D4}";
+            inv1.FlagReplaceOrAdjust = ReplaceOrAdjustFlag.Adjust;
+            inv1.FlagSuaDoi = SuaDoiFlag.Sent;
+            db.Tct300Logs.Add(new Tct300Log
+            {
+                InvoiceId = inv1.Id, TCTRefNo = inv1.TCTSuaDoiRefNo, FlagReplaceOrAdjust = ReplaceOrAdjustFlag.Adjust,
+                LoaiTB = "1", SoTB = "04/SS", NgayTB = DateTime.Today.AddDays(-4), LyDo = "Sai MST người mua",
+                Message = $"Đã gửi thông báo hóa đơn sai sót (300) cho HĐ {inv1.Symbol}-{inv1.No}. Mã V: {inv1.TCTSuaDoiRefNo}",
+                By = "kế toán", CreatedAt = DateTime.UtcNow.AddDays(-4)
+            });
+            await db.SaveChangesAsync();
             // Cập nhật nội dung hóa đơn sau khi đã cấp số (theo Invoice_Invoice_UpdAfterAllocated của TVAN gốc):
             // inv2 đang chờ (Draft) và đã có số → đã được cập nhật lại thông tin người mua.
             inv2.PaymentMethod = PaymentMethod.Transfer;

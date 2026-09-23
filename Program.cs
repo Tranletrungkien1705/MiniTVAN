@@ -539,6 +539,21 @@ app.MapGet("/api/tct-receive-logs", async (int? invoiceId, ITvanService svc) =>
     return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, mltDiep = (int)l.MltDiep, chapNhan = l.ChapNhan.ToString(), l.MaCQT, l.MaLoi, l.LyDo, l.Message, l.CreatedAt }));
 });
 
+// Gửi thông báo hóa đơn sai sót tới CQT (theo Invoice_Invoice_SentTCT_300 của TVAN gốc):
+// dựng thông điệp 300 (04/SS) cho HĐ đã được CQT chấp nhận, lưu mã V + cờ thay thế/điều chỉnh TCT trả về.
+app.MapPost("/api/invoices/{id:int}/send-tct-300", async (int id, SendTct300Dto dto, ITvanService svc) =>
+{
+    var (ok, msg, tctRefNo) = await svc.SendTct300Async(id, dto.FlagReplaceOrAdjust, dto.LoaiTb, dto.SoTb, dto.NgayTb, dto.LyDo, dto.By);
+    return ok ? Results.Ok(new { id, tctRefNo, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Nhật ký gửi thông báo hóa đơn sai sót (300) tới CQT (lọc theo hóa đơn nếu có).
+app.MapGet("/api/tct-300-logs", async (int? invoiceId, ITvanService svc) =>
+{
+    var ls = await svc.Tct300LogsAsync(invoiceId);
+    return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, l.TCTRefNo, flagReplaceOrAdjust = (int)l.FlagReplaceOrAdjust, l.LoaiTB, l.SoTB, l.NgayTB, l.LyDo, l.Message, l.By, l.CreatedAt }));
+});
+
 // Cập nhật nội dung hóa đơn sau khi đã cấp số (theo Invoice_Invoice_UpdAfterAllocated của TVAN gốc):
 // sửa người mua, phương thức thanh toán, tiền hàng/thuế suất, ngày HĐ khi HĐ đang chờ và đã có số.
 app.MapPost("/api/invoices/{id:int}/update-after-allocated", async (int id, UpdateAfterAllocatedDto dto, ITvanService svc) =>
@@ -1033,6 +1048,7 @@ record UpdateQtyNoDto(int StartInvoiceNo, int EndInvoiceNo, string? Remark, stri
 record SendTemplateTctDto(string? Remark, string? By);
 record ReceiveTemplateTctDto(TctAcceptStatus ChapNhan, string? Message, string? By);
 record TctReceiveDto(TctMessageType MltDiep, string? MaCQT, string? MaLoi, string? LyDo);
+record SendTct300Dto(ReplaceOrAdjustFlag FlagReplaceOrAdjust, string? LoaiTb, string? SoTb, DateTime? NgayTb, string? LyDo, string? By);
 record UpdateAfterAllocatedDto(string? BuyerName, string? BuyerMst, string? BuyerAddress, PaymentMethod PaymentMethod, decimal Amount, decimal VatRate, DateTime? InvoiceDate, string? Note, string? By);
 record CancelInvoiceDto(string? Remark, string? By);
 record CreateRecordDto(RecordType Type, string? FileName, string? FileSpec, string? Reason, string? By);

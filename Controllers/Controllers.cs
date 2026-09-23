@@ -70,6 +70,7 @@ public class InvoiceController(ITvanService svc) : Controller
         ViewBag.ApproveLogs = await svc.ApproveLogsAsync(id);
         ViewBag.IssueLogs = await svc.IssueLogsAsync(id);
         ViewBag.TctLogs = await svc.TctReceiveLogsAsync(id);
+        ViewBag.Tct300Logs = await svc.Tct300LogsAsync(id);
         ViewBag.UpdateLogs = await svc.UpdateLogsAsync(id);
         ViewBag.CancelLogs = await svc.CancelLogsAsync(id);
         ViewBag.RecordLogs = await svc.RecordLogsAsync(id);
@@ -257,6 +258,15 @@ public class InvoiceController(ITvanService svc) : Controller
     public async Task<IActionResult> TctReceive(int id, TctMessageType mltDiep, string? maCQT, string? maLoi, string? lyDo)
     {
         var (ok, msg) = await svc.ReceiveTctResultAsync(id, mltDiep, maCQT, maLoi, lyDo);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Gửi thông báo hóa đơn sai sót tới CQT (theo Invoice_Invoice_SentTCT_300 của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SendTct300(int id, ReplaceOrAdjustFlag flagReplaceOrAdjust, string? loaiTb, string? soTb, DateTime? ngayTb, string? lyDo, string? by)
+    {
+        var (ok, msg, _) = await svc.SendTct300Async(id, flagReplaceOrAdjust, loaiTb, soTb, ngayTb, lyDo, by);
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Detail), new { id });
     }
@@ -484,6 +494,16 @@ public class TctReceiveLogController(ITvanService svc) : Controller
     {
         ViewBag.InvoiceId = invoiceId;
         return View(await svc.TctReceiveLogsAsync(invoiceId));
+    }
+}
+
+// Nhật ký gửi thông báo hóa đơn sai sót tới CQT (theo Invoice_Invoice_SentTCT_300 của TVAN gốc).
+public class Tct300LogController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? invoiceId)
+    {
+        ViewBag.InvoiceId = invoiceId;
+        return View(await svc.Tct300LogsAsync(invoiceId));
     }
 }
 

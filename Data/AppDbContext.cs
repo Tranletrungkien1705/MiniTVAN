@@ -37,6 +37,7 @@ public class AppDbContext : DbContext
     public DbSet<InvoiceTemplate> InvoiceTemplates => Set<InvoiceTemplate>();
     public DbSet<InvoiceNoAllocLog> InvoiceNoAllocLogs => Set<InvoiceNoAllocLog>();
     public DbSet<TctReceiveLog> TctReceiveLogs => Set<TctReceiveLog>();
+    public DbSet<Tct300Log> Tct300Logs => Set<Tct300Log>();
     public DbSet<InvoiceUpdateLog> InvoiceUpdateLogs => Set<InvoiceUpdateLog>();
     public DbSet<TemplateRangeLog> TemplateRangeLogs => Set<TemplateRangeLog>();
     public DbSet<CancelInvoiceLog> CancelInvoiceLogs => Set<CancelInvoiceLog>();
@@ -225,6 +226,12 @@ public class AppDbContext : DbContext
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<TctReceiveLog>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.InvoiceId });
+            e.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Tct300Log>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.InvoiceId });
             e.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
