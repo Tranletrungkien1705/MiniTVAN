@@ -337,6 +337,22 @@ public class Country : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Danh mục Loại giấy tờ (theo bảng Mst_GovIDType của TVAN gốc): danh mục loại giấy tờ tùy thân/tổ chức
+// (CMND/CCCD/hộ chiếu/ĐKKD...) dùng khi khai báo thông tin NNT (Nnt.PresentIdType) và khách hàng
+// (CustomerNnt.GovIDType). Khóa nghiệp vụ: (OrgId, GovIDType). FlagActive = loại giấy tờ đang dùng hay không.
+public class GovIdType : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string GovIDType { get; set; } = "";        // Mã loại giấy tờ (VD CCCD)
+    public string GovIDTypeName { get; set; } = "";    // Tên loại giấy tờ (VD Căn cước công dân)
+    public string? Remark { get; set; }                  // Ghi chú
+    public bool FlagActive { get; set; } = true;         // Loại giấy tờ đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 // Danh mục Đại lý (theo bảng Mst_Dealer của TVAN gốc): đại lý phân phối/giới thiệu khách hàng
 // cho NNT, gắn với một tỉnh/thành (ProvinceCode). Dùng để quản lý mạng lưới đại lý.
 // Khóa nghiệp vụ: (OrgId, DLCode). FlagActive = đại lý đang hoạt động hay không.

@@ -1187,6 +1187,27 @@ app.MapDelete("/api/countries/{id:int}", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Danh mục Loại giấy tờ (theo Mst_GovIDType của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
+app.MapGet("/api/gov-id-types", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.GovIdTypesAsync(keyword);
+    return Results.Ok(ls.Select(t => new { t.Id, t.GovIDType, t.GovIDTypeName, t.Remark, t.FlagActive, t.UpdatedAt, t.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) loại giấy tờ theo mã (theo Mst_GovIDType của TVAN gốc).
+app.MapPost("/api/gov-id-types", async (GovIdTypeDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveGovIdTypeAsync(dto.Id, dto.Code ?? "", dto.Name ?? "", dto.Remark, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa loại giấy tờ theo id (theo Mst_GovIDType của TVAN gốc).
+app.MapDelete("/api/gov-id-types/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteGovIdTypeAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 // Danh mục Đại lý (theo Mst_Dealer của TVAN gốc): danh sách (lọc theo tỉnh/thành + từ khóa nếu có).
 app.MapGet("/api/dealers", async (string? provinceCode, string? keyword, ITvanService svc) =>
 {
@@ -1892,6 +1913,7 @@ record CustomerNntTypeDto(int? Id, string? Code, string? Name, string? Remark, b
 record ProvinceDto(int? Id, string? Code, string? Name, bool Active, string? By);
 record DistrictDto(int? Id, string? ProvinceCode, string? Code, string? Name, bool Active, string? By);
 record CountryDto(int? Id, string? Code, string? Name, bool Active, string? By);
+record GovIdTypeDto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
 record DealerDto(int? Id, string? Code, string? Name, string? ProvinceCode, string? Address, string? PresentBy, string? GovIdNumber, string? Email, string? Phone, bool Active, string? By);
 record DepartmentDto(int? Id, string? Code, string? CodeParent, string? Mst, string? Name, bool Active, string? By);
 record OrgCksDto(int? Id, string? CaNumber, string? CaOrg, string? Subject, DateTime? EffStart, DateTime? EffEnd, string? CtsPath, string? CtsPwd, bool Active, string? By);

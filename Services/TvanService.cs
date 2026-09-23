@@ -196,6 +196,11 @@ public interface ITvanService
     Task<Country?> GetCountryAsync(int id);
     Task<(bool ok, string msg, int id)> SaveCountryAsync(int? id, string code, string name, bool active, string? by);
     Task<(bool ok, string msg)> DeleteCountryAsync(int id);
+    // Danh mục Loại giấy tờ (theo Mst_GovIDType của TVAN gốc).
+    Task<List<GovIdType>> GovIdTypesAsync(string? keyword);
+    Task<GovIdType?> GetGovIdTypeAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveGovIdTypeAsync(int? id, string code, string name, string? remark, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteGovIdTypeAsync(int id);
     Task<List<Dealer>> DealersAsync(string? keyword, string? provinceCode);
     Task<Dealer?> GetDealerAsync(int id);
     Task<(bool ok, string msg, int id)> SaveDealerAsync(int? id, string code, string name, string provinceCode, string? address, string? presentBy, string? govIdNumber, string? email, string? phone, bool active, string? by);
@@ -4404,6 +4409,73 @@ public class TvanService(AppDbContext db) : ITvanService
         db.Countries.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa quốc gia {code}.");
+    }
+
+    // Danh mục Loại giấy tờ (theo Mst_GovIDType của TVAN gốc):
+    // danh sách loại giấy tờ (lọc theo từ khóa mã/tên/ghi chú nếu có).
+    public Task<List<GovIdType>> GovIdTypesAsync(string? keyword)
+    {
+        var q = db.GovIdTypes.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.GovIDType.Contains(k) || t.GovIDTypeName.Contains(k) || (t.Remark != null && t.Remark.Contains(k)));
+        }
+        return q.OrderBy(t => t.GovIDType).ToListAsync();
+    }
+
+    public Task<GovIdType?> GetGovIdTypeAsync(int id) =>
+        db.GovIdTypes.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) loại giấy tờ theo khóa nghiệp vụ (OrgId, GovIDType)
+    // (theo Mst_GovIDType_CheckDB của TVAN gốc). Ràng buộc:
+    //  - cần mã loại giấy tờ + tên loại giấy tờ;
+    //  - khi tạo: mã loại giấy tờ chưa tồn tại trong tổ chức (Mst_GovIDType_CheckDB_GovIDTypeExist).
+    public async Task<(bool ok, string msg, int id)> SaveGovIdTypeAsync(int? id, string code, string name, string? remark, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã loại giấy tờ.", 0);
+        if (name.Length == 0) return (false, "Cần tên loại giấy tờ.", 0);
+
+        GovIdType? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.GovIdTypes.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.GovIdTypes.FirstOrDefaultAsync(t => t.GovIDType == code);
+
+        if (e == null)
+        {
+            if (await db.GovIdTypes.AnyAsync(t => t.GovIDType == code))
+                return (false, "Mã loại giấy tờ đã tồn tại.", 0);
+            e = new GovIdType { GovIDType = code };
+            db.GovIdTypes.Add(e);
+        }
+        else
+        {
+            // Đổi mã loại giấy tờ: chặn trùng với loại giấy tờ khác.
+            if (!string.Equals(e.GovIDType, code, StringComparison.OrdinalIgnoreCase)
+                && await db.GovIdTypes.AnyAsync(t => t.GovIDType == code && t.Id != e.Id))
+                return (false, "Mã loại giấy tờ đã tồn tại.", 0);
+            e.GovIDType = code;
+        }
+
+        e.GovIDTypeName = name;
+        e.Remark = remark;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu loại giấy tờ {code} — {name}.", e.Id);
+    }
+
+    // Xóa loại giấy tờ theo id (theo Mst_GovIDType của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteGovIdTypeAsync(int id)
+    {
+        var e = await db.GovIdTypes.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy loại giấy tờ.");
+        var code = e.GovIDType;
+        db.GovIdTypes.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa loại giấy tờ {code}.");
     }
 
     // Danh mục Đại lý (theo Mst_Dealer của TVAN gốc):

@@ -871,6 +871,18 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Danh mục Loại giấy tờ (theo Mst_GovIDType của TVAN gốc):
+        // các loại giấy tờ demo dùng khi khai báo thông tin NNT (PresentIdType) và khách hàng (GovIDType).
+        if (!await db.GovIdTypes.AnyAsync())
+        {
+            db.GovIdTypes.AddRange(
+                new GovIdType { GovIDType = "CMND", GovIDTypeName = "Chứng minh nhân dân", Remark = "Giấy tờ tùy thân cũ", FlagActive = true, UpdatedBy = "kế toán" },
+                new GovIdType { GovIDType = "CCCD", GovIDTypeName = "Căn cước công dân", Remark = "Giấy tờ tùy thân hiện hành", FlagActive = true, UpdatedBy = "kế toán" },
+                new GovIdType { GovIDType = "HOPCHIEU", GovIDTypeName = "Hộ chiếu", Remark = "Dùng cho cá nhân nước ngoài", FlagActive = true, UpdatedBy = "kế toán" },
+                new GovIdType { GovIDType = "DKKD", GovIDTypeName = "Giấy chứng nhận đăng ký kinh doanh", Remark = "Giấy tờ của tổ chức", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+
         // Danh mục Đại lý (theo Mst_Dealer của TVAN gốc):
         // các đại lý demo gắn với tỉnh/thành, dùng để quản lý mạng lưới đại lý.
         if (!await db.Dealers.AnyAsync())

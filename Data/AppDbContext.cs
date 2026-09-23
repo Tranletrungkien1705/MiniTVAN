@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<Province> Provinces => Set<Province>();
     public DbSet<District> Districts => Set<District>();
     public DbSet<Country> Countries => Set<Country>();
+    public DbSet<GovIdType> GovIdTypes => Set<GovIdType>();
     public DbSet<Dealer> Dealers => Set<Dealer>();
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
@@ -135,6 +136,11 @@ public class AppDbContext : DbContext
         b.Entity<Country>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.CountryCode }).IsUnique();   // mỗi tổ chức một mã quốc gia
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<GovIdType>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.GovIDType }).IsUnique();   // mỗi tổ chức một mã loại giấy tờ
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<Dealer>(e =>

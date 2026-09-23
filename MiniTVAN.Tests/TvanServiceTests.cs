@@ -6278,4 +6278,75 @@ public class DocTienTests
             Assert.Single(await svc.LicOrdersAsync(null, LicOrderStatus.Approved, null, null));
         }
     }
+
+    // Danh mục Loại giấy tờ (theo Mst_GovIDType của TVAN gốc).
+    [Fact]
+    public async Task GovIdType_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveGovIdTypeAsync(null, "CCCD", "Căn cước công dân", "Giấy tờ tùy thân", true, "kế toán");
+            Assert.True(ok);
+            var e = await svc.GetGovIdTypeAsync(id);
+            Assert.Equal("CCCD", e!.GovIDType);
+            Assert.Equal("Căn cước công dân", e.GovIDTypeName);
+            Assert.True(e.FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task GovIdType_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveGovIdTypeAsync(null, "CCCD", "Căn cước", null, true, "kế toán");
+            // Lưu lại cùng mã = cập nhật (không tạo bản ghi mới, không báo trùng).
+            var (ok, _, id2) = await svc.SaveGovIdTypeAsync(null, "CCCD", "Căn cước công dân", "cập nhật", true, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            Assert.Single(await svc.GovIdTypesAsync(null));
+            Assert.Equal("Căn cước công dân", (await svc.GetGovIdTypeAsync(id))!.GovIDTypeName);
+        }
+    }
+
+    [Fact]
+    public async Task GovIdType_Save_MissingCodeOrName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok1, msg1, _) = await svc.SaveGovIdTypeAsync(null, "  ", "Căn cước", null, true, "kế toán");
+            Assert.False(ok1);
+            Assert.Contains("mã loại giấy tờ", msg1);
+            var (ok2, msg2, _) = await svc.SaveGovIdTypeAsync(null, "CCCD", "  ", null, true, "kế toán");
+            Assert.False(ok2);
+            Assert.Contains("tên loại giấy tờ", msg2);
+        }
+    }
+
+    [Fact]
+    public async Task GovIdType_List_FilteredByKeyword()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveGovIdTypeAsync(null, "CCCD", "Căn cước công dân", null, true, "kế toán");
+            await svc.SaveGovIdTypeAsync(null, "HOPCHIEU", "Hộ chiếu", null, true, "kế toán");
+            var all = await svc.GovIdTypesAsync(null);
+            Assert.Equal(2, all.Count);
+            var filtered = await svc.GovIdTypesAsync("HOPCHIEU");
+            Assert.Single(filtered);
+            Assert.Equal("HOPCHIEU", filtered[0].GovIDType);
+        }
+    }
+
+    [Fact]
+    public async Task GovIdType_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveGovIdTypeAsync(null, "CMND", "Chứng minh nhân dân", null, true, "kế toán");
+            var (ok, _) = await svc.DeleteGovIdTypeAsync(id);
+            Assert.True(ok);
+            Assert.Null(await svc.GetGovIdTypeAsync(id));
+        }
+    }
 }

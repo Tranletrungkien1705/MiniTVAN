@@ -1492,6 +1492,34 @@ public class CountryController(ITvanService svc) : Controller
     }
 }
 
+// Danh mục Loại giấy tờ (theo Mst_GovIDType của TVAN gốc):
+// danh mục loại giấy tờ tùy thân/tổ chức (CMND/CCCD/hộ chiếu/ĐKKD...) dùng khi khai báo
+// thông tin NNT (PresentIdType) và khách hàng (GovIDType).
+public class GovIdTypeController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.GovIdTypesAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string name, string? remark, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveGovIdTypeAsync(id, code, name, remark, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteGovIdTypeAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Danh mục Đại lý (theo Mst_Dealer của TVAN gốc):
 // đại lý phân phối/giới thiệu khách hàng cho NNT, gắn với một tỉnh/thành.
 public class DealerController(ITvanService svc) : Controller
