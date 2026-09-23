@@ -76,6 +76,7 @@ public class AppDbContext : DbContext
     public DbSet<SpecType1> SpecType1s => Set<SpecType1>();
     public DbSet<SpecType2> SpecType2s => Set<SpecType2>();
     public DbSet<Spec> Specs => Set<Spec>();
+    public DbSet<SpecCustomField> SpecCustomFields => Set<SpecCustomField>();
     public DbSet<SpecUnit> SpecUnits => Set<SpecUnit>();
     public DbSet<SpecPrice> SpecPrices => Set<SpecPrice>();
     public DbSet<TvanInteg> TvanIntegs => Set<TvanInteg>();
@@ -467,6 +468,11 @@ public class AppDbContext : DbContext
         b.Entity<Spec>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.SpecCode }).IsUnique();   // mỗi tổ chức một mã sản phẩm
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SpecCustomField>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.SpecCustomFieldCode }).IsUnique();   // mỗi tổ chức một mã trường tùy chỉnh
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<SpecUnit>(e =>

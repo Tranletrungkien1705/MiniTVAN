@@ -4519,6 +4519,78 @@ public class DocTienTests
     }
 
     [Fact]
+    public async Task SpecCustomField_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveSpecCustomFieldAsync(null, "CF1", "Màu sắc", DBPhysicalType.Text, "Màu hàng hóa", true, "kế toán");
+            Assert.True(ok);
+            var e = await svc.GetSpecCustomFieldAsync(id);
+            Assert.Equal("CF1", e!.SpecCustomFieldCode);
+            Assert.Equal("Màu sắc", e.SpecCustomFieldName);
+            Assert.Equal(DBPhysicalType.Text, e.DBPhysicalType);
+            Assert.True(e.FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task SpecCustomField_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveSpecCustomFieldAsync(null, "CF1", "Màu sắc", DBPhysicalType.Text, null, true, "kế toán");
+            // Lưu lại cùng mã = cập nhật (không tạo bản ghi mới, không báo trùng).
+            var (ok, _, id2) = await svc.SaveSpecCustomFieldAsync(null, "CF1", "Màu sắc (mới)", DBPhysicalType.Number, "cập nhật", true, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            Assert.Single(await svc.SpecCustomFieldsAsync(null));
+            var e = await svc.GetSpecCustomFieldAsync(id);
+            Assert.Equal("Màu sắc (mới)", e!.SpecCustomFieldName);
+            Assert.Equal(DBPhysicalType.Number, e.DBPhysicalType);
+        }
+    }
+
+    [Fact]
+    public async Task SpecCustomField_Save_MissingCodeOrName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok1, msg1, _) = await svc.SaveSpecCustomFieldAsync(null, "  ", "Màu sắc", DBPhysicalType.Text, null, true, "kế toán");
+            Assert.False(ok1);
+            Assert.Contains("mã trường tùy chỉnh", msg1);
+            var (ok2, msg2, _) = await svc.SaveSpecCustomFieldAsync(null, "CF1", "  ", DBPhysicalType.Text, null, true, "kế toán");
+            Assert.False(ok2);
+            Assert.Contains("tên trường tùy chỉnh", msg2);
+        }
+    }
+
+    [Fact]
+    public async Task SpecCustomField_List_FilteredByKeyword()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveSpecCustomFieldAsync(null, "CF1", "Màu sắc", DBPhysicalType.Text, null, true, "kế toán");
+            await svc.SaveSpecCustomFieldAsync(null, "CF2", "Bảo hành", DBPhysicalType.Number, null, true, "kế toán");
+            var all = await svc.SpecCustomFieldsAsync(null);
+            Assert.Equal(2, all.Count);
+            var filtered = await svc.SpecCustomFieldsAsync("Bảo hành");
+            Assert.Single(filtered);
+        }
+    }
+
+    [Fact]
+    public async Task SpecCustomField_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveSpecCustomFieldAsync(null, "CF1", "Màu sắc", DBPhysicalType.Text, null, true, "kế toán");
+            var (ok, _) = await svc.DeleteSpecCustomFieldAsync(id);
+            Assert.True(ok);
+            Assert.Null(await svc.GetSpecCustomFieldAsync(id));
+        }
+    }
+
+    [Fact]
     public async Task Spec_Save_Creates()
     {
         var (db, svc, conn) = NewSvc(); using (conn)

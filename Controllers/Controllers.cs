@@ -1202,6 +1202,34 @@ public class SpecType2Controller(ITvanService svc) : Controller
     }
 }
 
+// Danh mục Trường tùy chỉnh của sản phẩm (theo Mst_SpecCustomField của TVAN gốc — màn
+// OS_PrdCenter_Mst_SpecCustomFieldController): các trường tùy chỉnh gắn với sản phẩm
+// (Spec.CustomField1..10) để lưu thêm thuộc tính riêng của hàng hóa khi lập hóa đơn.
+public class SpecCustomFieldController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.SpecCustomFieldsAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string name, DBPhysicalType type, string? remark, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveSpecCustomFieldAsync(id, code, name, type, remark, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteSpecCustomFieldAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Danh mục Sản phẩm / hàng hóa (theo Mst_Spec của TVAN gốc — màn OS_PrdCenter_Mst_SpecController):
 // mỗi sản phẩm gắn với model, loại sản phẩm, nhóm sản phẩm, đơn vị tính và cờ quản lý serial/lô.
 public class SpecController(ITvanService svc) : Controller

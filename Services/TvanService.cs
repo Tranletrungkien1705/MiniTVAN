@@ -160,6 +160,10 @@ public interface ITvanService
     Task<SpecType2?> GetSpecType2Async(int id);
     Task<(bool ok, string msg, int id)> SaveSpecType2Async(int? id, string code, string name, string? remark, bool active, string? by);
     Task<(bool ok, string msg)> DeleteSpecType2Async(int id);
+    Task<List<SpecCustomField>> SpecCustomFieldsAsync(string? keyword);
+    Task<SpecCustomField?> GetSpecCustomFieldAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveSpecCustomFieldAsync(int? id, string code, string name, DBPhysicalType type, string? remark, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteSpecCustomFieldAsync(int id);
     Task<List<Spec>> SpecsAsync(string? keyword, string? specType1, string? specType2, string? modelCode);
     Task<Spec?> GetSpecAsync(int id);
     Task<(bool ok, string msg, int id)> SaveSpecAsync(int? id, string code, string name, string? desc, string? modelCode, string? specType1, string? specType2, string? color, bool hasSerial, bool hasLot, string? defaultUnitCode, string? standardUnitCode, string? remark, bool active, string? by);
@@ -3517,6 +3521,75 @@ public class TvanService(AppDbContext db) : ITvanService
         db.SpecType2s.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa nhóm sản phẩm {code}.");
+    }
+
+    // Danh mục Trường tùy chỉnh của sản phẩm (theo Mst_SpecCustomField của TVAN gốc — màn
+    // OS_PrdCenter_Mst_SpecCustomFieldController): danh sách trường tùy chỉnh
+    // (lọc theo từ khóa mã/tên/ghi chú nếu có).
+    public Task<List<SpecCustomField>> SpecCustomFieldsAsync(string? keyword)
+    {
+        var q = db.SpecCustomFields.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.SpecCustomFieldCode.Contains(k) || t.SpecCustomFieldName.Contains(k) || (t.Remark != null && t.Remark.Contains(k)));
+        }
+        return q.OrderBy(t => t.SpecCustomFieldCode).ToListAsync();
+    }
+
+    public Task<SpecCustomField?> GetSpecCustomFieldAsync(int id) =>
+        db.SpecCustomFields.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) trường tùy chỉnh sản phẩm theo khóa nghiệp vụ (OrgId, SpecCustomFieldCode)
+    // (theo Mst_SpecCustomField_Update của TVAN gốc). Ràng buộc:
+    //  - cần mã trường tùy chỉnh + tên trường tùy chỉnh;
+    //  - khi tạo: mã trường tùy chỉnh chưa tồn tại trong tổ chức (Mst_SpecCustomField_CheckDB_CustomFieldExist).
+    public async Task<(bool ok, string msg, int id)> SaveSpecCustomFieldAsync(int? id, string code, string name, DBPhysicalType type, string? remark, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã trường tùy chỉnh.", 0);
+        if (name.Length == 0) return (false, "Cần tên trường tùy chỉnh.", 0);
+
+        SpecCustomField? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.SpecCustomFields.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.SpecCustomFields.FirstOrDefaultAsync(t => t.SpecCustomFieldCode == code);
+
+        if (e == null)
+        {
+            if (await db.SpecCustomFields.AnyAsync(t => t.SpecCustomFieldCode == code))
+                return (false, "Mã trường tùy chỉnh đã tồn tại.", 0);
+            e = new SpecCustomField { SpecCustomFieldCode = code };
+            db.SpecCustomFields.Add(e);
+        }
+        else
+        {
+            // Đổi mã trường tùy chỉnh: chặn trùng với trường khác.
+            if (!string.Equals(e.SpecCustomFieldCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.SpecCustomFields.AnyAsync(t => t.SpecCustomFieldCode == code && t.Id != e.Id))
+                return (false, "Mã trường tùy chỉnh đã tồn tại.", 0);
+            e.SpecCustomFieldCode = code;
+        }
+
+        e.SpecCustomFieldName = name;
+        e.DBPhysicalType = type;
+        e.Remark = remark;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu trường tùy chỉnh {code} — {name}.", e.Id);
+    }
+
+    // Xóa trường tùy chỉnh sản phẩm theo id (theo Mst_SpecCustomField_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteSpecCustomFieldAsync(int id)
+    {
+        var e = await db.SpecCustomFields.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy trường tùy chỉnh.");
+        var code = e.SpecCustomFieldCode;
+        db.SpecCustomFields.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa trường tùy chỉnh {code}.");
     }
 
     // Danh mục Sản phẩm / hàng hóa (theo Mst_Spec của TVAN gốc — màn OS_PrdCenter_Mst_SpecController):

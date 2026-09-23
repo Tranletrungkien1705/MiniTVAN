@@ -958,6 +958,27 @@ app.MapDelete("/api/spec-type2s/{id:int}", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Danh mục trường tùy chỉnh sản phẩm (theo Mst_SpecCustomField của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
+app.MapGet("/api/spec-custom-fields", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.SpecCustomFieldsAsync(keyword);
+    return Results.Ok(ls.Select(t => new { t.Id, t.SpecCustomFieldCode, t.SpecCustomFieldName, type = t.DBPhysicalType.ToString(), t.Remark, t.FlagActive, t.UpdatedAt, t.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) trường tùy chỉnh sản phẩm theo mã (theo Mst_SpecCustomField_Update của TVAN gốc).
+app.MapPost("/api/spec-custom-fields", async (SpecCustomFieldDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveSpecCustomFieldAsync(dto.Id, dto.Code ?? "", dto.Name ?? "", dto.Type, dto.Remark, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa trường tùy chỉnh sản phẩm theo id (theo Mst_SpecCustomField_Delete của TVAN gốc).
+app.MapDelete("/api/spec-custom-fields/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteSpecCustomFieldAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 // Danh mục sản phẩm / hàng hóa (theo Mst_Spec của TVAN gốc): danh sách (lọc theo từ khóa + loại/nhóm SP + model nếu có).
 app.MapGet("/api/specs", async (string? keyword, string? specType1, string? specType2, string? modelCode, ITvanService svc) =>
 {
@@ -1608,6 +1629,7 @@ record BrandDto(int? Id, string? Code, string? Name, string? Remark, bool Active
 record ProductModelDto(int? Id, string? Code, string? Name, string? OrgModelCode, string? BrandCode, string? Remark, bool Active, string? By);
 record SpecType1Dto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
 record SpecType2Dto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
+record SpecCustomFieldDto(int? Id, string? Code, string? Name, DBPhysicalType Type, string? Remark, bool Active, string? By);
 record SpecDto(int? Id, string? Code, string? Name, string? Desc, string? ModelCode, string? SpecType1, string? SpecType2, string? Color, bool HasSerial, bool HasLot, string? DefaultUnitCode, string? StandardUnitCode, string? Remark, bool Active, string? By);
 record SpecUnitDto(int? Id, string? SpecCode, string? UnitCode, string? StandardUnitCode, string? Desc, decimal Qty, decimal? Length, decimal? Width, decimal? Height, decimal? Volume, decimal? Weight, string? Remark, bool Active, string? By);
 record SpecPriceDto(int? Id, string? SpecCode, string? UnitCode, decimal BuyPrice, decimal SellPrice, string? CurrencyCode, decimal DiscountVnd, string? VatRateCode, DateTime? EffectDTimeStart, DateTime? EffectDTimeEnd, string? Remark, bool Active, string? By);

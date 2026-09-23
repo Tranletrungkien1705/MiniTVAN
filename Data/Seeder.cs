@@ -639,6 +639,17 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Danh mục Trường tùy chỉnh của sản phẩm (theo Mst_SpecCustomField của TVAN gốc):
+        // các trường tùy chỉnh demo gắn với sản phẩm (Spec.CustomField1..10).
+        if (!await db.SpecCustomFields.AnyAsync())
+        {
+            db.SpecCustomFields.AddRange(
+                new SpecCustomField { SpecCustomFieldCode = "CF1", SpecCustomFieldName = "Màu sắc", DBPhysicalType = DBPhysicalType.Text, Remark = "Màu sắc hàng hóa", FlagActive = true, UpdatedBy = "kế toán" },
+                new SpecCustomField { SpecCustomFieldCode = "CF2", SpecCustomFieldName = "Bảo hành (tháng)", DBPhysicalType = DBPhysicalType.Number, Remark = "Thời hạn bảo hành", FlagActive = true, UpdatedBy = "kế toán" },
+                new SpecCustomField { SpecCustomFieldCode = "CF3", SpecCustomFieldName = "Ngày hết hạn", DBPhysicalType = DBPhysicalType.Date, Remark = "Hạn sử dụng", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+
         // Danh mục Sản phẩm / hàng hóa (theo Mst_Spec của TVAN gốc):
         // các sản phẩm demo gắn với model / loại SP / nhóm SP / đơn vị tính ở trên.
         if (!await db.Specs.AnyAsync())

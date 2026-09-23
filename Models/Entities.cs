@@ -1645,6 +1645,25 @@ public class Spec : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Danh mục Trường tùy chỉnh của sản phẩm (theo bảng Mst_SpecCustomField của TVAN gốc — màn
+// OS_PrdCenter_Mst_SpecCustomFieldController): mỗi tổ chức khai báo các trường tùy chỉnh
+// (SpecCustomFieldCode/SpecCustomFieldName) gắn với sản phẩm (Spec.CustomField1..10) để lưu
+// thêm thuộc tính riêng của hàng hóa khi lập hóa đơn. DBPhysicalType = kiểu vật lý trong DB.
+// Khóa nghiệp vụ: (OrgId, SpecCustomFieldCode). FlagActive = trường đang dùng hay không.
+public class SpecCustomField : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string SpecCustomFieldCode { get; set; } = "";   // Mã trường tùy chỉnh (VD CF1)
+    public string SpecCustomFieldName { get; set; } = "";   // Tên trường tùy chỉnh (VD Màu sắc)
+    public DBPhysicalType DBPhysicalType { get; set; } = DBPhysicalType.Text;   // Kiểu vật lý trong DB
+    public string? Remark { get; set; }                       // Ghi chú
+    public bool FlagActive { get; set; } = true;              // Trường đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 // Đơn vị quy đổi của sản phẩm (theo bảng Mst_SpecUnit của TVAN gốc — màn
 // OS_PrdCenter_Mst_SpecUnitController): mỗi sản phẩm (SpecCode) có thể có nhiều đơn vị tính
 // với hệ số quy đổi (Qty) về đơn vị chuẩn (StandardUnitCode), kèm kích thước/khối lượng/thể tích

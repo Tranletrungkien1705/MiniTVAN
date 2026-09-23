@@ -1,0 +1,82 @@
+@model List<SpecCustomField>
+@{
+    ViewData["Title"] = "Trường tùy chỉnh sản phẩm";
+    var keyword = ViewBag.Keyword as string;
+    string TypeText(DBPhysicalType t) => t switch
+    {
+        DBPhysicalType.Number => "Số",
+        DBPhysicalType.Date => "Ngày",
+        _ => "Văn bản"
+    };
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-input-cursor-text me-1"></i>Danh mục trường tùy chỉnh sản phẩm</h6>
+                <form method="get" action="/SpecCustomField" class="d-flex gap-2">
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm mã / tên / ghi chú" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã trường</th><th>Tên trường tùy chỉnh</th><th>Kiểu dữ liệu</th><th>Ghi chú</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var t in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@t.SpecCustomFieldCode</td>
+                        <td><span class="badge bg-info-subtle text-info-emphasis">@t.SpecCustomFieldName</span></td>
+                        <td><span class="badge bg-secondary-subtle text-secondary-emphasis">@TypeText(t.DBPhysicalType)</span></td>
+                        <td class="small text-muted">@(string.IsNullOrWhiteSpace(t.Remark) ? "—" : t.Remark)</td>
+                        <td>
+                            @if (t.FlagActive) { <span class="badge bg-success">Đang dùng</span> }
+                            else { <span class="badge bg-secondary">Ngừng dùng</span> }
+                        </td>
+                        <td class="small text-muted">
+                            @if (t.UpdatedAt.HasValue) { <div>@t.UpdatedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div> }
+                            @if (!string.IsNullOrWhiteSpace(t.UpdatedBy)) { <div>@t.UpdatedBy</div> }
+                            @if (!t.UpdatedAt.HasValue && string.IsNullOrWhiteSpace(t.UpdatedBy)) { <span>—</span> }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/SpecCustomField/Delete" class="d-inline" onsubmit="return confirm('Xóa trường tùy chỉnh @t.SpecCustomFieldCode?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@t.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có trường tùy chỉnh nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm / cập nhật trường tùy chỉnh</h6>
+            <form method="post" action="/SpecCustomField/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã trường tùy chỉnh</label><input name="code" class="form-control form-control-sm" placeholder="CF1" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Tên trường tùy chỉnh</label><input name="name" class="form-control form-control-sm" placeholder="Màu sắc" required /></div>
+                <div class="col-12">
+                    <label class="form-label small mb-1">Kiểu dữ liệu</label>
+                    <select name="type" class="form-select form-select-sm">
+                        <option value="0">Văn bản</option>
+                        <option value="1">Số</option>
+                        <option value="2">Ngày</option>
+                    </select>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Ghi chú</label><textarea name="remark" class="form-control form-control-sm" rows="2" maxlength="400" placeholder="Trường tùy chỉnh dùng để lưu thuộc tính riêng của hàng hóa"></textarea></div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="active" value="true" id="specCustomFieldActive" checked />
+                    <label class="form-check-label small" for="specCustomFieldActive">Đang dùng</label>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu trường tùy chỉnh</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Lưu cùng mã trường tùy chỉnh = cập nhật trường đã có (theo khóa nghiệp vụ OrgId + mã trường tùy chỉnh).</p>
+        </div></div>
+    </div>
+</div>
