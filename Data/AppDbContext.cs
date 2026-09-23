@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     public DbSet<Nnt> Nnts => Set<Nnt>();
     public DbSet<CustomerNnt> CustomerNnts => Set<CustomerNnt>();
     public DbSet<NntType> NntTypes => Set<NntType>();
+    public DbSet<CustomerNntType> CustomerNntTypes => Set<CustomerNntType>();
     public DbSet<Province> Provinces => Set<Province>();
     public DbSet<District> Districts => Set<District>();
     public DbSet<Country> Countries => Set<Country>();
@@ -64,6 +65,11 @@ public class AppDbContext : DbContext
         b.Entity<NntType>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.NNTType }).IsUnique();   // mỗi tổ chức một mã loại NNT
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CustomerNntType>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.CustomerNNTType }).IsUnique();   // mỗi tổ chức một mã loại khách hàng
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<Province>(e =>

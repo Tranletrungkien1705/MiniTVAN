@@ -447,6 +447,17 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):
+        // các loại khách hàng demo dùng khi khai báo danh mục khách hàng.
+        if (!await db.CustomerNntTypes.AnyAsync())
+        {
+            db.CustomerNntTypes.AddRange(
+                new CustomerNntType { CustomerNNTType = "DN", CustomerNNTTypeName = "Doanh nghiệp", Remark = "Khách hàng là doanh nghiệp", FlagActive = true, UpdatedBy = "kế toán" },
+                new CustomerNntType { CustomerNNTType = "CN", CustomerNNTTypeName = "Cá nhân", Remark = "Khách hàng là cá nhân", FlagActive = true, UpdatedBy = "kế toán" },
+                new CustomerNntType { CustomerNNTType = "NN", CustomerNNTTypeName = "Tổ chức nước ngoài", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+
         // Danh mục Tỉnh/Thành phố (theo Mst_Province của TVAN gốc):
         // các tỉnh/thành demo dùng khi khai báo địa chỉ NNT/khách hàng.
         if (!await db.Provinces.AnyAsync())

@@ -197,6 +197,23 @@ public class NntType : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Loại khách hàng / người mua (theo bảng Mst_CustomerNNTType của TVAN gốc): danh mục phân loại
+// khách hàng (VD: Doanh nghiệp, Cá nhân, Tổ chức nước ngoài...) dùng để gán loại cho khách hàng
+// khi khai báo danh mục khách hàng (CustomerNnt.CustomerNNTType).
+// Khóa nghiệp vụ: (OrgId, CustomerNNTType). FlagActive = loại đang dùng hay không.
+public class CustomerNntType : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string CustomerNNTType { get; set; } = "";        // Mã loại khách hàng
+    public string CustomerNNTTypeName { get; set; } = "";    // Tên loại khách hàng
+    public string? Remark { get; set; }                       // Ghi chú
+    public bool FlagActive { get; set; } = true;              // Loại đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 // Danh mục Tỉnh/Thành phố (theo bảng Mst_Province của TVAN gốc): danh mục địa giới hành chính
 // cấp tỉnh dùng để chọn khi khai báo địa chỉ NNT/khách hàng (CustomerNnt.ProvinceCode).
 // Khóa nghiệp vụ: (OrgId, ProvinceCode). FlagActive = tỉnh/thành đang dùng hay không.

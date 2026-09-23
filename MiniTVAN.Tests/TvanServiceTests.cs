@@ -2471,6 +2471,62 @@ public class TvanServiceTests
         }
     }
 
+    // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc).
+    [Fact]
+    public async Task CustomerNntType_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveCustomerNntTypeAsync(null, "DN", "Doanh nghiệp", "Khách hàng doanh nghiệp", true, "kế toán");
+            Assert.True(ok);
+            var list = await svc.CustomerNntTypesAsync(null);
+            Assert.Single(list);
+            Assert.Equal("Doanh nghiệp", list[0].CustomerNNTTypeName);
+            Assert.Equal("Khách hàng doanh nghiệp", list[0].Remark);
+            Assert.True(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task CustomerNntType_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveCustomerNntTypeAsync(null, "DN", "Doanh nghiệp", null, true, null);
+            // Lưu lại cùng mã loại = cập nhật (không tạo mới).
+            var (ok, _, id2) = await svc.SaveCustomerNntTypeAsync(null, "DN", "Doanh nghiệp lớn", null, false, null);
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            var list = await svc.CustomerNntTypesAsync(null);
+            Assert.Single(list);
+            Assert.Equal("Doanh nghiệp lớn", list[0].CustomerNNTTypeName);
+            Assert.False(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task CustomerNntType_Save_MissingName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveCustomerNntTypeAsync(null, "DN", "  ", null, true, null);
+            Assert.False(ok);
+            Assert.Contains("tên", msg);
+        }
+    }
+
+    [Fact]
+    public async Task CustomerNntType_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveCustomerNntTypeAsync(null, "CN", "Cá nhân", null, true, null);
+            var (ok, _) = await svc.DeleteCustomerNntTypeAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.CustomerNntTypesAsync(null));
+        }
+    }
+
     // Danh mục Tỉnh/Thành phố (theo Mst_Province của TVAN gốc).
     [Fact]
     public async Task Province_Save_Creates()

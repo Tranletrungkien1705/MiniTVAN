@@ -103,6 +103,10 @@ public interface ITvanService
     Task<NntType?> GetNntTypeAsync(int id);
     Task<(bool ok, string msg, int id)> SaveNntTypeAsync(int? id, string code, string name, bool active, string? by);
     Task<(bool ok, string msg)> DeleteNntTypeAsync(int id);
+    Task<List<CustomerNntType>> CustomerNntTypesAsync(string? keyword);
+    Task<CustomerNntType?> GetCustomerNntTypeAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveCustomerNntTypeAsync(int? id, string code, string name, string? remark, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteCustomerNntTypeAsync(int id);
     Task<List<Province>> ProvincesAsync(string? keyword);
     Task<Province?> GetProvinceAsync(int id);
     Task<(bool ok, string msg, int id)> SaveProvinceAsync(int? id, string code, string name, bool active, string? by);
@@ -2147,6 +2151,73 @@ public class TvanService(AppDbContext db) : ITvanService
         db.NntTypes.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa loại người nộp thuế {code}.");
+    }
+
+    // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):
+    // danh sách loại khách hàng (lọc theo từ khóa mã/tên nếu có).
+    public Task<List<CustomerNntType>> CustomerNntTypesAsync(string? keyword)
+    {
+        var q = db.CustomerNntTypes.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.CustomerNNTType.Contains(k) || t.CustomerNNTTypeName.Contains(k));
+        }
+        return q.OrderBy(t => t.CustomerNNTType).ToListAsync();
+    }
+
+    public Task<CustomerNntType?> GetCustomerNntTypeAsync(int id) =>
+        db.CustomerNntTypes.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) loại khách hàng theo khóa nghiệp vụ (OrgId, CustomerNNTType)
+    // (theo Mst_CustomerNNTType_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã loại khách hàng + tên loại khách hàng;
+    //  - khi tạo: mã loại khách hàng chưa tồn tại trong tổ chức (Mst_CustomerNNTType_CheckDB_CustomerNNTTypeExist).
+    public async Task<(bool ok, string msg, int id)> SaveCustomerNntTypeAsync(int? id, string code, string name, string? remark, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã loại khách hàng.", 0);
+        if (name.Length == 0) return (false, "Cần tên loại khách hàng.", 0);
+
+        CustomerNntType? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.CustomerNntTypes.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.CustomerNntTypes.FirstOrDefaultAsync(t => t.CustomerNNTType == code);
+
+        if (e == null)
+        {
+            if (await db.CustomerNntTypes.AnyAsync(t => t.CustomerNNTType == code))
+                return (false, "Mã loại khách hàng đã tồn tại.", 0);
+            e = new CustomerNntType { CustomerNNTType = code };
+            db.CustomerNntTypes.Add(e);
+        }
+        else
+        {
+            // Đổi mã loại khách hàng: chặn trùng với loại khác.
+            if (!string.Equals(e.CustomerNNTType, code, StringComparison.OrdinalIgnoreCase)
+                && await db.CustomerNntTypes.AnyAsync(t => t.CustomerNNTType == code && t.Id != e.Id))
+                return (false, "Mã loại khách hàng đã tồn tại.", 0);
+            e.CustomerNNTType = code;
+        }
+
+        e.CustomerNNTTypeName = name;
+        e.Remark = remark;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu loại khách hàng {code} — {name}.", e.Id);
+    }
+
+    // Xóa loại khách hàng theo id (theo Mst_CustomerNNTType_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteCustomerNntTypeAsync(int id)
+    {
+        var e = await db.CustomerNntTypes.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy loại khách hàng.");
+        var code = e.CustomerNNTType;
+        db.CustomerNntTypes.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa loại khách hàng {code}.");
     }
 
     // Danh mục Tỉnh/Thành phố (theo Mst_Province của TVAN gốc):
