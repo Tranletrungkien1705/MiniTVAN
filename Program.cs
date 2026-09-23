@@ -114,6 +114,21 @@ app.MapPost("/api/nnts/create-with-department", async (CreateNntDeptDto dto, ITv
     return ok ? Results.Ok(new { nntId, deptId, msg }) : Results.BadRequest(new { nntId, deptId, error = msg });
 });
 
+// Sinh nội dung XML đăng ký thay đổi chứng thư số gửi CQT
+// (theo Mst_NNTController.GetContentXML / CreateXML_UpdateNNT của TVAN gốc).
+app.MapPost("/api/nnts/{id:int}/gen-update-xml", async (int id, GenNntXmlDto dto, ITvanService svc) =>
+{
+    var (ok, msg, xmlBase64, logId) = await svc.GenNntUpdateXmlAsync(id, dto.By);
+    return ok ? Results.Ok(new { id = logId, xmlBase64, msg }) : Results.BadRequest(new { id = logId, error = msg });
+});
+
+// Nhật ký sinh XML đăng ký thay đổi chứng thư số (lọc theo NNT nếu có).
+app.MapGet("/api/nnt-xml-logs", async (int? nntId, ITvanService svc) =>
+{
+    var ls = await svc.NntXmlLogsAsync(nntId);
+    return Results.Ok(ls.Select(l => new { l.Id, l.NntId, l.Mst, l.GovTaxID, l.GovTaxName, l.CANumber, l.ContactEmail, l.By, l.CreatedAt }));
+});
+
 app.MapPost("/api/import/invoices", async (List<ImportInvDto> rows, AppDbContext db, ITenantContext tc) =>
 {
     if (rows == null || rows.Count == 0) return Results.BadRequest(new { error = "Không có dữ liệu." });
@@ -1922,6 +1937,7 @@ record ExtInvoiceDto(string? SellerMst, string? SellerName, string? BuyerName, s
 record RegisterOrgDto(string Name);
 record ImportNntDto(string? Mst, string? Name, string? Address, string? Email);
 record CreateNntDeptDto(string? Mst, string? Name, string? Address, string? Email, string? DepartmentCode, string? DepartmentName, string? By);
+record GenNntXmlDto(string? By);
 record ImportInvDto(string? SellerMst, string? Symbol, string? No, string? BuyerName, string? BuyerMst, string? BuyerAddress, decimal Amount, decimal VatRate, DateTime? IssuedDate, string? TctCode);
 record AdjustDto(InvoiceAdjType AdjType, decimal Amount, decimal VatRate, string? Reason);
 record ReplaceDto(decimal Amount, decimal VatRate, string? Reason);

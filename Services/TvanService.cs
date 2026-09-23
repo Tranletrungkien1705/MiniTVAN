@@ -361,6 +361,10 @@ public interface ITvanService
     Task<TctMessageTemplate?> GetTctMessageTemplateAsync(int id);
     Task<(bool ok, string msg, int id)> SaveTctMessageTemplateAsync(int? id, string code, string name, TctMessageTypeCode type, string? body, string? fileName, string? filePath, bool active, List<TctMessageTemplateField> fields, string? by);
     Task<(bool ok, string msg)> DeleteTctMessageTemplateAsync(int id);
+
+    // Sinh nội dung XML đăng ký thay đổi chứng thư số gửi CQT (theo Mst_NNTController.GetContentXML / CreateXML_UpdateNNT của TVAN gốc)
+    Task<(bool ok, string msg, string xmlBase64, int logId)> GenNntUpdateXmlAsync(int nntId, string? by);
+    Task<List<NntXmlLog>> NntXmlLogsAsync(int? nntId);
 }
 
 // Hồ sơ NNT đầy đủ dùng khi lưu (theo Mst_NNT_Create/Update của TVAN gốc).
@@ -6875,5 +6879,87 @@ public class TvanService(AppDbContext db) : ITvanService
         db.Taxes.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa thuế/tờ khai {code}.");
+    }
+
+    // ===== Sinh nội dung XML đăng ký thay đổi chứng thư số gửi CQT =====
+    // (theo Mst_NNTController.GetContentXML / CreateXML_UpdateNNT của TVAN gốc)
+
+    // Danh sách nhật ký sinh XML đăng ký thay đổi chứng thư số (lọc theo NNT nếu có).
+    public Task<List<NntXmlLog>> NntXmlLogsAsync(int? nntId)
+    {
+        var q = db.NntXmlLogs.AsQueryable();
+        if (nntId.HasValue) q = q.Where(l => l.NntId == nntId.Value);
+        return q.OrderByDescending(l => l.CreatedAt).ToListAsync();
+    }
+
+    // Sinh nội dung XML đăng ký thay đổi chứng thư số (mẫu 02-DK_T-VAN, mã đăng ký 217) cho một NNT
+    // (theo CreateXML_UpdateNNT của TVAN gốc): dựng thông điệp từ MST, mã/tên CQT quản lý, giấy phép KD,
+    // đơn vị trực thuộc (issuer/tenToChuc), số chứng thư số (serial) và email liên hệ; trả về nội dung XML base64.
+    // Ràng buộc: NNT phải tồn tại; phải có số chứng thư số (CANumber) để đăng ký thay đổi CTS.
+    public async Task<(bool ok, string msg, string xmlBase64, int logId)> GenNntUpdateXmlAsync(int nntId, string? by)
+    {
+        var nnt = await db.Nnts.FirstOrDefaultAsync(n => n.Id == nntId);
+        if (nnt == null) return (false, "Không tìm thấy người nộp thuế.", "", 0);
+        var caNumber = (nnt.CANumber ?? "").Trim();
+        if (caNumber.Length == 0) return (false, "NNT chưa có số chứng thư số để đăng ký thay đổi.", "", 0);
+
+        // Tên cơ quan thuế quản lý (theo List_Mst_GovTaxID của TVAN gốc).
+        var govTaxID = (nnt.GovTaxID ?? "").Trim();
+        var govTaxName = "";
+        if (govTaxID.Length > 0)
+        {
+            var office = await db.TaxOffices.FirstOrDefaultAsync(o => o.GovTaxID == govTaxID);
+            govTaxName = office?.GovTaxName ?? "";
+        }
+
+        var mstParent = (nnt.MstParent ?? "").Trim();
+        var xml = BuildNntUpdateXml(nnt.Mst, govTaxID, govTaxName, nnt.BusinessRegNo, mstParent, caNumber, nnt.ContactEmail);
+        var xmlBase64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(xml));
+
+        var log = new NntXmlLog
+        {
+            NntId = nnt.Id, Mst = nnt.Mst, GovTaxID = govTaxID.Length > 0 ? govTaxID : null,
+            GovTaxName = govTaxName.Length > 0 ? govTaxName : null, CANumber = caNumber,
+            ContactEmail = nnt.ContactEmail, XmlBase64 = xmlBase64, By = by
+        };
+        db.NntXmlLogs.Add(log);
+        await db.SaveChangesAsync();
+        return (true, $"Đã sinh nội dung XML đăng ký thay đổi chứng thư số cho MST {nnt.Mst}.", xmlBase64, log.Id);
+    }
+
+    // Dựng nội dung XML đăng ký thay đổi chứng thư số (theo CreateXML_UpdateNNT của TVAN gốc).
+    private static string BuildNntUpdateXml(string mst, string govTaxID, string govTaxName, string? businessRegNo,
+        string mstParent, string caNumber, string? contactEmail)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+        sb.Append("<DKyThueDTu xmlns=\"http://kekhaithue.gdt.gov.vn/HSoDKy\"><DKyThue id=\"_NODE_TO_SIGN\">");
+        sb.Append("<TTinChung>");
+        sb.Append("<CQT>");
+        sb.Append("<maCQT>").Append(govTaxID).Append("</maCQT>");
+        sb.Append("<tenCQT>").Append(govTaxName).Append("</tenCQT>");
+        sb.Append("<DVu>");
+        sb.Append("<maDVu>0019</maDVu>");
+        sb.Append("<tenDVu>idocNet</tenDVu>");
+        sb.Append("<soGPhepKDoanh>").Append(businessRegNo ?? "").Append("</soGPhepKDoanh>");
+        sb.Append("</DVu>");
+        sb.Append("</CQT>");
+        sb.Append("<TTinDKyThue>");
+        sb.Append("<maDKy>217</maDKy>");
+        sb.Append("<mauDKy>02-DK_T-VAN</mauDKy>");
+        sb.Append("<tenDKy>Đăng ký thay đổi chứng thư số</tenDKy>");
+        sb.Append("<pBanDKy>2.0.9</pBanDKy>");
+        sb.Append("<tIN>").Append(mst).Append("</tIN>");
+        sb.Append("</TTinDKyThue>");
+        sb.Append("</TTinChung>");
+        sb.Append("<NDungDKy>");
+        sb.Append("<diaDiemTB></diaDiemTB>");
+        sb.Append("<issuer>").Append(mstParent).Append("</issuer>");
+        sb.Append("<serial>").Append(caNumber).Append("</serial>");
+        sb.Append("<email>").Append(contactEmail ?? "").Append("</email>");
+        sb.Append("<tenToChuc>").Append(mstParent).Append("</tenToChuc>");
+        sb.Append("</NDungKy>");
+        sb.Append("</DKyThue></DKyThueDTu>");
+        return sb.ToString();
     }
 }

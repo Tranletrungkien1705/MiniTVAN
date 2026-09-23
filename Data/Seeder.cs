@@ -14,9 +14,19 @@ public static class Seeder
 
         if (!await db.Nnts.AnyAsync())
         {
-            var seller = new Nnt { Mst = "0101243150", Name = "Công ty CP Ô tô Đông Đô", Address = "Hà Nội", Email = "kt@dongdo.vn", RegStatus = RegStatus.Registered, RegisteredAt = DateTime.UtcNow.AddDays(-10) };
+            var seller = new Nnt { Mst = "0101243150", Name = "Công ty CP Ô tô Đông Đô", Address = "Hà Nội", Email = "kt@dongdo.vn", RegStatus = RegStatus.Registered, RegisteredAt = DateTime.UtcNow.AddDays(-10), CANumber = "VNPT-CA-0101243150", CAOrg = "VNPT-CA", ContactEmail = "kt@dongdo.vn" };
             var seller2 = new Nnt { Mst = "0312345678", Name = "Công ty TNHH Miền Nam", Address = "TP.HCM", RegStatus = RegStatus.None };
             db.Nnts.AddRange(seller, seller2); await db.SaveChangesAsync();
+            // Nhật ký sinh XML đăng ký thay đổi chứng thư số (theo Mst_NNTController.GetContentXML / CreateXML_UpdateNNT của TVAN gốc):
+            // seller đã sinh nội dung XML đăng ký thay đổi chứng thư số gửi CQT.
+            db.NntXmlLogs.Add(new NntXmlLog
+            {
+                NntId = seller.Id, Mst = seller.Mst, CANumber = seller.CANumber,
+                ContactEmail = seller.ContactEmail, By = "kế toán",
+                XmlBase64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("<DKyThueDTu><DKyThue><TTinChung><TTinDKyThue><maDKy>217</maDKy><mauDKy>02-DK_T-VAN</mauDKy></TTinDKyThue></TTinChung></DKyThue></DKyThueDTu>")),
+                CreatedAt = DateTime.UtcNow.AddDays(-9)
+            });
+            await db.SaveChangesAsync();
 
             var inv1 = new Invoice { NntId = seller.Id, Symbol = "1C26TAA", No = "00000001", BuyerName = "Nguyễn Văn A", BuyerMst = "8012345678", BuyerAddress = "Hà Nội", Amount = 500_000_000, VatRate = 10, IssuedDate = DateTime.Today.AddDays(-5), Status = InvoiceStatus.Accepted, TctCode = "0026082512345678", SentAt = DateTime.UtcNow.AddDays(-5) };
             var inv2 = new Invoice { NntId = seller.Id, Symbol = "1C26TAA", No = "00000002", BuyerName = "Trần Thị B", BuyerAddress = "Hải Phòng", Amount = 30_000_000, VatRate = 10, IssuedDate = DateTime.Today.AddDays(-1), Status = InvoiceStatus.Draft };

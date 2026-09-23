@@ -2339,3 +2339,24 @@ public class Tax : IOrgOwned
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
+
+// Nhật ký sinh nội dung XML đăng ký thay đổi chứng thư số gửi CQT
+// (theo Mst_NNTController.GetContentXML / CreateXML_UpdateNNT của TVAN gốc):
+// mỗi lần NNT sinh nội dung XML đăng ký thay đổi chứng thư số (mẫu 02-DK_T-VAN, mã đăng ký 217)
+// ghi lại MST, mã CQT, tên CQT, số chứng thư số, email liên hệ và nội dung XML (base64) để đối soát.
+// Khóa nghiệp vụ: (OrgId, NntId) — mỗi NNT có thể sinh nhiều lần, lưu lịch sử theo thời điểm.
+public class NntXmlLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int NntId { get; set; }                       // NNT sinh XML
+    public Nnt? Nnt { get; set; }
+    public string Mst { get; set; } = "";                // MST người nộp thuế
+    public string? GovTaxID { get; set; }                // Mã cơ quan thuế quản lý
+    public string? GovTaxName { get; set; }              // Tên cơ quan thuế quản lý
+    public string? CANumber { get; set; }                // Số chứng thư số
+    public string? ContactEmail { get; set; }            // Email liên hệ
+    public string XmlBase64 { get; set; } = "";          // Nội dung XML (base64)
+    public string? By { get; set; }                      // Người thực hiện
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}

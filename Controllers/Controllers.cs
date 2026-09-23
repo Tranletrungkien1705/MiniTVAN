@@ -29,6 +29,7 @@ public class NntController(ITvanService svc) : Controller
         ViewBag.Provinces = await svc.ProvincesAsync(null);
         ViewBag.Districts = await svc.DistrictsAsync(null, null);
         ViewBag.TaxOffices = await svc.TaxOfficesAsync();
+        ViewBag.XmlLogs = await svc.NntXmlLogsAsync(null);
         return View(await svc.NntsAsync(keyword, mst, dlCode, regStatus));
     }
 
@@ -89,6 +90,16 @@ public class NntController(ITvanService svc) : Controller
             null, null, null, null, null, null, email, null, null, null, null, null,
             null, null, null, null, null, null, true, by);
         var (ok, msg, _, _) = await svc.CreateNntAndDepartmentAsync(p, departmentCode, departmentName);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Sinh nội dung XML đăng ký thay đổi chứng thư số gửi CQT
+    // (theo Mst_NNTController.GetContentXML / CreateXML_UpdateNNT của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> GenUpdateXml(int id, string? by)
+    {
+        var (ok, msg, _, _) = await svc.GenNntUpdateXmlAsync(id, by);
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Index));
     }

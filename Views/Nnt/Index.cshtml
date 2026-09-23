@@ -8,6 +8,7 @@
     var provinces = ViewBag.Provinces as List<Province> ?? new();
     var districts = ViewBag.Districts as List<District> ?? new();
     var offices = ViewBag.TaxOffices as List<TaxOffice> ?? new();
+    var xmlLogs = ViewBag.XmlLogs as List<NntXmlLog> ?? new();
     string ProvName(string? code) => provinces.FirstOrDefault(p => p.ProvinceCode == code)?.ProvinceName ?? (code ?? "");
     string DistName(string? p, string? d) => districts.FirstOrDefault(x => x.ProvinceCode == p && x.DistrictCode == d)?.DistrictName ?? (d ?? "");
     string OfficeName(string? code) => offices.FirstOrDefault(o => o.GovTaxID == code)?.GovTaxName ?? (code ?? "");
@@ -84,6 +85,10 @@
                                         data-canumber="@n.CANumber" data-caorg="@n.CAOrg" data-accno="@n.AccNo" data-accholder="@n.AccHolder"
                                         data-bankname="@n.BankName" data-biztype="@n.BizType" data-bizfield="@n.BizFieldCode" data-bizsize="@n.BizSizeCode"
                                         data-active="@(n.FlagActive ? "true" : "false")"><i class="bi bi-pencil"></i></button>
+                                <form asp-action="GenUpdateXml" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()<input type="hidden" name="id" value="@n.Id" />
+                                    <button class="btn btn-sm btn-outline-info" title="Sinh XML đăng ký thay đổi chứng thư số" @(string.IsNullOrWhiteSpace(n.CANumber) ? "disabled" : "")><i class="bi bi-filetype-xml"></i></button>
+                                </form>
                                 <form asp-action="Delete" method="post" class="d-inline" onsubmit="return confirm('Xóa NNT @n.Name?');">
                                     @Html.AntiForgeryToken()<input type="hidden" name="id" value="@n.Id" />
                                     <button class="btn btn-sm btn-outline-danger" title="Xóa"><i class="bi bi-trash"></i></button>
@@ -124,6 +129,29 @@
                 <button class="btn btn-sm btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Tạo NNT + phòng ban</button>
             </form>
             <p class="small text-muted mt-3 mb-0">Tạo hồ sơ NNT và phòng ban gốc (không có phòng ban cha) trong một thao tác (theo Mst_NNT_CreateNNTAndDepartment).</p>
+        </div></div>
+
+        <div class="card mt-3"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-filetype-xml me-1"></i>Nhật ký sinh XML đăng ký thay đổi CTS</h6>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead><tr><th>MST</th><th>CQT</th><th>CTS</th><th>Người TH</th><th>Thời điểm</th></tr></thead>
+                    <tbody>
+                    @foreach (var l in xmlLogs)
+                    {
+                        <tr>
+                            <td class="small fw-semibold">@l.Mst</td>
+                            <td class="small">@(string.IsNullOrWhiteSpace(l.GovTaxName) ? (l.GovTaxID ?? "—") : l.GovTaxName)</td>
+                            <td class="small text-muted">@l.CANumber</td>
+                            <td class="small">@l.By</td>
+                            <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                        </tr>
+                    }
+                    @if (xmlLogs.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-3">Chưa có lần sinh XML nào.</td></tr> }
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-3 mb-0">Nút <i class="bi bi-filetype-xml"></i> sinh nội dung XML đăng ký thay đổi chứng thư số (mẫu 02-DK_T-VAN, mã đăng ký 217) gửi CQT (theo Mst_NNTController.GetContentXML / CreateXML_UpdateNNT). NNT phải có số chứng thư số.</p>
         </div></div>
     </div>
 </div>

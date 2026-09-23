@@ -101,6 +101,7 @@ public class AppDbContext : DbContext
     public DbSet<TctMessageTemplateDtl> TctMessageTemplateDtls => Set<TctMessageTemplateDtl>();
     public DbSet<TaxType> TaxTypes => Set<TaxType>();
     public DbSet<Tax> Taxes => Set<Tax>();
+    public DbSet<NntXmlLog> NntXmlLogs => Set<NntXmlLog>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {

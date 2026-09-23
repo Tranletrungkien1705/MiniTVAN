@@ -6509,4 +6509,69 @@ public class DocTienTests
             Assert.Null(await svc.GetTctMessageTemplateAsync(id));
         }
     }
+
+    // Tạo NNT đầy đủ (có số chứng thư số) để test sinh XML đăng ký thay đổi CTS.
+    private static async Task<int> SetupNntWithCa(ITvanService svc, string caNumber = "VNPT-CA-0101243150")
+    {
+        var p = new NntProfile("0101243150", "Cty Bán", null, null, null, null, "Hà Nội", null, null, null,
+            "Nguyễn Văn A", null, "Giám đốc", null, null, null, "Nguyễn Văn A", "0900000000", "kt@cty.vn", null,
+            caNumber, "VNPT-CA", null, null, null, null, null, null, null, null, true, "kế toán");
+        var (_, _, id) = await svc.SaveNntAsync(null, p);
+        return id;
+    }
+
+    [Fact]
+    public async Task GenNntUpdateXml_WithCa_ReturnsXmlAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var nntId = await SetupNntWithCa(svc);
+            var (ok, msg, xmlBase64, logId) = await svc.GenNntUpdateXmlAsync(nntId, "kế toán");
+            Assert.True(ok);
+            Assert.True(logId > 0);
+            var xml = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(xmlBase64));
+            Assert.Contains("<maDKy>217</maDKy>", xml);
+            Assert.Contains("<mauDKy>02-DK_T-VAN</mauDKy>", xml);
+            Assert.Contains("<serial>VNPT-CA-0101243150</serial>", xml);
+            Assert.Single(await svc.NntXmlLogsAsync(nntId));
+        }
+    }
+
+    [Fact]
+    public async Task GenNntUpdateXml_NoCa_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            var (ok, msg, _, _) = await svc.GenNntUpdateXmlAsync(nntId, "kế toán");
+            Assert.False(ok);
+            Assert.Contains("chứng thư số", msg);
+            Assert.Empty(await svc.NntXmlLogsAsync(nntId));
+        }
+    }
+
+    [Fact]
+    public async Task GenNntUpdateXml_UnknownNnt_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _, _) = await svc.GenNntUpdateXmlAsync(9999, "kế toán");
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
+
+    [Fact]
+    public async Task NntXmlLogs_FilteredByNnt()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var nntId = await SetupNntWithCa(svc);
+            await svc.GenNntUpdateXmlAsync(nntId, "kế toán");
+            await svc.GenNntUpdateXmlAsync(nntId, "kế toán");
+            Assert.Equal(2, (await svc.NntXmlLogsAsync(nntId)).Count);
+            Assert.Equal(2, (await svc.NntXmlLogsAsync(null)).Count);
+            Assert.Empty(await svc.NntXmlLogsAsync(9999));
+        }
+    }
 }
