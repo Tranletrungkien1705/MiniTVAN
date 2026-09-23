@@ -239,7 +239,21 @@ app.MapGet("/api/tax/lookup/{mst}", async (string mst, ITvanService svc) =>
 app.MapGet("/api/tax/offices", async (ITvanService svc) =>
 {
     var ls = await svc.TaxOfficesAsync();
-    return Results.Ok(ls.Select(t => new { t.GovTaxID, t.GovTaxName, t.Address, t.ContactEmail, t.ContactPhone, t.FlagActive }));
+    return Results.Ok(ls.Select(t => new { t.GovTaxID, t.GovTaxIDParent, t.GovTaxIDBUCode, t.GovTaxIDBUPattern, t.GovTaxIDLevel, t.ProvinceCode, t.DistrictCode, t.GovTaxName, t.Level, t.Address, t.ContactEmail, t.ContactPhone, t.FlagActive }));
+});
+
+// Lưu (tạo mới/cập nhật) cơ quan thuế theo mã (theo Mst_GovTaxID_Create/Update của TVAN gốc).
+app.MapPost("/api/tax/offices", async (TaxOfficeDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveTaxOfficeAsync(dto.Id, dto.Code ?? "", dto.CodeParent, dto.ProvinceCode, dto.DistrictCode, dto.Name ?? "", dto.Level, dto.Address, dto.ContactEmail, dto.ContactPhone, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa cơ quan thuế theo id (theo Mst_GovTaxID_Delete của TVAN gốc).
+app.MapDelete("/api/tax/offices/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteTaxOfficeAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
 // Gửi/gửi lại email hóa đơn đã phát hành cho người mua (theo Invoice_Invoice_Support_SendMail của TVAN gốc).
@@ -996,3 +1010,4 @@ record UpdateNotifyRecipientDto(string? UserName, string? By);
 record NotifyRecipientTypeDto(string? NotifyType, bool FlagNotify);
 record SaveNotifyRecipientTypesDto(List<NotifyRecipientTypeDto>? Types, string? By);
 record ColumnConfigDto(int? Id, string? TableName, string? ColumnName, string? ColumnFormat, string? ColumnDesc, bool Active, string? By);
+record TaxOfficeDto(int? Id, string? Code, string? CodeParent, string? ProvinceCode, string? DistrictCode, string? Name, string? Level, string? Address, string? ContactEmail, string? ContactPhone, bool Active, string? By);

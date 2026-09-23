@@ -177,8 +177,28 @@ public static class Seeder
         if (!await db.TaxOffices.AnyAsync())
         {
             db.TaxOffices.AddRange(
-                new TaxOffice { GovTaxID = "0101", GovTaxName = "Cục Thuế TP Hà Nội", Address = "Hà Nội", ContactEmail = "hanoi@gdt.gov.vn", ContactPhone = "024 3825 0000" },
-                new TaxOffice { GovTaxID = "0301", GovTaxName = "Cục Thuế TP Hồ Chí Minh", Address = "TP.HCM", ContactEmail = "hcm@gdt.gov.vn", ContactPhone = "028 3829 0000" });
+                new TaxOffice { GovTaxID = "0100231226", GovTaxName = "Tổng cục Thuế", Level = "0", Address = "Hà Nội", ContactEmail = "tct@gdt.gov.vn", ContactPhone = "024 3825 0000", FlagActive = true, UpdatedBy = "quản trị" },
+                new TaxOffice { GovTaxID = "0101", GovTaxIDParent = "0100231226", ProvinceCode = "01", DistrictCode = "0101", GovTaxName = "Cục Thuế TP Hà Nội", Level = "1", Address = "Hà Nội", ContactEmail = "hanoi@gdt.gov.vn", ContactPhone = "024 3825 0000", FlagActive = true, UpdatedBy = "quản trị" },
+                new TaxOffice { GovTaxID = "0301", GovTaxIDParent = "0100231226", ProvinceCode = "79", DistrictCode = "7901", GovTaxName = "Cục Thuế TP Hồ Chí Minh", Level = "1", Address = "TP.HCM", ContactEmail = "hcm@gdt.gov.vn", ContactPhone = "028 3829 0000", FlagActive = true, UpdatedBy = "quản trị" });
+            await db.SaveChangesAsync();
+
+            // Tính lại mã đơn vị nghiệp vụ/mẫu/cấp cho cây CQT (theo Mst_GovTaxID_UpdBU của TVAN gốc).
+            const string root = "0100231226";
+            var allOffices = await db.TaxOffices.ToListAsync();
+            var byCode = allOffices.ToDictionary(t => t.GovTaxID, StringComparer.OrdinalIgnoreCase);
+            for (int pass = 0; pass < 7; pass++)
+            {
+                foreach (var t in allOffices)
+                {
+                    if (string.Equals(t.GovTaxID, root, StringComparison.OrdinalIgnoreCase)) { t.GovTaxIDBUCode = root; t.GovTaxIDBUPattern = root + "%"; t.GovTaxIDLevel = 0; continue; }
+                    TaxOffice? parent = null;
+                    if (!string.IsNullOrWhiteSpace(t.GovTaxIDParent)) byCode.TryGetValue(t.GovTaxIDParent!, out parent);
+                    var parentBu = parent?.GovTaxIDBUCode;
+                    t.GovTaxIDBUCode = (string.IsNullOrEmpty(parentBu) ? "" : parentBu + ".") + t.GovTaxID;
+                    t.GovTaxIDBUPattern = t.GovTaxIDBUCode + "%";
+                    t.GovTaxIDLevel = (parent?.GovTaxIDLevel ?? 0) + 1;
+                }
+            }
             await db.SaveChangesAsync();
         }
         if (!await db.NntLookupLogs.AnyAsync())

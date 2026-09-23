@@ -37,6 +37,9 @@ public interface ITvanService
     Task<(bool ok, string msg)> SendGuiTongHopAsync(int id);
     Task<List<InvoiceGthRow>> BthRowsAsync(PeriodType lkdlieu, string kdlieu);
     Task<List<TaxOffice>> TaxOfficesAsync();
+    Task<TaxOffice?> GetTaxOfficeAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveTaxOfficeAsync(int? id, string code, string? codeParent, string? provinceCode, string? districtCode, string name, string? level, string? address, string? contactEmail, string? contactPhone, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteTaxOfficeAsync(int id);
     Task<List<NntLookupLog>> NntLookupLogsAsync(string? mst);
     Task<(bool ok, string msg, NntLookupLog? log)> LookupNntByMstAsync(string mst);
     Task<List<InvoiceEmailLog>> EmailLogsAsync(int? invoiceId);
@@ -668,7 +671,122 @@ public class TvanService(AppDbContext db) : ITvanService
 
     // Danh mục cơ quan thuế (theo Mst_GovTaxID của TVAN gốc).
     public Task<List<TaxOffice>> TaxOfficesAsync() =>
-        db.TaxOffices.OrderBy(t => t.GovTaxID).ToListAsync();
+        db.TaxOffices.OrderBy(t => t.GovTaxIDBUCode).ThenBy(t => t.GovTaxID).ToListAsync();
+
+    public Task<TaxOffice?> GetTaxOfficeAsync(int id) =>
+        db.TaxOffices.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) cơ quan thuế theo khóa nghiệp vụ (OrgId, GovTaxID)
+    // (theo Mst_GovTaxID_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã CQT (Mst_GovTaxID_Create_InvalidGovTaxID);
+    //  - cần tên CQT (Mst_GovTaxID_Create_InvalidGovTaxName / _Update_InvalidGovTaxName);
+    //  - CQT cấp trên (nếu có) phải tồn tại và đang dùng (Mst_GovTaxID_CheckDB);
+    //  - tỉnh/thành + quận/huyện (nếu có) phải tồn tại và đang dùng (Mst_District_CheckDB);
+    //  - khi tạo: mã CQT chưa tồn tại (Mst_GovTaxID_CheckDB_GovTaxIDExist).
+    // Sau khi lưu, tính lại mã đơn vị nghiệp vụ/mẫu/cấp cho toàn bộ cây (Mst_GovTaxID_UpdBU).
+    public async Task<(bool ok, string msg, int id)> SaveTaxOfficeAsync(int? id, string code, string? codeParent, string? provinceCode, string? districtCode, string name, string? level, string? address, string? contactEmail, string? contactPhone, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        codeParent = (codeParent ?? "").Trim();
+        provinceCode = (provinceCode ?? "").Trim();
+        districtCode = (districtCode ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã cơ quan thuế.", 0);
+        if (name.Length == 0) return (false, "Cần tên cơ quan thuế.", 0);
+
+        // CQT cấp trên (nếu có) phải tồn tại và đang dùng (theo Mst_GovTaxID_CheckDB của TVAN gốc).
+        if (codeParent.Length > 0)
+        {
+            var parent = await db.TaxOffices.FirstOrDefaultAsync(t => t.GovTaxID == codeParent);
+            if (parent == null) return (false, "Cơ quan thuế cấp trên không tồn tại.", 0);
+            if (!parent.FlagActive) return (false, "Cơ quan thuế cấp trên đã ngừng dùng.", 0);
+        }
+
+        // Tỉnh/thành + quận/huyện (nếu có) phải tồn tại và đang dùng (theo Mst_District_CheckDB của TVAN gốc).
+        if (provinceCode.Length > 0 && districtCode.Length > 0)
+        {
+            var district = await db.Districts.FirstOrDefaultAsync(d => d.ProvinceCode == provinceCode && d.DistrictCode == districtCode);
+            if (district == null) return (false, "Quận/huyện không tồn tại trong tỉnh/thành đã chọn.", 0);
+            if (!district.FlagActive) return (false, "Quận/huyện đã ngừng dùng.", 0);
+        }
+
+        TaxOffice? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.TaxOffices.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.TaxOffices.FirstOrDefaultAsync(t => t.GovTaxID == code);
+
+        if (e == null)
+        {
+            if (await db.TaxOffices.AnyAsync(t => t.GovTaxID == code))
+                return (false, "Mã cơ quan thuế đã tồn tại.", 0);
+            e = new TaxOffice { GovTaxID = code };
+            db.TaxOffices.Add(e);
+        }
+        else
+        {
+            // Đổi mã CQT: chặn trùng với CQT khác.
+            if (!string.Equals(e.GovTaxID, code, StringComparison.OrdinalIgnoreCase)
+                && await db.TaxOffices.AnyAsync(t => t.GovTaxID == code && t.Id != e.Id))
+                return (false, "Mã cơ quan thuế đã tồn tại.", 0);
+            e.GovTaxID = code;
+        }
+
+        e.GovTaxIDParent = codeParent.Length > 0 ? codeParent : null;
+        e.ProvinceCode = provinceCode.Length > 0 ? provinceCode : null;
+        e.DistrictCode = districtCode.Length > 0 ? districtCode : null;
+        e.GovTaxName = name;
+        e.Level = string.IsNullOrWhiteSpace(level) ? null : level.Trim();
+        e.Address = string.IsNullOrWhiteSpace(address) ? null : address.Trim();
+        e.ContactEmail = string.IsNullOrWhiteSpace(contactEmail) ? null : contactEmail.Trim();
+        e.ContactPhone = string.IsNullOrWhiteSpace(contactPhone) ? null : contactPhone.Trim();
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+
+        // Tính lại mã đơn vị nghiệp vụ/mẫu/cấp cho toàn bộ cây (theo Mst_GovTaxID_UpdBU của TVAN gốc).
+        await RecomputeTaxOfficeBuAsync();
+        return (true, $"Đã lưu cơ quan thuế {code} — {name}.", e.Id);
+    }
+
+    // Xóa cơ quan thuế theo id (theo Mst_GovTaxID_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteTaxOfficeAsync(int id)
+    {
+        var e = await db.TaxOffices.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy cơ quan thuế.");
+        var code = e.GovTaxID;
+        db.TaxOffices.Remove(e);
+        await db.SaveChangesAsync();
+        await RecomputeTaxOfficeBuAsync();
+        return (true, $"Đã xóa cơ quan thuế {code}.");
+    }
+
+    // Tính lại mã đơn vị nghiệp vụ (GovTaxIDBUCode), mẫu (GovTaxIDBUPattern) và cấp
+    // (GovTaxIDLevel) cho toàn bộ cây CQT — theo Mst_GovTaxID_UpdBU của TVAN gốc:
+    // CQT gốc '0100231226' có BUCode='0100231226', pattern='0100231226%', level=0;
+    // các CQT khác có BUCode = <BUCode cha> + '.' + <mã>, pattern = BUCode + '%', level = <level cha> + 1.
+    private async Task RecomputeTaxOfficeBuAsync()
+    {
+        const string root = "0100231226";
+        var all = await db.TaxOffices.ToListAsync();
+        var byCode = all.ToDictionary(t => t.GovTaxID, StringComparer.OrdinalIgnoreCase);
+        for (int pass = 0; pass < 7; pass++)
+        {
+            foreach (var t in all)
+            {
+                if (string.Equals(t.GovTaxID, root, StringComparison.OrdinalIgnoreCase))
+                {
+                    t.GovTaxIDBUCode = root; t.GovTaxIDBUPattern = root + "%"; t.GovTaxIDLevel = 0; continue;
+                }
+                TaxOffice? parent = null;
+                if (!string.IsNullOrWhiteSpace(t.GovTaxIDParent)) byCode.TryGetValue(t.GovTaxIDParent!, out parent);
+                var parentBu = parent?.GovTaxIDBUCode;
+                t.GovTaxIDBUCode = (string.IsNullOrEmpty(parentBu) ? "" : parentBu + ".") + t.GovTaxID;
+                t.GovTaxIDBUPattern = t.GovTaxIDBUCode + "%";
+                t.GovTaxIDLevel = (parent?.GovTaxIDLevel ?? 0) + 1;
+            }
+        }
+        await db.SaveChangesAsync();
+    }
 
     public Task<List<NntLookupLog>> NntLookupLogsAsync(string? mst)
     {

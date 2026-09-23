@@ -3232,4 +3232,79 @@ public class TvanServiceTests
             Assert.Empty(await svc.ColumnConfigsAsync(null, null));
         }
     }
+
+    // Danh mục cơ quan thuế (theo Mst_GovTaxID của TVAN gốc):
+    // tạo mới/cập nhật theo mã, tự tính mã đơn vị nghiệp vụ/cấp từ cây, xóa.
+    [Fact]
+    public async Task TaxOffice_Save_CreatesAndRecomputesBu()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (okRoot, _, _) = await svc.SaveTaxOfficeAsync(null, "0100231226", null, null, null, "Tổng cục Thuế", "0", null, null, null, true, "quản trị");
+            Assert.True(okRoot);
+            var (okChild, _, _) = await svc.SaveTaxOfficeAsync(null, "0101", "0100231226", null, null, "Cục Thuế TP Hà Nội", "1", null, null, null, true, "quản trị");
+            Assert.True(okChild);
+
+            var offices = await svc.TaxOfficesAsync();
+            var root = offices.First(t => t.GovTaxID == "0100231226");
+            var child = offices.First(t => t.GovTaxID == "0101");
+            Assert.Equal("0100231226", root.GovTaxIDBUCode);
+            Assert.Equal(0, root.GovTaxIDLevel);
+            Assert.Equal("0100231226.0101", child.GovTaxIDBUCode);
+            Assert.Equal(1, child.GovTaxIDLevel);
+        }
+    }
+
+    [Fact]
+    public async Task TaxOffice_Save_MissingCodeOrName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok1, msg1, _) = await svc.SaveTaxOfficeAsync(null, "  ", null, null, null, "Cục Thuế", null, null, null, null, true, null);
+            Assert.False(ok1);
+            Assert.Contains("mã cơ quan thuế", msg1);
+            var (ok2, msg2, _) = await svc.SaveTaxOfficeAsync(null, "0101", null, null, null, "  ", null, null, null, null, true, null);
+            Assert.False(ok2);
+            Assert.Contains("tên cơ quan thuế", msg2);
+        }
+    }
+
+    [Fact]
+    public async Task TaxOffice_Save_SameCode_UpdatesExisting()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveTaxOfficeAsync(null, "0101", null, null, null, "Cục Thuế TP Hà Nội", null, null, null, null, true, null);
+            // Lưu lại cùng mã = cập nhật (theo khóa nghiệp vụ OrgId + mã CQT).
+            var (ok, _, id2) = await svc.SaveTaxOfficeAsync(null, "0101", null, null, null, "Cục Thuế TP Hà Nội (đổi tên)", null, null, null, null, true, null);
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            var offices = await svc.TaxOfficesAsync();
+            Assert.Single(offices);
+            Assert.Equal("Cục Thuế TP Hà Nội (đổi tên)", offices[0].GovTaxName);
+        }
+    }
+
+    [Fact]
+    public async Task TaxOffice_Save_ParentNotFound_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveTaxOfficeAsync(null, "0101", "9999", null, null, "Cục Thuế TP Hà Nội", null, null, null, null, true, null);
+            Assert.False(ok);
+            Assert.Contains("cấp trên không tồn tại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task TaxOffice_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveTaxOfficeAsync(null, "0101", null, null, null, "Cục Thuế TP Hà Nội", null, null, null, null, true, null);
+            var (ok, _) = await svc.DeleteTaxOfficeAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.TaxOfficesAsync());
+        }
+    }
 }

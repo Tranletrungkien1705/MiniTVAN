@@ -496,18 +496,31 @@ public class GuiTongHopDtl : IOrgOwned
 }
 
 // Cơ quan thuế quản lý (theo bảng Mst_GovTaxID của TVAN gốc): danh mục CQT theo mã (GovTaxID).
-// Dùng để tra cứu "CQT quản lý" của một MST người nộp thuế.
+// Dùng để tra cứu "CQT quản lý" của một MST người nộp thuế. CQT có cấu trúc phân cấp
+// (GovTaxIDParent) và gắn với địa giới hành chính (ProvinceCode/DistrictCode).
+// Hệ thống tự tính mã đơn vị nghiệp vụ (GovTaxIDBUCode), mẫu (GovTaxIDBUPattern) và cấp
+// (GovTaxIDLevel) từ cây CQT — theo Mst_GovTaxID_UpdBU của TVAN gốc.
+// Khóa nghiệp vụ: (OrgId, GovTaxID). FlagActive = CQT đang dùng hay không.
 public class TaxOffice : IOrgOwned
 {
     public int Id { get; set; }
     public Guid OrgId { get; set; }
     public string GovTaxID { get; set; } = "";        // Mã cơ quan thuế
+    public string? GovTaxIDParent { get; set; }        // Mã CQT cấp trên (rỗng = cấp gốc)
+    public string GovTaxIDBUCode { get; set; } = "";  // Mã đơn vị nghiệp vụ (tự tính từ cây)
+    public string GovTaxIDBUPattern { get; set; } = ""; // Mẫu đơn vị nghiệp vụ (tự tính từ cây)
+    public int GovTaxIDLevel { get; set; }             // Cấp CQT (tự tính từ cây)
+    public string? ProvinceCode { get; set; }          // Mã tỉnh/thành
+    public string? DistrictCode { get; set; }          // Mã quận/huyện
     public string GovTaxName { get; set; } = "";      // Tên cơ quan thuế
+    public string? Level { get; set; }                 // Cấp (nhập tay, theo Mst_GovTaxID.Level)
     public string? Address { get; set; }
     public string? ContactEmail { get; set; }
     public string? ContactPhone { get; set; }
     public bool FlagActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
 }
 
 // Nhật ký tra cứu thông tin NNT theo MST từ cơ quan thuế (theo TCT_TraTTinMaSoThue của TVAN gốc).

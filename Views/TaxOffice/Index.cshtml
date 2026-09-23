@@ -1,0 +1,98 @@
+@model List<TaxOffice>
+@{
+    ViewData["Title"] = "Cơ quan thuế";
+    var keyword = ViewBag.Keyword as string;
+    var provinces = ViewBag.Provinces as List<Province> ?? new();
+    var districts = ViewBag.Districts as List<District> ?? new();
+    string ProvName(string? code) => provinces.FirstOrDefault(p => p.ProvinceCode == code)?.ProvinceName ?? (code ?? "");
+    string DistName(string? p, string? d) => districts.FirstOrDefault(x => x.ProvinceCode == p && x.DistrictCode == d)?.DistrictName ?? (d ?? "");
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-bank me-1"></i>Danh mục cơ quan thuế</h6>
+                <form method="get" action="/TaxOffice" class="d-flex gap-2">
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm mã / tên CQT" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã CQT</th><th>Tên cơ quan thuế</th><th>Đơn vị nghiệp vụ</th><th>Cấp</th><th>Địa giới</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var t in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@t.GovTaxID</td>
+                        <td>
+                            <div>@t.GovTaxName</div>
+                            @if (!string.IsNullOrWhiteSpace(t.GovTaxIDParent)) { <div class="small text-muted">Thuộc: @t.GovTaxIDParent</div> }
+                        </td>
+                        <td class="small"><code>@t.GovTaxIDBUCode</code></td>
+                        <td><span class="badge bg-light text-dark">Cấp @t.GovTaxIDLevel</span></td>
+                        <td class="small">
+                            @if (!string.IsNullOrWhiteSpace(t.ProvinceCode)) { <div>@ProvName(t.ProvinceCode)</div> }
+                            @if (!string.IsNullOrWhiteSpace(t.DistrictCode)) { <div class="text-muted">@DistName(t.ProvinceCode, t.DistrictCode)</div> }
+                        </td>
+                        <td>
+                            @if (t.FlagActive) { <span class="badge bg-success">Đang dùng</span> }
+                            else { <span class="badge bg-secondary">Ngừng dùng</span> }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/TaxOffice/Delete" class="d-inline" onsubmit="return confirm('Xóa cơ quan thuế @t.GovTaxName?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@t.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có cơ quan thuế nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm / cập nhật cơ quan thuế</h6>
+            <form method="post" action="/TaxOffice/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã cơ quan thuế</label><input name="code" class="form-control form-control-sm" placeholder="0101" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Tên cơ quan thuế</label><input name="name" class="form-control form-control-sm" placeholder="Cục Thuế TP Hà Nội" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Mã CQT cấp trên</label><input name="codeParent" class="form-control form-control-sm" placeholder="0100231226 (để trống nếu là cấp gốc)" /></div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">Tỉnh / Thành phố</label>
+                    <select name="provinceCode" class="form-select form-select-sm">
+                        <option value="">— Chọn —</option>
+                        @foreach (var p in provinces)
+                        {
+                            <option value="@p.ProvinceCode">@p.ProvinceName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">Quận / Huyện</label>
+                    <select name="districtCode" class="form-select form-select-sm">
+                        <option value="">— Chọn —</option>
+                        @foreach (var d in districts)
+                        {
+                            <option value="@d.DistrictCode">@d.DistrictName (@d.ProvinceCode)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Cấp (nhập tay)</label><input name="level" class="form-control form-control-sm" placeholder="1" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Địa chỉ</label><input name="address" class="form-control form-control-sm" placeholder="Số 1 Lê Lợi, Hà Nội" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Email</label><input name="contactEmail" class="form-control form-control-sm" placeholder="hanoi@gdt.gov.vn" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Điện thoại</label><input name="contactPhone" class="form-control form-control-sm" placeholder="024 3825 0000" /></div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="active" value="true" id="taxActive" checked />
+                    <label class="form-check-label small" for="taxActive">Đang dùng</label>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="quản trị" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu cơ quan thuế</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Lưu cùng mã CQT = cập nhật CQT đã có (theo khóa nghiệp vụ OrgId + mã CQT). Mã đơn vị nghiệp vụ/cấp được tự tính lại từ cây CQT.</p>
+        </div></div>
+    </div>
+</div>

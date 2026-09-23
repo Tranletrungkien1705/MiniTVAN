@@ -386,6 +386,41 @@ public class TaxLookupController(ITvanService svc) : Controller
     }
 }
 
+// Danh mục cơ quan thuế (theo Mst_GovTaxID của TVAN gốc):
+// cây CQT phân cấp, tự tính mã đơn vị nghiệp vụ/mẫu/cấp từ cây, gắn với địa giới hành chính.
+public class TaxOfficeController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        ViewBag.Provinces = await svc.ProvincesAsync(null);
+        ViewBag.Districts = await svc.DistrictsAsync(null, null);
+        var all = await svc.TaxOfficesAsync();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            all = all.Where(t => t.GovTaxID.Contains(k) || t.GovTaxName.Contains(k)).ToList();
+        }
+        return View(all);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string? codeParent, string? provinceCode, string? districtCode, string name, string? level, string? address, string? contactEmail, string? contactPhone, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveTaxOfficeAsync(id, code, codeParent, provinceCode, districtCode, name, level, address, contactEmail, contactPhone, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteTaxOfficeAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Nhật ký gửi email hóa đơn cho người mua (theo Invoice_Invoice_Support_SendMail của TVAN gốc).
 public class EmailLogController(ITvanService svc) : Controller
 {
