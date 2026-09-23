@@ -430,6 +430,23 @@ public class BthController(ITvanService svc) : Controller
     }
 }
 
+// Báo cáo tình hình sử dụng hóa đơn (BC26/AC) — theo Rpt_InvoiceInvoice_ResultUsed của TVAN gốc:
+// với mỗi mẫu hóa đơn (Mẫu số + Ký hiệu) của một NNT, tổng hợp 3 khối theo mẫu báo cáo của cơ quan thuế:
+// tồn đầu kỳ + phát hành trong kỳ, sử dụng trong kỳ (đã dùng/đã xóa/đã hủy) và tồn cuối kỳ.
+public class ReportController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> InvoiceUsage(string? mst, string? formNo, string? sign, int? year, int? quarter)
+    {
+        var y = year ?? DateTime.Today.Year;
+        ViewBag.Mst = mst;
+        ViewBag.FormNo = formNo;
+        ViewBag.Sign = sign;
+        ViewBag.Year = y;
+        ViewBag.Quarter = quarter;
+        return View(await svc.InvoiceUsageReportAsync(mst, formNo, sign, y, quarter));
+    }
+}
+
 public class LookupController(ITvanService svc) : Controller
 {
     [Route("Lookup/{code?}")]

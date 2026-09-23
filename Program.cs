@@ -227,6 +227,27 @@ app.MapGet("/api/bth", async (PeriodType? lkdlieu, string? kdlieu, ITvanService 
     });
 });
 
+// Báo cáo tình hình sử dụng hóa đơn (BC26/AC) — theo Rpt_InvoiceInvoice_ResultUsed của TVAN gốc:
+// tổng hợp theo từng mẫu hóa đơn (Mẫu số + Ký hiệu) của NNT: tồn đầu kỳ + phát hành trong kỳ,
+// sử dụng trong kỳ (đã dùng/đã xóa/đã hủy) và tồn cuối kỳ. Lọc theo MST/Mẫu số/Ký hiệu/Năm/Quý.
+app.MapGet("/api/reports/invoice-usage", async (string? mst, string? formNo, string? sign, int? year, int? quarter, ITvanService svc) =>
+{
+    var y = year ?? DateTime.Today.Year;
+    var rows = await svc.InvoiceUsageReportAsync(mst, formNo, sign, y, quarter);
+    return Results.Ok(new
+    {
+        year = y, quarter,
+        count = rows.Count,
+        totals = new
+        {
+            opening = rows.Sum(r => r.QtyOpening), issued = rows.Sum(r => r.QtyIssued),
+            used = rows.Sum(r => r.QtyUsed), deleted = rows.Sum(r => r.QtyDeleted),
+            cancelled = rows.Sum(r => r.QtyCancelled), closing = rows.Sum(r => r.QtyClosing)
+        },
+        rows = rows.Select(r => new { r.Mst, r.NntName, r.FormNo, r.Sign, r.QtyOpening, r.QtyIssued, r.QtyUsed, r.QtyDeleted, r.QtyCancelled, r.QtyClosing })
+    });
+});
+
 // Tra cứu thông tin NNT theo MST từ cơ quan thuế (theo TCT_TraTTinMaSoThue của TVAN gốc).
 app.MapGet("/api/tax/lookup/{mst}", async (string mst, ITvanService svc) =>
 {

@@ -42,6 +42,8 @@ public interface ITvanService
     Task<(bool ok, string msg, int id)> CreateGuiTongHopAsync(int nntId, PeriodType lkdlieu, string kdlieu, int bslthu, string? note);
     Task<(bool ok, string msg)> SendGuiTongHopAsync(int id);
     Task<List<InvoiceGthRow>> BthRowsAsync(PeriodType lkdlieu, string kdlieu);
+    // Báo cáo tình hình sử dụng hóa đơn (BC26/AC) — theo Rpt_InvoiceInvoice_ResultUsed của TVAN gốc.
+    Task<List<InvoiceUsageRow>> InvoiceUsageReportAsync(string? mst, string? formNo, string? sign, int year, int? quarter);
     Task<List<TaxOffice>> TaxOfficesAsync();
     Task<TaxOffice?> GetTaxOfficeAsync(int id);
     Task<(bool ok, string msg, int id)> SaveTaxOfficeAsync(int? id, string code, string? codeParent, string? provinceCode, string? districtCode, string name, string? level, string? address, string? contactEmail, string? contactPhone, bool active, string? by);
@@ -1017,6 +1019,72 @@ public class TvanService(AppDbContext db) : ITvanService
                 Amount = i.Amount, VatRate = i.VatRate, VatAmount = i.VatAmount, Total = i.Total,
                 TThai = tthai,
                 RefSign = refInv?.Symbol, RefFormNo = refInv?.Symbol, RefInvoiceNo = refInv?.No
+            });
+        }
+        return rows;
+    }
+
+    // Báo cáo tình hình sử dụng hóa đơn (BC26/AC) — theo Rpt_InvoiceInvoice_ResultUsed của TVAN gốc
+    // (idN.TVAN.Biz/Report.cs). Với mỗi mẫu hóa đơn (Mẫu số + Ký hiệu) của một NNT, tính 3 khối:
+    //   K1 — Tồn đầu kỳ (số lượng dải số còn lại trước kỳ) + Phát hành trong kỳ (số lượng dải số mới).
+    //   K2 — Sử dụng trong kỳ: tổng số đã dùng, số đã xóa (DELETED), số đã hủy (CANCELLED).
+    //   K3 — Tồn cuối kỳ (số lượng còn lại chưa dùng).
+    // Bộ lọc: MST (bên bán), Mẫu số, Ký hiệu, Năm và Quý (null = cả năm).
+    public async Task<List<InvoiceUsageRow>> InvoiceUsageReportAsync(string? mst, string? formNo, string? sign, int year, int? quarter)
+    {
+        mst = (mst ?? "").Trim();
+        formNo = (formNo ?? "").Trim();
+        sign = (sign ?? "").Trim();
+        if (year <= 0) year = DateTime.Today.Year;
+
+        // Khoảng thời gian của kỳ báo cáo (theo quý nếu có, ngược lại cả năm).
+        var (from, to) = quarter.HasValue && quarter.Value is >= 1 and <= 4
+            ? (new DateTime(year, (quarter.Value - 1) * 3 + 1, 1), new DateTime(year, (quarter.Value - 1) * 3 + 1, 1).AddMonths(3))
+            : (new DateTime(year, 1, 1), new DateTime(year, 1, 1).AddYears(1));
+
+        // Lấy các mẫu hóa đơn theo bộ lọc (MST/Mẫu số/Ký hiệu).
+        var tplQuery = db.InvoiceTemplates.Include(t => t.Nnt).AsQueryable();
+        if (mst.Length > 0) tplQuery = tplQuery.Where(t => t.Nnt!.Mst == mst);
+        if (formNo.Length > 0) tplQuery = tplQuery.Where(t => t.FormNo == formNo);
+        if (sign.Length > 0) tplQuery = tplQuery.Where(t => t.Sign == sign);
+        var templates = await tplQuery.OrderBy(t => t.Nnt!.Mst).ThenBy(t => t.FormNo).ThenBy(t => t.Sign).ToListAsync();
+        if (templates.Count == 0) return new();
+
+        // Nạp toàn bộ hóa đơn của các mẫu liên quan (theo Mẫu số = Symbol) để tính số liệu theo kỳ.
+        var formNos = templates.Select(t => t.FormNo).Distinct().ToList();
+        var invs = await db.Invoices
+            .Where(i => formNos.Contains(i.Symbol))
+            .Select(i => new { i.Symbol, i.Status, i.IssuedDate })
+            .ToListAsync();
+
+        var rows = new List<InvoiceUsageRow>();
+        foreach (var t in templates)
+        {
+            var tplInvs = invs.Where(i => i.Symbol == t.FormNo).ToList();
+
+            // K2 — Sử dụng trong kỳ: HĐ có ngày phát hành nằm trong kỳ báo cáo.
+            var inPeriod = tplInvs.Where(i => i.IssuedDate >= from && i.IssuedDate < to).ToList();
+            int used = inPeriod.Count(i => i.Status == InvoiceStatus.Accepted);
+            int deleted = inPeriod.Count(i => i.Status == InvoiceStatus.Deleted);
+            int cancelled = inPeriod.Count(i => i.Status == InvoiceStatus.Cancelled);
+
+            // K1 — Phát hành trong kỳ: số lượng dải số mới được cấp trong kỳ (theo ngày bắt đầu hiệu lực mẫu).
+            int issued = t.EffDateStart >= from && t.EffDateStart < to ? Math.Max(0, t.EndInvoiceNo - t.StartInvoiceNo + 1) : 0;
+
+            // K1 — Tồn đầu kỳ: số lượng dải số đã cấp trước kỳ trừ số đã dùng trước kỳ.
+            int rangeTotal = Math.Max(0, t.EndInvoiceNo - t.StartInvoiceNo + 1);
+            int usedBefore = tplInvs.Count(i => i.IssuedDate < from && i.Status != InvoiceStatus.Draft);
+            int opening = Math.Max(0, rangeTotal - issued - usedBefore);
+
+            // K3 — Tồn cuối kỳ: tồn đầu kỳ + phát hành trong kỳ - đã dùng trong kỳ.
+            int closing = Math.Max(0, opening + issued - used - deleted - cancelled);
+
+            rows.Add(new InvoiceUsageRow
+            {
+                Mst = t.Nnt?.Mst ?? "", NntName = t.Nnt?.Name ?? "", FormNo = t.FormNo, Sign = t.Sign,
+                QtyOpening = opening, QtyIssued = issued,
+                QtyUsed = used, QtyDeleted = deleted, QtyCancelled = cancelled,
+                QtyClosing = closing
             });
         }
         return rows;

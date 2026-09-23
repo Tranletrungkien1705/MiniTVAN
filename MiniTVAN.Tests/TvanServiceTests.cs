@@ -5231,4 +5231,82 @@ public class DocTienTests
             Assert.Null(await svc.GetSpecPriceAsync(id));
         }
     }
+
+    // Báo cáo tình hình sử dụng hóa đơn (BC26/AC) — theo Rpt_InvoiceInvoice_ResultUsed của TVAN gốc.
+    private static async Task<int> SetupTemplate(AppDbContext db, ITvanService svc, int startNo, int endNo, DateTime effStart)
+    {
+        var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+        await svc.RegisterNntAsync(nntId);
+        var tpl = new InvoiceTemplate
+        {
+            NntId = nntId, TInvoiceCode = "TINV-1C26TAA", TInvoiceName = "Hóa đơn GTGT 1C26TAA",
+            FormNo = "1C26TAA", Sign = "K26TAA", TTType = InvoiceNoRule.TT78,
+            EffDateStart = effStart, StartInvoiceNo = startNo, EndInvoiceNo = endNo,
+            TInvoiceStatus = TemplateStatus.Issued, FlagActive = true
+        };
+        db.InvoiceTemplates.Add(tpl); await db.SaveChangesAsync();
+        return nntId;
+    }
+
+    [Fact]
+    public async Task InvoiceUsage_CountsUsedDeletedCancelled()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var nntId = await SetupTemplate(db, svc, 1, 1000, DateTime.Today.AddDays(-30));
+            // 2 HĐ đã phát hành (Accepted) + 1 HĐ đã xóa (Deleted) trong kỳ.
+            var (_, _, i1) = await svc.CreateInvoiceAsync(new Invoice { NntId = nntId, Symbol = "1C26TAA", No = "00000001", BuyerName = "A", Amount = 1_000_000 });
+            await svc.TransmitAsync(i1);
+            var (_, _, i2) = await svc.CreateInvoiceAsync(new Invoice { NntId = nntId, Symbol = "1C26TAA", No = "00000002", BuyerName = "B", Amount = 2_000_000 });
+            await svc.TransmitAsync(i2);
+            var (_, _, i3) = await svc.CreateInvoiceAsync(new Invoice { NntId = nntId, Symbol = "1C26TAA", No = "00000003", BuyerName = "C", Amount = 3_000_000 });
+            await svc.TransmitAsync(i3);
+            await svc.DeleteInvoiceAsync(i3, "lập sai", "kế toán");
+
+            var rows = await svc.InvoiceUsageReportAsync(null, null, null, DateTime.Today.Year, null);
+            var r = Assert.Single(rows);
+            Assert.Equal("1C26TAA", r.FormNo);
+            Assert.Equal(2, r.QtyUsed);
+            Assert.Equal(1, r.QtyDeleted);
+            Assert.Equal(0, r.QtyCancelled);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceUsage_IssuedInPeriod_CountsRange()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            // Mẫu có hiệu lực trong năm nay → phát hành trong kỳ = số lượng dải số (500).
+            await SetupTemplate(db, svc, 1, 500, DateTime.Today.AddDays(-10));
+            var rows = await svc.InvoiceUsageReportAsync(null, null, null, DateTime.Today.Year, null);
+            var r = Assert.Single(rows);
+            Assert.Equal(500, r.QtyIssued);
+            Assert.Equal(500, r.QtyClosing);   // chưa dùng gì → tồn cuối = phát hành
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceUsage_FilterByMst_NoMatch_Empty()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SetupTemplate(db, svc, 1, 100, DateTime.Today.AddDays(-5));
+            var rows = await svc.InvoiceUsageReportAsync("9999999999", null, null, DateTime.Today.Year, null);
+            Assert.Empty(rows);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceUsage_EmptyYear_NoIssued()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SetupTemplate(db, svc, 1, 100, DateTime.Today.AddDays(-5));
+            // Năm không có hiệu lực mẫu → không phát hành trong kỳ.
+            var rows = await svc.InvoiceUsageReportAsync(null, null, null, DateTime.Today.Year - 5, null);
+            var r = Assert.Single(rows);
+            Assert.Equal(0, r.QtyIssued);
+        }
+    }
 }

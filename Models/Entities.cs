@@ -1071,6 +1071,32 @@ public class InvoiceGthRow
     public string? RefInvoiceNo { get; set; }             // Số hóa đơn gốc
 }
 
+// Dòng dữ liệu Báo cáo tình hình sử dụng hóa đơn (BC26/AC) — theo model Rpt_InvoiceInvoice_ResultUsed
+// của TVAN gốc (idN.TVAN.Common/Models/Rpt_InvoiceInvoice_ResultUsed.cs). Mỗi dòng ứng với một mẫu
+// hóa đơn (Mẫu số + Ký hiệu) của một NNT, gồm 3 khối theo mẫu báo cáo của cơ quan thuế:
+//   K1 — Tồn đầu kỳ + Phát hành trong kỳ (số lượng dải số).
+//   K2 — Sử dụng trong kỳ: tổng số đã dùng, số đã xóa, số đã hủy.
+//   K3 — Tồn cuối kỳ (số lượng còn lại chưa dùng).
+public class InvoiceUsageRow
+{
+    public string Mst { get; set; } = "";               // MST người nộp thuế (bên bán)
+    public string NntName { get; set; } = "";           // Tên người nộp thuế
+    public string FormNo { get; set; } = "";            // Mẫu số hóa đơn
+    public string Sign { get; set; } = "";              // Ký hiệu hóa đơn
+
+    // K1 — Tồn đầu kỳ + Phát hành trong kỳ
+    public int QtyOpening { get; set; }                  // Số lượng tồn đầu kỳ
+    public int QtyIssued { get; set; }                   // Số lượng phát hành trong kỳ
+
+    // K2 — Sử dụng trong kỳ
+    public int QtyUsed { get; set; }                     // Tổng số đã sử dụng trong kỳ
+    public int QtyDeleted { get; set; }                  // Số đã xóa
+    public int QtyCancelled { get; set; }                // Số đã hủy
+
+    // K3 — Tồn cuối kỳ
+    public int QtyClosing { get; set; }                  // Số lượng tồn cuối kỳ
+}
+
 // Trường động của nhóm mẫu hóa đơn (theo bảng Invoice_TempGroupField của TVAN gốc):
 // mỗi nhóm mẫu khai báo danh sách trường động (DBFieldName) + kiểu trường (TCFType).
 // Khóa nghiệp vụ: (OrgId, InvoiceTGroupCode, DBFieldName).

@@ -1,0 +1,99 @@
+@model List<InvoiceUsageRow>
+@{
+    ViewData["Title"] = "Báo cáo tình hình sử dụng hóa đơn";
+    var mst = (string?)ViewBag.Mst;
+    var formNo = (string?)ViewBag.FormNo;
+    var sign = (string?)ViewBag.Sign;
+    var year = (int)ViewBag.Year;
+    var quarter = (int?)ViewBag.Quarter;
+    var periodText = quarter.HasValue ? $"Quý {quarter.Value}/{year}" : $"Năm {year}";
+    int tOpening = Model.Sum(r => r.QtyOpening);
+    int tIssued = Model.Sum(r => r.QtyIssued);
+    int tUsed = Model.Sum(r => r.QtyUsed);
+    int tDeleted = Model.Sum(r => r.QtyDeleted);
+    int tCancelled = Model.Sum(r => r.QtyCancelled);
+    int tClosing = Model.Sum(r => r.QtyClosing);
+}
+<div class="row g-3">
+    <div class="col-lg-9"><div class="card"><div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-bold mb-0">Báo cáo tình hình sử dụng hóa đơn — @periodText</h6>
+            <span class="badge bg-light text-dark border">@Model.Count mẫu hóa đơn</span>
+        </div>
+        <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th rowspan="2" class="align-middle">MST / NNT</th>
+                    <th rowspan="2" class="align-middle">Mẫu số / Ký hiệu</th>
+                    <th colspan="2" class="text-center border-start">K1 — Tồn đầu kỳ &amp; phát hành</th>
+                    <th colspan="3" class="text-center border-start">K2 — Sử dụng trong kỳ</th>
+                    <th rowspan="2" class="align-middle text-center border-start">K3 — Tồn cuối kỳ</th>
+                </tr>
+                <tr>
+                    <th class="text-end border-start">Tồn đầu kỳ</th>
+                    <th class="text-end">Phát hành</th>
+                    <th class="text-end border-start">Đã dùng</th>
+                    <th class="text-end">Đã xóa</th>
+                    <th class="text-end">Đã hủy</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var r in Model)
+            {
+                <tr>
+                    <td>@r.NntName<div class="small text-muted">MST @r.Mst</div></td>
+                    <td>@r.FormNo<div class="small text-muted">@r.Sign</div></td>
+                    <td class="text-end border-start">@r.QtyOpening</td>
+                    <td class="text-end">@r.QtyIssued</td>
+                    <td class="text-end border-start">@r.QtyUsed</td>
+                    <td class="text-end">@r.QtyDeleted</td>
+                    <td class="text-end">@r.QtyCancelled</td>
+                    <td class="text-end fw-semibold border-start">@r.QtyClosing</td>
+                </tr>
+            }
+            @if (Model.Count == 0) { <tr><td colspan="8" class="text-center text-muted py-4">Không có mẫu hóa đơn nào khớp bộ lọc trong kỳ này.</td></tr> }
+            </tbody>
+            @if (Model.Count > 0)
+            {
+                <tfoot><tr class="fw-bold">
+                    <td colspan="2" class="text-end">Tổng cộng</td>
+                    <td class="text-end border-start">@tOpening</td>
+                    <td class="text-end">@tIssued</td>
+                    <td class="text-end border-start">@tUsed</td>
+                    <td class="text-end">@tDeleted</td>
+                    <td class="text-end">@tCancelled</td>
+                    <td class="text-end border-start">@tClosing</td>
+                </tr></tfoot>
+            }
+        </table>
+        </div>
+    </div></div></div>
+    <div class="col-lg-3"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Bộ lọc báo cáo</h6>
+        <form asp-action="InvoiceUsage" method="get">
+            <div class="mb-2"><label class="form-label small mb-1">MST người nộp thuế</label>
+                <input name="mst" value="@mst" class="form-control" placeholder="VD 0101243150" /></div>
+            <div class="mb-2"><label class="form-label small mb-1">Mẫu số</label>
+                <input name="formNo" value="@formNo" class="form-control" placeholder="VD 1C26TAA" /></div>
+            <div class="mb-2"><label class="form-label small mb-1">Ký hiệu</label>
+                <input name="sign" value="@sign" class="form-control" placeholder="VD 1C26TAA" /></div>
+            <div class="mb-2"><label class="form-label small mb-1">Năm</label>
+                <input name="year" type="number" value="@year" class="form-control" /></div>
+            <div class="mb-3"><label class="form-label small mb-1">Quý (để trống = cả năm)</label>
+                <select name="quarter" class="form-select">
+                    <option value="" selected="@(!quarter.HasValue)">Cả năm</option>
+                    <option value="1" selected="@(quarter == 1)">Quý 1</option>
+                    <option value="2" selected="@(quarter == 2)">Quý 2</option>
+                    <option value="3" selected="@(quarter == 3)">Quý 3</option>
+                    <option value="4" selected="@(quarter == 4)">Quý 4</option>
+                </select></div>
+            <button class="btn btn-primary w-100"><i class="bi bi-funnel me-1"></i>Xem báo cáo</button>
+        </form>
+        <div class="small text-muted mt-3">
+            Báo cáo tình hình sử dụng hóa đơn (BC26/AC) theo mẫu của cơ quan thuế: tồn đầu kỳ + phát hành
+            trong kỳ, sử dụng trong kỳ (đã dùng/đã xóa/đã hủy) và tồn cuối kỳ — tính theo từng mẫu hóa đơn
+            (Mẫu số + Ký hiệu) của người nộp thuế.
+        </div>
+    </div></div></div>
+</div>
