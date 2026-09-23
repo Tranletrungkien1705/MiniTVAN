@@ -562,6 +562,28 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Danh mục Thương hiệu (theo Mst_Brand của TVAN gốc):
+        // các thương hiệu demo dùng để phân loại sản phẩm/hàng hóa.
+        if (!await db.Brands.AnyAsync())
+        {
+            db.Brands.AddRange(
+                new Brand { BrandCode = "SAMSUNG", BrandName = "Samsung", Remark = "Thương hiệu điện tử", FlagActive = true, UpdatedBy = "kế toán" },
+                new Brand { BrandCode = "APPLE", BrandName = "Apple", Remark = "Thương hiệu điện tử", FlagActive = true, UpdatedBy = "kế toán" },
+                new Brand { BrandCode = "SONY", BrandName = "Sony", Remark = "Thương hiệu điện tử", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+
+        // Danh mục Model sản phẩm (theo Mst_Model của TVAN gốc):
+        // các model demo thuộc thương hiệu ở trên.
+        if (!await db.ProductModels.AnyAsync())
+        {
+            db.ProductModels.AddRange(
+                new ProductModel { ModelCode = "A54", ModelName = "Galaxy A54", BrandCode = "SAMSUNG", OrgModelCode = "SS-A54", Remark = "Điện thoại", FlagActive = true, UpdatedBy = "kế toán" },
+                new ProductModel { ModelCode = "IP15", ModelName = "iPhone 15", BrandCode = "APPLE", OrgModelCode = "AP-IP15", Remark = "Điện thoại", FlagActive = true, UpdatedBy = "kế toán" },
+                new ProductModel { ModelCode = "WH1000", ModelName = "WH-1000XM5", BrandCode = "SONY", Remark = "Tai nghe", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+
         // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):
         // các loại khách hàng demo dùng khi khai báo danh mục khách hàng.
         if (!await db.CustomerNntTypes.AnyAsync())

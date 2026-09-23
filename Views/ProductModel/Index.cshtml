@@ -1,0 +1,85 @@
+@model List<ProductModel>
+@{
+    ViewData["Title"] = "Model sản phẩm";
+    var brandCode = ViewBag.BrandCode as string;
+    var keyword = ViewBag.Keyword as string;
+    var brands = ViewBag.Brands as List<Brand> ?? new List<Brand>();
+    var brandName = brands.FirstOrDefault(b => b.BrandCode == brandCode)?.BrandName;
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-box me-1"></i>Danh mục model sản phẩm</h6>
+                <form method="get" action="/ProductModel" class="d-flex gap-2">
+                    <select name="brandCode" class="form-select form-select-sm" style="width:auto">
+                        <option value="">— Tất cả thương hiệu —</option>
+                        @foreach (var b in brands)
+                        {
+                            <option value="@b.BrandCode" selected="@(b.BrandCode == brandCode)">@b.BrandCode — @b.BrandName</option>
+                        }
+                    </select>
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm mã / tên model" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã model</th><th>Tên model</th><th>Thương hiệu</th><th>Mã nội bộ</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var t in Model)
+                {
+                    var bn = brands.FirstOrDefault(b => b.BrandCode == t.BrandCode)?.BrandName;
+                    <tr>
+                        <td class="fw-semibold">@t.ModelCode</td>
+                        <td>@t.ModelName</td>
+                        <td><span class="badge bg-info-subtle text-info-emphasis">@t.BrandCode@(string.IsNullOrWhiteSpace(bn) ? "" : $" — {bn}")</span></td>
+                        <td class="small text-muted">@(string.IsNullOrWhiteSpace(t.OrgModelCode) ? "—" : t.OrgModelCode)</td>
+                        <td>
+                            @if (t.FlagActive) { <span class="badge bg-success">Đang dùng</span> }
+                            else { <span class="badge bg-secondary">Ngừng dùng</span> }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/ProductModel/Delete" class="d-inline" onsubmit="return confirm('Xóa model @t.ModelCode?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@t.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có model sản phẩm nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm / cập nhật model</h6>
+            <form method="post" action="/ProductModel/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã model</label><input name="code" class="form-control form-control-sm" placeholder="A54" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Tên model</label><input name="name" class="form-control form-control-sm" placeholder="Galaxy A54" required /></div>
+                <div class="col-12">
+                    <label class="form-label small mb-1">Thương hiệu</label>
+                    <select name="brandCode" class="form-select form-select-sm" required>
+                        <option value="">— Chọn thương hiệu —</option>
+                        @foreach (var b in brands.Where(x => x.FlagActive))
+                        {
+                            <option value="@b.BrandCode">@b.BrandCode — @b.BrandName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Mã model nội bộ</label><input name="orgModelCode" class="form-control form-control-sm" placeholder="(tùy chọn)" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Ghi chú</label><textarea name="remark" class="form-control form-control-sm" rows="2" maxlength="400"></textarea></div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="active" value="true" id="modelActive" checked />
+                    <label class="form-check-label small" for="modelActive">Đang dùng</label>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu model</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Model phải thuộc một thương hiệu đang dùng. Lưu cùng mã model = cập nhật model đã có.</p>
+        </div></div>
+    </div>
+</div>

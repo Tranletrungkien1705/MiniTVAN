@@ -4173,4 +4173,114 @@ public class DocTienTests
             Assert.Null(await svc.GetUnitAsync(id));
         }
     }
+
+    [Fact]
+    public async Task Brand_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveBrandAsync(null, "SAMSUNG", "Samsung", "Thương hiệu điện tử", true, "kế toán");
+            Assert.True(ok);
+            var e = await svc.GetBrandAsync(id);
+            Assert.Equal("SAMSUNG", e!.BrandCode);
+            Assert.Equal("Samsung", e.BrandName);
+            Assert.True(e.FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task Brand_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveBrandAsync(null, "SONY", "Sony", null, true, "kế toán");
+            // Lưu lại cùng mã = cập nhật (không tạo bản ghi mới, không báo trùng).
+            var (ok, _, id2) = await svc.SaveBrandAsync(null, "SONY", "Sony Việt Nam", "cập nhật", true, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            Assert.Single(await svc.BrandsAsync(null));
+            Assert.Equal("Sony Việt Nam", (await svc.GetBrandAsync(id))!.BrandName);
+        }
+    }
+
+    [Fact]
+    public async Task Brand_Save_MissingCodeOrName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok1, msg1, _) = await svc.SaveBrandAsync(null, "  ", "Samsung", null, true, "kế toán");
+            Assert.False(ok1);
+            Assert.Contains("mã thương hiệu", msg1);
+            var (ok2, msg2, _) = await svc.SaveBrandAsync(null, "SAMSUNG", "  ", null, true, "kế toán");
+            Assert.False(ok2);
+            Assert.Contains("tên thương hiệu", msg2);
+        }
+    }
+
+    [Fact]
+    public async Task Brand_Delete_BlockedWhenModelExists()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, brandId) = await svc.SaveBrandAsync(null, "APPLE", "Apple", null, true, "kế toán");
+            await svc.SaveProductModelAsync(null, "IP15", "iPhone 15", null, "APPLE", null, true, "kế toán");
+            var (ok, msg) = await svc.DeleteBrandAsync(brandId);
+            Assert.False(ok);
+            Assert.Contains("model sản phẩm", msg);
+        }
+    }
+
+    [Fact]
+    public async Task ProductModel_Save_RequiresActiveBrand()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            // Thương hiệu chưa tồn tại → chặn.
+            var (ok1, msg1, _) = await svc.SaveProductModelAsync(null, "A54", "Galaxy A54", null, "SAMSUNG", null, true, "kế toán");
+            Assert.False(ok1);
+            Assert.Contains("không tồn tại", msg1);
+
+            // Thương hiệu đã ngừng dùng → chặn.
+            await svc.SaveBrandAsync(null, "SAMSUNG", "Samsung", null, false, "kế toán");
+            var (ok2, msg2, _) = await svc.SaveProductModelAsync(null, "A54", "Galaxy A54", null, "SAMSUNG", null, true, "kế toán");
+            Assert.False(ok2);
+            Assert.Contains("ngừng dùng", msg2);
+        }
+    }
+
+    [Fact]
+    public async Task ProductModel_Save_CreatesAndListsByBrand()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveBrandAsync(null, "SAMSUNG", "Samsung", null, true, "kế toán");
+            await svc.SaveBrandAsync(null, "SONY", "Sony", null, true, "kế toán");
+            var (ok, _, id) = await svc.SaveProductModelAsync(null, "A54", "Galaxy A54", "SS-A54", "SAMSUNG", "Điện thoại", true, "kế toán");
+            Assert.True(ok);
+            await svc.SaveProductModelAsync(null, "WH1000", "WH-1000XM5", null, "SONY", null, true, "kế toán");
+
+            var e = await svc.GetProductModelAsync(id);
+            Assert.Equal("A54", e!.ModelCode);
+            Assert.Equal("SAMSUNG", e.BrandCode);
+            Assert.Equal("SS-A54", e.OrgModelCode);
+
+            Assert.Equal(2, (await svc.ProductModelsAsync(null, null)).Count);
+            var samsung = await svc.ProductModelsAsync("SAMSUNG", null);
+            Assert.Single(samsung);
+            Assert.Equal("A54", samsung[0].ModelCode);
+        }
+    }
+
+    [Fact]
+    public async Task ProductModel_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveBrandAsync(null, "SONY", "Sony", null, true, "kế toán");
+            var (_, _, id) = await svc.SaveProductModelAsync(null, "WH1000", "WH-1000XM5", null, "SONY", null, true, "kế toán");
+            var (ok, _) = await svc.DeleteProductModelAsync(id);
+            Assert.True(ok);
+            Assert.Null(await svc.GetProductModelAsync(id));
+        }
+    }
 }

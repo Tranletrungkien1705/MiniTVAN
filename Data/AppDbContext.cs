@@ -68,6 +68,8 @@ public class AppDbContext : DbContext
     public DbSet<SysSolution> SysSolutions => Set<SysSolution>();
     public DbSet<SysObject> SysObjects => Set<SysObject>();
     public DbSet<SysObjectInModule> SysObjectInModules => Set<SysObjectInModule>();
+    public DbSet<Brand> Brands => Set<Brand>();
+    public DbSet<ProductModel> ProductModels => Set<ProductModel>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -412,6 +414,16 @@ public class AppDbContext : DbContext
         b.Entity<SysObjectInModule>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.ModuleCode, x.ObjectCode }).IsUnique();   // mỗi gói một đối tượng
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Brand>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.BrandCode }).IsUnique();   // mỗi tổ chức một mã thương hiệu
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ProductModel>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ModelCode }).IsUnique();   // mỗi tổ chức một mã model
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

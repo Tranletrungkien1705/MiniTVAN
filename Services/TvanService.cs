@@ -133,6 +133,14 @@ public interface ITvanService
     Task<Unit?> GetUnitAsync(int id);
     Task<(bool ok, string msg, int id)> SaveUnitAsync(int? id, string code, string name, string? remark, bool active, string? by);
     Task<(bool ok, string msg)> DeleteUnitAsync(int id);
+    Task<List<Brand>> BrandsAsync(string? keyword);
+    Task<Brand?> GetBrandAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveBrandAsync(int? id, string code, string name, string? remark, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteBrandAsync(int id);
+    Task<List<ProductModel>> ProductModelsAsync(string? brandCode, string? keyword);
+    Task<ProductModel?> GetProductModelAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveProductModelAsync(int? id, string code, string name, string? orgModelCode, string brandCode, string? remark, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteProductModelAsync(int id);
     Task<List<Province>> ProvincesAsync(string? keyword);
     Task<Province?> GetProvinceAsync(int id);
     Task<(bool ok, string msg, int id)> SaveProvinceAsync(int? id, string code, string name, bool active, string? by);
@@ -2931,6 +2939,157 @@ public class TvanService(AppDbContext db) : ITvanService
         db.Units.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa đơn vị tính {code}.");
+    }
+
+    // Danh mục Thương hiệu (theo Mst_Brand của TVAN gốc):
+    // danh sách thương hiệu (lọc theo từ khóa mã/tên/ghi chú nếu có).
+    public Task<List<Brand>> BrandsAsync(string? keyword)
+    {
+        var q = db.Brands.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.BrandCode.Contains(k) || t.BrandName.Contains(k) || (t.Remark != null && t.Remark.Contains(k)));
+        }
+        return q.OrderBy(t => t.BrandCode).ToListAsync();
+    }
+
+    public Task<Brand?> GetBrandAsync(int id) =>
+        db.Brands.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) thương hiệu theo khóa nghiệp vụ (OrgId, BrandCode)
+    // (theo Mst_Brand_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã thương hiệu + tên thương hiệu;
+    //  - khi tạo: mã thương hiệu chưa tồn tại trong tổ chức (Mst_Brand_CheckDB_BrandCodeExist).
+    public async Task<(bool ok, string msg, int id)> SaveBrandAsync(int? id, string code, string name, string? remark, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã thương hiệu.", 0);
+        if (name.Length == 0) return (false, "Cần tên thương hiệu.", 0);
+
+        Brand? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.Brands.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.Brands.FirstOrDefaultAsync(t => t.BrandCode == code);
+
+        if (e == null)
+        {
+            if (await db.Brands.AnyAsync(t => t.BrandCode == code))
+                return (false, "Mã thương hiệu đã tồn tại.", 0);
+            e = new Brand { BrandCode = code };
+            db.Brands.Add(e);
+        }
+        else
+        {
+            // Đổi mã thương hiệu: chặn trùng với thương hiệu khác.
+            if (!string.Equals(e.BrandCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.Brands.AnyAsync(t => t.BrandCode == code && t.Id != e.Id))
+                return (false, "Mã thương hiệu đã tồn tại.", 0);
+            e.BrandCode = code;
+        }
+
+        e.BrandName = name;
+        e.Remark = remark;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu thương hiệu {code} — {name}.", e.Id);
+    }
+
+    // Xóa thương hiệu theo id (theo Mst_Brand_Delete của TVAN gốc): chặn khi không tồn tại
+    // và chặn khi còn model sản phẩm đang tham chiếu tới thương hiệu này.
+    public async Task<(bool ok, string msg)> DeleteBrandAsync(int id)
+    {
+        var e = await db.Brands.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy thương hiệu.");
+        if (await db.ProductModels.AnyAsync(m => m.BrandCode == e.BrandCode))
+            return (false, $"Không thể xóa: còn model sản phẩm thuộc thương hiệu {e.BrandCode}.");
+        var code = e.BrandCode;
+        db.Brands.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa thương hiệu {code}.");
+    }
+
+    // Danh mục Model sản phẩm (theo Mst_Model của TVAN gốc):
+    // danh sách model (lọc theo thương hiệu + từ khóa mã/tên/mã nội bộ nếu có).
+    public Task<List<ProductModel>> ProductModelsAsync(string? brandCode, string? keyword)
+    {
+        var q = db.ProductModels.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(brandCode))
+        {
+            var b = brandCode.Trim();
+            q = q.Where(t => t.BrandCode == b);
+        }
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.ModelCode.Contains(k) || t.ModelName.Contains(k) || (t.OrgModelCode != null && t.OrgModelCode.Contains(k)));
+        }
+        return q.OrderBy(t => t.ModelCode).ToListAsync();
+    }
+
+    public Task<ProductModel?> GetProductModelAsync(int id) =>
+        db.ProductModels.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) model sản phẩm theo khóa nghiệp vụ (OrgId, ModelCode)
+    // (theo Mst_Model_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã model + tên model + mã thương hiệu;
+    //  - thương hiệu phải tồn tại và đang dùng (Mst_Brand_CheckDB_BrandCodeNotFound / FlagActiveNotMatched);
+    //  - khi tạo: mã model chưa tồn tại trong tổ chức (Mst_Model_CheckDB_ModelCodeExist).
+    public async Task<(bool ok, string msg, int id)> SaveProductModelAsync(int? id, string code, string name, string? orgModelCode, string brandCode, string? remark, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        brandCode = (brandCode ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã model.", 0);
+        if (name.Length == 0) return (false, "Cần tên model.", 0);
+        if (brandCode.Length == 0) return (false, "Cần mã thương hiệu.", 0);
+
+        var brand = await db.Brands.FirstOrDefaultAsync(t => t.BrandCode == brandCode);
+        if (brand == null) return (false, $"Thương hiệu {brandCode} không tồn tại.", 0);
+        if (!brand.FlagActive) return (false, $"Thương hiệu {brandCode} đã ngừng dùng.", 0);
+
+        ProductModel? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.ProductModels.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.ProductModels.FirstOrDefaultAsync(t => t.ModelCode == code);
+
+        if (e == null)
+        {
+            if (await db.ProductModels.AnyAsync(t => t.ModelCode == code))
+                return (false, "Mã model đã tồn tại.", 0);
+            e = new ProductModel { ModelCode = code };
+            db.ProductModels.Add(e);
+        }
+        else
+        {
+            // Đổi mã model: chặn trùng với model khác.
+            if (!string.Equals(e.ModelCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.ProductModels.AnyAsync(t => t.ModelCode == code && t.Id != e.Id))
+                return (false, "Mã model đã tồn tại.", 0);
+            e.ModelCode = code;
+        }
+
+        e.ModelName = name;
+        e.OrgModelCode = orgModelCode;
+        e.BrandCode = brandCode;
+        e.Remark = remark;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu model {code} — {name}.", e.Id);
+    }
+
+    // Xóa model sản phẩm theo id (theo Mst_Model_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteProductModelAsync(int id)
+    {
+        var e = await db.ProductModels.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy model sản phẩm.");
+        var code = e.ModelCode;
+        db.ProductModels.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa model {code}.");
     }
 
     // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):

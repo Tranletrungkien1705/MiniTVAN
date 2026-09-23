@@ -782,6 +782,48 @@ app.MapDelete("/api/units/{id:int}", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Danh mục Thương hiệu (theo Mst_Brand của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
+app.MapGet("/api/brands", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.BrandsAsync(keyword);
+    return Results.Ok(ls.Select(t => new { t.Id, t.BrandCode, t.BrandName, t.Remark, t.FlagActive, t.UpdatedAt, t.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) thương hiệu theo mã (theo Mst_Brand_Create/Update của TVAN gốc).
+app.MapPost("/api/brands", async (BrandDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveBrandAsync(dto.Id, dto.Code ?? "", dto.Name ?? "", dto.Remark, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa thương hiệu theo id (theo Mst_Brand_Delete của TVAN gốc).
+app.MapDelete("/api/brands/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteBrandAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
+// Danh mục Model sản phẩm (theo Mst_Model của TVAN gốc): danh sách (lọc theo thương hiệu + từ khóa nếu có).
+app.MapGet("/api/product-models", async (string? brandCode, string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.ProductModelsAsync(brandCode, keyword);
+    return Results.Ok(ls.Select(t => new { t.Id, t.ModelCode, t.ModelName, t.OrgModelCode, t.BrandCode, t.Remark, t.FlagActive, t.UpdatedAt, t.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) model sản phẩm theo mã (theo Mst_Model_Create/Update của TVAN gốc).
+app.MapPost("/api/product-models", async (ProductModelDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveProductModelAsync(dto.Id, dto.Code ?? "", dto.Name ?? "", dto.OrgModelCode, dto.BrandCode ?? "", dto.Remark, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa model sản phẩm theo id (theo Mst_Model_Delete của TVAN gốc).
+app.MapDelete("/api/product-models/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteProductModelAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
 app.MapGet("/api/customer-nnt-types", async (string? keyword, ITvanService svc) =>
 {
@@ -1253,6 +1295,8 @@ record CustomerNntDto(int? Id, string? Mst, string? Code, string? Name, string? 
 record NntTypeDto(int? Id, string? Code, string? Name, bool Active, string? By);
 record VatRateDto(int? Id, string? Code, string? Rate, string? Desc, bool Active, string? By);
 record UnitDto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
+record BrandDto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
+record ProductModelDto(int? Id, string? Code, string? Name, string? OrgModelCode, string? BrandCode, string? Remark, bool Active, string? By);
 record CustomerNntTypeDto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
 record ProvinceDto(int? Id, string? Code, string? Name, bool Active, string? By);
 record DistrictDto(int? Id, string? ProvinceCode, string? Code, string? Name, bool Active, string? By);

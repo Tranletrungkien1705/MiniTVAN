@@ -950,6 +950,62 @@ public class UnitController(ITvanService svc) : Controller
     }
 }
 
+// Danh mục Thương hiệu (theo Mst_Brand của TVAN gốc):
+// các thương hiệu (hãng sản xuất) dùng để phân loại sản phẩm/hàng hóa.
+public class BrandController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.BrandsAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string name, string? remark, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveBrandAsync(id, code, name, remark, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteBrandAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
+// Danh mục Model sản phẩm (theo Mst_Model của TVAN gốc):
+// mỗi model thuộc một thương hiệu, dùng để phân loại hàng hóa theo model khi lập hóa đơn.
+public class ProductModelController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? brandCode, string? keyword)
+    {
+        ViewBag.BrandCode = brandCode;
+        ViewBag.Keyword = keyword;
+        ViewBag.Brands = await svc.BrandsAsync(null);
+        return View(await svc.ProductModelsAsync(brandCode, keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string name, string? orgModelCode, string brandCode, string? remark, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveProductModelAsync(id, code, name, orgModelCode, brandCode, remark, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteProductModelAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):
 // phân loại khách hàng (Doanh nghiệp, Cá nhân, Tổ chức nước ngoài...) dùng khi khai báo danh mục khách hàng.
 public class CustomerNntTypeController(ITvanService svc) : Controller

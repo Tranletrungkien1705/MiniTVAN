@@ -1445,3 +1445,37 @@ public class SysObjectInModule : IOrgOwned
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
+
+// Danh mục Thương hiệu (theo bảng Mst_Brand của TVAN gốc): mỗi tổ chức khai báo các thương hiệu
+// (hãng sản xuất) dùng để phân loại sản phẩm/hàng hóa. Model sản phẩm (Mst_Model) tham chiếu tới
+// thương hiệu qua BrandCode. Khóa nghiệp vụ: (OrgId, BrandCode). FlagActive = thương hiệu đang dùng.
+public class Brand : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string BrandCode { get; set; } = "";        // Mã thương hiệu (VD SAMSUNG)
+    public string BrandName { get; set; } = "";        // Tên thương hiệu (VD Samsung)
+    public string? Remark { get; set; }                 // Ghi chú
+    public bool FlagActive { get; set; } = true;         // Thương hiệu đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
+// Danh mục Model sản phẩm (theo bảng Mst_Model của TVAN gốc): mỗi model thuộc một thương hiệu
+// (BrandCode) và có thể có mã model nội bộ của tổ chức (OrgModelCode). Dùng để phân loại hàng hóa
+// theo model khi lập hóa đơn. Khóa nghiệp vụ: (OrgId, ModelCode). FlagActive = model đang dùng.
+public class ProductModel : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ModelCode { get; set; } = "";        // Mã model (VD A54)
+    public string ModelName { get; set; } = "";        // Tên model (VD Galaxy A54)
+    public string? OrgModelCode { get; set; }            // Mã model nội bộ của tổ chức
+    public string BrandCode { get; set; } = "";        // Mã thương hiệu (FK nghiệp vụ tới Brand.BrandCode)
+    public string? Remark { get; set; }                 // Ghi chú
+    public bool FlagActive { get; set; } = true;         // Model đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
