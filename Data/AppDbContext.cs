@@ -59,6 +59,8 @@ public class AppDbContext : DbContext
     public DbSet<SortColumnInvoice> SortColumnInvoices => Set<SortColumnInvoice>();
     public DbSet<CurrencyEx> CurrencyExes => Set<CurrencyEx>();
     public DbSet<DocTienLog> DocTienLogs => Set<DocTienLog>();
+    public DbSet<SysGroup> SysGroups => Set<SysGroup>();
+    public DbSet<SysUserInGroup> SysUserInGroups => Set<SysUserInGroup>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -357,6 +359,17 @@ public class AppDbContext : DbContext
         {
             e.Property(x => x.Amount).HasPrecision(18, 2);
             e.HasIndex(x => new { x.OrgId, x.CreatedAt });
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SysGroup>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.GroupCode }).IsUnique();   // mỗi tổ chức một mã nhóm
+            e.HasMany(x => x.Members).WithOne(m => m.Group).HasForeignKey(m => m.SysGroupId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SysUserInGroup>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.GroupCode, x.UserCode }).IsUnique();   // mỗi nhóm một người dùng
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

@@ -1282,3 +1282,38 @@ public class SortColumnInvoice : IOrgOwned
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
+
+// Nhóm người dùng (theo bảng Sys_Group của TVAN gốc): mỗi tổ chức tự khai báo các nhóm người dùng
+// (VD Kế toán, Quản trị, Bán hàng...) để gom người dùng phục vụ phân quyền. Nhóm có mã (GroupCode),
+// tên (GroupName) và cờ đang dùng (FlagActive). Xóa nhóm sẽ xóa kèm toàn bộ phân gán người dùng.
+// Khóa nghiệp vụ: (OrgId, GroupCode). FlagActive = nhóm đang dùng hay không.
+public class SysGroup : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string GroupCode { get; set; } = "";        // Mã nhóm người dùng (VD KETOAN)
+    public string GroupName { get; set; } = "";        // Tên nhóm người dùng (VD Nhóm kế toán)
+    public bool FlagActive { get; set; } = true;       // Nhóm đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+
+    public List<SysUserInGroup> Members { get; set; } = new();
+}
+
+// Phân gán người dùng vào nhóm (theo bảng Sys_UserInGroup của TVAN gốc): mỗi dòng gắn một người dùng
+// (UserCode) vào một nhóm (GroupCode). Lưu theo kiểu thay thế toàn bộ danh sách thành viên của nhóm
+// (theo Sys_UserInGroup_Save của TVAN gốc: xóa hết rồi chèn lại).
+// Khóa nghiệp vụ: (OrgId, GroupCode, UserCode).
+public class SysUserInGroup : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int SysGroupId { get; set; }
+    public SysGroup? Group { get; set; }
+    public string GroupCode { get; set; } = "";        // Mã nhóm người dùng
+    public string UserCode { get; set; } = "";         // Mã người dùng trong nhóm
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}

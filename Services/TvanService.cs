@@ -171,6 +171,13 @@ public interface ITvanService
     Task<(bool ok, string msg)> DeleteNotifyRecipientAsync(int id);
     Task<(bool ok, string msg)> SaveNotifyRecipientTypesAsync(int id, List<(string notifyType, bool flagNotify)> types, string? by);
 
+    // Nhóm người dùng (theo Sys_Group / Sys_UserInGroup của TVAN gốc)
+    Task<List<SysGroup>> SysGroupsAsync(string? keyword);
+    Task<SysGroup?> GetSysGroupAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveSysGroupAsync(int? id, string groupCode, string groupName, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteSysGroupAsync(int id);
+    Task<(bool ok, string msg)> SaveSysGroupMembersAsync(int id, List<string> userCodes, string? by);
+
     // Cấu hình định dạng cột hiển thị theo bảng (theo Mst_ColumnConfig của TVAN gốc)
     Task<List<ColumnConfig>> ColumnConfigsAsync(string? tableName, string? keyword);
     Task<ColumnConfig?> GetColumnConfigAsync(int id);
@@ -3539,6 +3546,92 @@ public class TvanService(AppDbContext db) : ITvanService
         e.UpdatedBy = by;
         await db.SaveChangesAsync();
         return (true, $"Đã lưu đăng ký nhận thông báo cho {e.UserCode}.");
+    }
+
+    // ===== Nhóm người dùng (theo Sys_Group / Sys_UserInGroup của TVAN gốc) =====
+
+    // Danh sách nhóm người dùng (lọc theo từ khóa mã/tên nếu có), kèm danh sách thành viên.
+    public Task<List<SysGroup>> SysGroupsAsync(string? keyword)
+    {
+        var q = db.SysGroups.Include(g => g.Members).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(g => g.GroupCode.Contains(k) || g.GroupName.Contains(k));
+        }
+        return q.OrderBy(g => g.GroupCode).ToListAsync();
+    }
+
+    public Task<SysGroup?> GetSysGroupAsync(int id) =>
+        db.SysGroups.Include(g => g.Members).FirstOrDefaultAsync(g => g.Id == id);
+
+    // Lưu (tạo mới/cập nhật) nhóm người dùng theo mã (theo Sys_Group_Create/Update của TVAN gốc):
+    // lưu lần đầu = tạo nhóm mới (FlagActive = đang dùng), lưu lại cùng mã = cập nhật tên/cờ.
+    // Chặn thiếu mã nhóm, chặn thiếu tên nhóm, chặn trùng mã nhóm khi tạo.
+    public async Task<(bool ok, string msg, int id)> SaveSysGroupAsync(int? id, string groupCode, string groupName, bool active, string? by)
+    {
+        groupCode = (groupCode ?? "").Trim();
+        groupName = (groupName ?? "").Trim();
+        if (groupCode.Length == 0) return (false, "Cần mã nhóm người dùng.", 0);
+        if (groupName.Length == 0) return (false, "Cần tên nhóm người dùng.", 0);
+
+        SysGroup? e;
+        if (id is > 0)
+        {
+            e = await db.SysGroups.FirstOrDefaultAsync(g => g.Id == id);
+            if (e == null) return (false, "Không tìm thấy nhóm người dùng.", 0);
+            if (await db.SysGroups.AnyAsync(g => g.GroupCode == groupCode && g.Id != e.Id))
+                return (false, $"Mã nhóm {groupCode} đã tồn tại.", 0);
+            e.GroupCode = groupCode;
+            e.GroupName = groupName;
+            e.FlagActive = active;
+            e.UpdatedAt = DateTime.UtcNow;
+            e.UpdatedBy = by;
+            await db.SaveChangesAsync();
+            return (true, $"Đã cập nhật nhóm người dùng {groupCode}.", e.Id);
+        }
+
+        if (await db.SysGroups.AnyAsync(g => g.GroupCode == groupCode))
+            return (false, $"Mã nhóm {groupCode} đã tồn tại.", 0);
+        e = new SysGroup { GroupCode = groupCode, GroupName = groupName, FlagActive = active, UpdatedBy = by };
+        db.SysGroups.Add(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã tạo nhóm người dùng {groupCode}.", e.Id);
+    }
+
+    // Xóa nhóm người dùng theo id (theo Sys_Group_Delete của TVAN gốc): chặn khi không tồn tại;
+    // xóa kèm toàn bộ phân gán người dùng của nhóm (Sys_UserInGroup_Delete_ByGroup).
+    public async Task<(bool ok, string msg)> DeleteSysGroupAsync(int id)
+    {
+        var e = await db.SysGroups.FirstOrDefaultAsync(g => g.Id == id);
+        if (e == null) return (false, "Không tìm thấy nhóm người dùng.");
+        var code = e.GroupCode;
+        var members = await db.SysUserInGroups.Where(m => m.SysGroupId == id).ToListAsync();
+        db.SysUserInGroups.RemoveRange(members);
+        db.SysGroups.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa nhóm người dùng {code}.");
+    }
+
+    // Lưu danh sách thành viên của nhóm (theo Sys_UserInGroup_Save của TVAN gốc):
+    // thay thế toàn bộ danh sách (xóa hết rồi chèn lại). Chặn khi nhóm không tồn tại.
+    public async Task<(bool ok, string msg)> SaveSysGroupMembersAsync(int id, List<string> userCodes, string? by)
+    {
+        var e = await db.SysGroups.FirstOrDefaultAsync(g => g.Id == id);
+        if (e == null) return (false, "Không tìm thấy nhóm người dùng.");
+
+        var existing = await db.SysUserInGroups.Where(m => m.SysGroupId == id).ToListAsync();
+        db.SysUserInGroups.RemoveRange(existing);
+        foreach (var raw in userCodes ?? new())
+        {
+            var uc = (raw ?? "").Trim();
+            if (uc.Length == 0) continue;
+            db.SysUserInGroups.Add(new SysUserInGroup { SysGroupId = id, GroupCode = e.GroupCode, UserCode = uc, UpdatedBy = by });
+        }
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu thành viên cho nhóm {e.GroupCode}.");
     }
 
     // Cấu hình định dạng cột hiển thị theo bảng (theo Mst_ColumnConfig của TVAN gốc):

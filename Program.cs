@@ -1047,6 +1047,34 @@ app.MapGet("/api/doc-tien-logs", async (ITvanService svc) =>
     return Results.Ok(ls.Select(l => new { l.Id, l.Amount, l.CurrencyCode, l.CurrencyName, l.Text, l.By, l.CreatedAt }));
 });
 
+// Nhóm người dùng (theo Sys_Group của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
+app.MapGet("/api/sys-groups", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.SysGroupsAsync(keyword);
+    return Results.Ok(ls.Select(g => new { g.Id, g.GroupCode, g.GroupName, g.FlagActive, g.UpdatedAt, g.UpdatedBy, members = g.Members.Select(m => m.UserCode) }));
+});
+
+// Lưu (tạo mới/cập nhật) nhóm người dùng theo mã (theo Sys_Group_Create/Update của TVAN gốc).
+app.MapPost("/api/sys-groups", async (SysGroupDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveSysGroupAsync(dto.Id, dto.Code ?? "", dto.Name ?? "", dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa nhóm người dùng theo id (theo Sys_Group_Delete của TVAN gốc): xóa kèm phân gán người dùng.
+app.MapDelete("/api/sys-groups/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteSysGroupAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
+// Lưu danh sách thành viên của nhóm (theo Sys_UserInGroup_Save của TVAN gốc): thay thế toàn bộ.
+app.MapPost("/api/sys-groups/{id:int}/members", async (int id, SaveSysGroupMembersDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.SaveSysGroupMembersAsync(id, dto.UserCodes ?? new(), dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -1115,4 +1143,6 @@ record ColumnConfigDto(int? Id, string? TableName, string? ColumnName, string? C
 record SortColumnDto(int? Id, string? ColumnCode, int Idx, string? ColumnName, SortColumnType Type, bool Active, string? By);
 record CurrencyExDto(int? Id, string? Code, string? Name, string? BaseCode, decimal BuyRate, decimal SellRate, string? Remark, bool Active, string? By);
 record DocTienDto(decimal Amount, string? CurrencyCode, string? By);
+record SysGroupDto(int? Id, string? Code, string? Name, bool Active, string? By);
+record SaveSysGroupMembersDto(List<string>? UserCodes, string? By);
 record TaxOfficeDto(int? Id, string? Code, string? CodeParent, string? ProvinceCode, string? DistrictCode, string? Name, string? Level, string? Address, string? ContactEmail, string? ContactPhone, bool Active, string? By);

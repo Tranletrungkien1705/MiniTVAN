@@ -1,0 +1,94 @@
+@model List<SysGroup>
+@{
+    ViewData["Title"] = "Nhóm người dùng";
+    var keyword = ViewBag.Keyword as string;
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-people-fill me-1"></i>Danh sách nhóm người dùng</h6>
+                <form method="get" action="/SysGroup" class="d-flex gap-2">
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm mã / tên nhóm" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã nhóm</th><th>Tên nhóm</th><th>Trạng thái</th><th>Thành viên</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var g in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@g.GroupCode</td>
+                        <td>@g.GroupName</td>
+                        <td>
+                            <span class="badge @(g.FlagActive ? "bg-success" : "bg-secondary")">@(g.FlagActive ? "Đang dùng" : "Ngừng")</span>
+                        </td>
+                        <td>
+                            @if (g.Members.Count == 0)
+                            {
+                                <span class="text-muted small">Chưa có thành viên</span>
+                            }
+                            else
+                            {
+                                @foreach (var m in g.Members)
+                                {
+                                    <span class="badge bg-light text-dark border me-1 mb-1">@m.UserCode</span>
+                                }
+                            }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/SysGroup/Delete" class="d-inline" onsubmit="return confirm('Xóa nhóm @g.GroupCode? Toàn bộ phân gán người dùng của nhóm cũng bị xóa.');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@g.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td colspan="4" class="pt-0">
+                            <form method="post" action="/SysGroup/SaveMembers" class="row g-2 align-items-end">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@g.Id" />
+                                <div class="col-md-8">
+                                    <label class="form-label small mb-1">Thành viên (mã người dùng, cách nhau bởi dấu phẩy)</label>
+                                    <input name="userCodes" class="form-control form-control-sm" value="@string.Join(", ", g.Members.Select(m => m.UserCode))" placeholder="VD ketoan01, ketoan02" />
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small mb-1">Người thực hiện</label>
+                                    <input name="by" class="form-control form-control-sm" placeholder="quản trị" />
+                                </div>
+                                <div class="col-md-2">
+                                    <button class="btn btn-sm btn-outline-primary w-100">Lưu thành viên</button>
+                                </div>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-4">Chưa có nhóm người dùng nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm nhóm người dùng</h6>
+            <form method="post" action="/SysGroup/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã nhóm</label><input name="groupCode" class="form-control form-control-sm" placeholder="VD KETOAN" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Tên nhóm</label><input name="groupName" class="form-control form-control-sm" placeholder="VD Nhóm kế toán" required /></div>
+                <div class="col-12">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="active" value="true" id="activeNew" checked />
+                        <label class="form-check-label small" for="activeNew">Đang dùng</label>
+                    </div>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="quản trị" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Thêm nhóm</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Lưu lại cùng mã nhóm = cập nhật tên/trạng thái (theo Sys_Group_Create/Update). Xóa nhóm sẽ xóa kèm toàn bộ phân gán người dùng (theo Sys_Group_Delete).</p>
+        </div></div>
+    </div>
+</div>

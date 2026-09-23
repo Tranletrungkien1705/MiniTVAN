@@ -727,6 +727,21 @@ public static class Seeder
             });
             await db.SaveChangesAsync();
         }
+
+        // Nhóm người dùng (theo Sys_Group / Sys_UserInGroup của TVAN gốc):
+        // 2 nhóm demo, mỗi nhóm phân gán một số người dùng.
+        if (!await db.SysGroups.AnyAsync())
+        {
+            var g1 = new SysGroup { GroupCode = "KETOAN", GroupName = "Nhóm kế toán", FlagActive = true, UpdatedBy = "quản trị" };
+            var g2 = new SysGroup { GroupCode = "BANHANG", GroupName = "Nhóm bán hàng", FlagActive = true, UpdatedBy = "quản trị" };
+            db.SysGroups.AddRange(g1, g2);
+            await db.SaveChangesAsync();
+            db.SysUserInGroups.AddRange(
+                new SysUserInGroup { SysGroupId = g1.Id, GroupCode = g1.GroupCode, UserCode = "ketoan01", UpdatedBy = "quản trị" },
+                new SysUserInGroup { SysGroupId = g1.Id, GroupCode = g1.GroupCode, UserCode = "ketoan02", UpdatedBy = "quản trị" },
+                new SysUserInGroup { SysGroupId = g2.Id, GroupCode = g2.GroupCode, UserCode = "ketoan01", UpdatedBy = "quản trị" });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

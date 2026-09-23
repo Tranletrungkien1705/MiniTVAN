@@ -1201,6 +1201,45 @@ public class NotifyRecipientController(ITvanService svc) : Controller
     }
 }
 
+// Nhóm người dùng (theo Sys_Group / Sys_UserInGroup của TVAN gốc):
+// mỗi tổ chức khai báo các nhóm người dùng và phân gán người dùng vào nhóm.
+public class SysGroupController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.SysGroupsAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string groupCode, string groupName, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveSysGroupAsync(id, groupCode, groupName, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteSysGroupAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveMembers(int id, string? userCodes, string? by)
+    {
+        // Danh sách mã người dùng cách nhau bởi dấu phẩy / xuống dòng.
+        var codes = (userCodes ?? "")
+            .Split(new[] { ',', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+        var (ok, msg) = await svc.SaveSysGroupMembersAsync(id, codes, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Cấu hình định dạng cột hiển thị theo bảng (theo Mst_ColumnConfig của TVAN gốc):
 // mỗi tổ chức khai báo định dạng hiển thị + mô tả cho một cột của một bảng.
 public class ColumnConfigController(ITvanService svc) : Controller

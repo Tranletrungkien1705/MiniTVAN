@@ -3162,6 +3162,76 @@ public class TvanServiceTests
     }
 
     [Fact]
+    public async Task SysGroup_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveSysGroupAsync(null, "KETOAN", "Nhóm kế toán", true, "quản trị");
+            Assert.True(ok);
+            var g = await svc.GetSysGroupAsync(id);
+            Assert.NotNull(g);
+            Assert.Equal("KETOAN", g!.GroupCode);
+            Assert.Equal("Nhóm kế toán", g.GroupName);
+            Assert.True(g.FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task SysGroup_Save_DuplicateCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveSysGroupAsync(null, "KETOAN", "A", true, null);
+            var (ok, msg, _) = await svc.SaveSysGroupAsync(null, "KETOAN", "B", true, null);
+            Assert.False(ok);
+            Assert.Contains("đã tồn tại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SysGroup_Save_MissingName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveSysGroupAsync(null, "KETOAN", "  ", true, null);
+            Assert.False(ok);
+            Assert.Contains("Cần tên nhóm", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SysGroup_SaveMembers_Replaces()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveSysGroupAsync(null, "KETOAN", "Nhóm kế toán", true, null);
+            var (ok, _) = await svc.SaveSysGroupMembersAsync(id, new() { "ketoan01", "ketoan02" }, "quản trị");
+            Assert.True(ok);
+            var g = await svc.GetSysGroupAsync(id);
+            Assert.Equal(2, g!.Members.Count);
+            // Lưu lại thay thế toàn bộ danh sách.
+            await svc.SaveSysGroupMembersAsync(id, new() { "ketoan03" }, "quản trị");
+            g = await svc.GetSysGroupAsync(id);
+            Assert.Single(g!.Members);
+            Assert.Equal("ketoan03", g.Members[0].UserCode);
+        }
+    }
+
+    [Fact]
+    public async Task SysGroup_Delete_RemovesMembers()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveSysGroupAsync(null, "KETOAN", "Nhóm kế toán", true, null);
+            await svc.SaveSysGroupMembersAsync(id, new() { "ketoan01" }, null);
+            var (ok, _) = await svc.DeleteSysGroupAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.SysGroupsAsync(null));
+            Assert.Empty(await db.SysUserInGroups.ToListAsync());
+        }
+    }
+
+    [Fact]
     public async Task ColumnConfig_Save_Creates()
     {
         var (db, svc, conn) = NewSvc(); using (conn)
