@@ -1,0 +1,31 @@
+@model List<Tct301Log>
+@{ ViewData["Title"] = "Nhật ký nhận kết quả 301"; int? filterInv = ViewBag.InvoiceId as int?; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0"><i class="bi bi-check2-circle me-1"></i>Nhật ký nhận kết quả xử lý thông báo sai sót (301) từ CQT</h6>
+        @if (filterInv.HasValue) { <a class="small" href="/Tct301Log">Bỏ lọc</a> }
+    </div>
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Thời điểm</th><th>Hóa đơn</th><th>Mã V</th><th>Cờ thay thế/điều chỉnh</th><th>Kết quả</th><th>Thông báo</th><th>Người nhận</th></tr></thead>
+        <tbody>
+        @foreach (var l in Model)
+        {
+            var (at, acss) = Ui.ReplaceOrAdjust(l.FlagReplaceOrAdjust);
+            var (kt, kcss) = Ui.SuaDoi(l.KetQua);
+            <tr>
+                <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                <td class="small">
+                    @if (l.Invoice != null) { <a href="/Invoice/Detail/@l.InvoiceId">@l.Invoice.Symbol-@l.Invoice.No</a> }
+                    else { <span class="text-muted">#@l.InvoiceId</span> }
+                </td>
+                <td class="small text-break">@l.TCTRefNo</td>
+                <td><span class="badge bg-@acss">@at</span></td>
+                <td><span class="badge bg-@kcss">@kt</span></td>
+                <td class="small">@l.Message</td>
+                <td class="small">@l.By</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có lần nhận kết quả 301 nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

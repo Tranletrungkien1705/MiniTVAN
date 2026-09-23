@@ -874,6 +874,23 @@ public class Tct300Log : IOrgOwned
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
+// Nhật ký nhận kết quả xử lý thông báo hóa đơn sai sót từ CQT (theo Invoice_Invoice_Process301 của TVAN gốc).
+// Sau khi NNT gửi thông báo sai sót (300), CQT phản hồi thông điệp loại 301 để xác nhận đã tiếp nhận/xử lý;
+// mỗi lần nhận ghi lại để đối soát: mã V tham chiếu, cờ thay thế/điều chỉnh, kết quả xử lý.
+public class Tct301Log : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InvoiceId { get; set; }
+    public Invoice? Invoice { get; set; }
+    public string? TCTRefNo { get; set; }              // Mã V tham chiếu file thông báo 300 đã gửi
+    public ReplaceOrAdjustFlag FlagReplaceOrAdjust { get; set; } = ReplaceOrAdjustFlag.Normal;  // Cờ thay thế/điều chỉnh
+    public SuaDoiFlag KetQua { get; set; } = SuaDoiFlag.Allowed;  // Kết quả CQT xử lý (Allowed = TCT cho phép)
+    public string? Message { get; set; }               // Thông báo kết quả
+    public string? By { get; set; }                    // Người thực hiện
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
 // Nhật ký thông điệp trao đổi với TCT
 public class TranMessage : IOrgOwned
 {
@@ -1876,4 +1893,61 @@ public class InvoiceInputDtl : IOrgOwned
     public decimal VatAmount { get; set; }                 // Tiền thuế
     public decimal Total { get; set; }                     // Tổng tiền thanh toán
     public string? Remark { get; set; }
+}
+
+// Trạng thái của một mã sản phẩm / serial (theo Prd_ProductID.ProductIDStatus của TVAN gốc):
+// New = mới tạo (chưa bán), Sold = đã bán, Locked = đã khóa (ngừng theo dõi).
+public enum ProductIdStatus { New = 0, Sold = 1, Locked = 2 }
+
+// Mã sản phẩm / serial (theo bảng Prd_ProductID của TVAN gốc — màn OS_PrdCenter_Prd_ProductIDController):
+// mỗi bản ghi là MỘT cá thể hàng hóa (serial) của một sản phẩm (SpecCode), dùng để quản lý serial/lô,
+// ngày sản xuất, bảo hành, người mua và các trường tùy chỉnh (CustomField1..5 — theo Prd_PrdIDCustomField).
+// Khóa nghiệp vụ: (OrgId, ProductID, SpecCode).
+public class ProductId : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ProductID { get; set; } = "";            // Mã sản phẩm / số serial
+    public string SpecCode { get; set; } = "";             // Mã sản phẩm (Mst_Spec) mà serial thuộc về
+    public DateTime? ProductionDate { get; set; }          // Ngày sản xuất
+    public string? LOTNo { get; set; }                     // Số lô
+    public DateTime? BuyDate { get; set; }                 // Ngày mua
+    public string? SecretNo { get; set; }                  // Số bí mật (secret)
+    public DateTime? WarrantyStartDate { get; set; }       // Bắt đầu bảo hành
+    public DateTime? WarrantyExpiredDate { get; set; }     // Hết hạn bảo hành
+    public int? WarrantyDuration { get; set; }             // Thời hạn bảo hành (tháng)
+    public string? RefNo1 { get; set; }                    // Tham chiếu 1
+    public string? RefBiz1 { get; set; }                   // Nghiệp vụ tham chiếu 1
+    public string? RefNo2 { get; set; }                    // Tham chiếu 2
+    public string? RefBiz2 { get; set; }                   // Nghiệp vụ tham chiếu 2
+    public string? RefNo3 { get; set; }                    // Tham chiếu 3
+    public string? RefBiz3 { get; set; }                   // Nghiệp vụ tham chiếu 3
+    public string? Buyer { get; set; }                     // Người mua
+    public string? NetworkProductIDCode { get; set; }      // Mã sản phẩm của tổ chức cấp trên (network)
+    public ProductIdStatus ProductIDStatus { get; set; } = ProductIdStatus.New;   // Trạng thái serial
+    public string? CustomField1 { get; set; }              // Trường tùy chỉnh 1 (theo Prd_PrdIDCustomField)
+    public string? CustomField2 { get; set; }              // Trường tùy chỉnh 2
+    public string? CustomField3 { get; set; }              // Trường tùy chỉnh 3
+    public string? CustomField4 { get; set; }              // Trường tùy chỉnh 4
+    public string? CustomField5 { get; set; }              // Trường tùy chỉnh 5
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
+// Trường tùy chỉnh của mã sản phẩm / serial (theo bảng Prd_PrdIDCustomField của TVAN gốc):
+// mỗi tổ chức khai báo tối đa 5 trường (CustomField1..5) để lưu thêm thuộc tính riêng của serial.
+// Khóa nghiệp vụ: (OrgId, PrdCustomFieldCode).
+public class PrdIdCustomField : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string PrdCustomFieldCode { get; set; } = "";   // Mã trường (VD CustomField1)
+    public string PrdCustomFieldName { get; set; } = "";   // Tên hiển thị của trường
+    public DBPhysicalType DBPhysicalType { get; set; } = DBPhysicalType.Text;   // Kiểu vật lý trong DB
+    public string? Remark { get; set; }                    // Ghi chú
+    public bool FlagActive { get; set; } = true;           // Trường đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
 }

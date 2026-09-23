@@ -91,6 +91,8 @@ public interface ITvanService
     Task<List<TctReceiveLog>> TctReceiveLogsAsync(int? invoiceId);
     Task<(bool ok, string msg, string? tctRefNo)> SendTct300Async(int invoiceId, ReplaceOrAdjustFlag flagReplaceOrAdjust, string? loaiTb, string? soTb, DateTime? ngayTb, string? lyDo, string? by);
     Task<List<Tct300Log>> Tct300LogsAsync(int? invoiceId);
+    Task<(bool ok, string msg)> ReceiveTct301Async(int invoiceId, string? tctRefNo, string? by);
+    Task<List<Tct301Log>> Tct301LogsAsync(int? invoiceId);
     Task<(bool ok, string msg)> UpdateAfterAllocatedAsync(int invoiceId, string? buyerName, string? buyerMst, string? buyerAddress, PaymentMethod paymentMethod, decimal amount, decimal vatRate, DateTime invoiceDate, string? note, string? by);
     Task<List<InvoiceUpdateLog>> UpdateLogsAsync(int? invoiceId);
     Task<(bool ok, string msg)> CancelInvoiceAsync(int invoiceId, string? remark, string? by);
@@ -292,6 +294,13 @@ public interface ITvanService
     Task<InvoiceInput?> GetInvoiceInputAsync(int id);
     Task<(bool ok, string msg, int id)> SaveInvoiceInputAsync(int? id, InvoiceInputHeader h, List<InvoiceInputLine> lines, string? by);
     Task<(bool ok, string msg)> DeleteInvoiceInputAsync(int id, string? reason, string? by);
+
+    // Mã sản phẩm / serial (theo Prd_ProductID của TVAN gốc)
+    Task<List<ProductId>> ProductIdsAsync(string? keyword, string? specCode, ProductIdStatus? status);
+    Task<ProductId?> GetProductIdAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveProductIdAsync(int? id, string productId, string specCode, DateTime? productionDate, string? lotNo, DateTime? buyDate, string? secretNo, DateTime? warrantyStartDate, DateTime? warrantyExpiredDate, int? warrantyDuration, string? refNo1, string? refBiz1, string? refNo2, string? refBiz2, string? refNo3, string? refBiz3, string? buyer, ProductIdStatus status, string? customField1, string? customField2, string? customField3, string? customField4, string? customField5, string? by);
+    Task<(bool ok, string msg)> DeleteProductIdAsync(int id);
+    Task<List<PrdIdCustomField>> PrdIdCustomFieldsAsync(string? keyword);
 }
 
 // Hồ sơ NNT đầy đủ dùng khi lưu (theo Mst_NNT_Create/Update của TVAN gốc).
@@ -2318,6 +2327,40 @@ public class TvanService(AppDbContext db) : ITvanService
     public Task<List<Tct300Log>> Tct300LogsAsync(int? invoiceId)
     {
         var q = db.Tct300Logs.Include(l => l.Invoice).AsQueryable();
+        if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
+        return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
+
+    // Nhận kết quả xử lý thông báo hóa đơn sai sót từ CQT (theo Invoice_Invoice_Process301 của TVAN gốc):
+    // sau khi NNT gửi thông báo sai sót (300), CQT phản hồi thông điệp loại 301 xác nhận đã tiếp nhận/xử lý.
+    // HĐ phải đang ở trạng thái đã gửi thông báo sai sót (FlagSuaDoi = Sent); khi nhận 301, đánh dấu
+    // FlagSuaDoi = Allowed (TCT cho phép tạo HĐ thay thế/điều chỉnh) và ghi nhật ký (Tct301Log).
+    public async Task<(bool ok, string msg)> ReceiveTct301Async(int invoiceId, string? tctRefNo, string? by)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.");
+        // Chỉ nhận kết quả 301 cho hóa đơn đã gửi thông báo sai sót (300) và đang chờ CQT trả lời.
+        if (inv.FlagSuaDoi != SuaDoiFlag.Sent)
+            return (false, "Chỉ nhận kết quả 301 cho hóa đơn đã gửi thông báo sai sót (300) và đang chờ CQT trả lời.");
+
+        // Mã V tham chiếu: ưu tiên tham số truyền vào, nếu rỗng lấy mã V đã lưu trên hóa đơn.
+        var refNo = string.IsNullOrWhiteSpace(tctRefNo) ? inv.TCTSuaDoiRefNo : tctRefNo.Trim();
+        inv.FlagSuaDoi = SuaDoiFlag.Allowed;
+
+        var msg = $"CQT đã xử lý thông báo sai sót (301) cho HĐ {inv.Symbol}-{inv.No}. Mã V: {refNo}";
+        db.Messages.Add(new TranMessage { InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.In, Code = "301", Text = msg });
+        db.Tct301Logs.Add(new Tct301Log
+        {
+            InvoiceId = inv.Id, TCTRefNo = refNo, FlagReplaceOrAdjust = inv.FlagReplaceOrAdjust,
+            KetQua = SuaDoiFlag.Allowed, Message = msg, By = by,
+        });
+        await db.SaveChangesAsync();
+        return (true, msg);
+    }
+
+    public Task<List<Tct301Log>> Tct301LogsAsync(int? invoiceId)
+    {
+        var q = db.Tct301Logs.Include(l => l.Invoice).AsQueryable();
         if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
     }

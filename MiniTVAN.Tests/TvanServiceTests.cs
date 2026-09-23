@@ -4194,6 +4194,58 @@ public class TvanServiceTests
             Assert.Equal(ReplaceOrAdjustFlag.Replace, inv!.FlagReplaceOrAdjust);
         }
     }
+
+    // Nhận kết quả xử lý thông báo sai sót từ CQT (theo Invoice_Invoice_Process301 của TVAN gốc).
+    // Đưa HĐ về trạng thái đã gửi thông báo sai sót (FlagSuaDoi = Sent) để nhận kết quả 301.
+    private static async Task<int> SetupSent300(AppDbContext db, ITvanService svc)
+    {
+        var invId = await SetupAccepted(db, svc);
+        await svc.SendTct300Async(invId, ReplaceOrAdjustFlag.Adjust, "1", "04/SS", DateTime.Today, "Sai MST người mua", "kế toán");
+        return invId;
+    }
+
+    [Fact]
+    public async Task ReceiveTct301_Sent_SetsAllowedAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var invId = await SetupSent300(db, svc);
+            var (ok, msg) = await svc.ReceiveTct301Async(invId, null, "kế toán");
+            Assert.True(ok);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(SuaDoiFlag.Allowed, inv!.FlagSuaDoi);
+            var logs = await svc.Tct301LogsAsync(invId);
+            Assert.Single(logs);
+            Assert.Equal(SuaDoiFlag.Allowed, logs[0].KetQua);
+            Assert.Equal(inv.TCTSuaDoiRefNo, logs[0].TCTRefNo);
+        }
+    }
+
+    [Fact]
+    public async Task ReceiveTct301_NotSent_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var invId = await SetupAccepted(db, svc);   // đã Accepted nhưng CHƯA gửi thông báo 300
+            var (ok, msg) = await svc.ReceiveTct301Async(invId, null, null);
+            Assert.False(ok);
+            Assert.Contains("300", msg);
+        }
+    }
+
+    [Fact]
+    public async Task ReceiveTct301_ExplicitRefNo_Stored()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var invId = await SetupSent300(db, svc);
+            var (ok, _) = await svc.ReceiveTct301Async(invId, "V-CUSTOM-301", "kế toán");
+            Assert.True(ok);
+            var logs = await svc.Tct301LogsAsync(invId);
+            Assert.Single(logs);
+            Assert.Equal("V-CUSTOM-301", logs[0].TCTRefNo);
+        }
+    }
 }
 
 // Đọc tiền bằng chữ (theo luồng DocTien của TVAN gốc) + danh mục tiền tệ (Mst_CurrencyEx).

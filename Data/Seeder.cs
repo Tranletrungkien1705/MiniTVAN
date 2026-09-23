@@ -127,6 +127,17 @@ public static class Seeder
                 By = "kế toán", CreatedAt = DateTime.UtcNow.AddDays(-4)
             });
             await db.SaveChangesAsync();
+            // Nhận kết quả xử lý thông báo sai sót từ CQT (theo Invoice_Invoice_Process301 của TVAN gốc):
+            // CQT đã phản hồi thông điệp 301 xác nhận xử lý thông báo 300 → FlagSuaDoi = Allowed.
+            inv1.FlagSuaDoi = SuaDoiFlag.Allowed;
+            db.Tct301Logs.Add(new Tct301Log
+            {
+                InvoiceId = inv1.Id, TCTRefNo = inv1.TCTSuaDoiRefNo, FlagReplaceOrAdjust = ReplaceOrAdjustFlag.Adjust,
+                KetQua = SuaDoiFlag.Allowed,
+                Message = $"CQT đã xử lý thông báo sai sót (301) cho HĐ {inv1.Symbol}-{inv1.No}. Mã V: {inv1.TCTSuaDoiRefNo}",
+                By = "kế toán", CreatedAt = DateTime.UtcNow.AddDays(-3)
+            });
+            await db.SaveChangesAsync();
             // Cập nhật nội dung hóa đơn sau khi đã cấp số (theo Invoice_Invoice_UpdAfterAllocated của TVAN gốc):
             // inv2 đang chờ (Draft) và đã có số → đã được cập nhật lại thông tin người mua.
             inv2.PaymentMethod = PaymentMethod.Transfer;

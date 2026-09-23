@@ -39,6 +39,7 @@ public class AppDbContext : DbContext
     public DbSet<InvoiceNoAllocLog> InvoiceNoAllocLogs => Set<InvoiceNoAllocLog>();
     public DbSet<TctReceiveLog> TctReceiveLogs => Set<TctReceiveLog>();
     public DbSet<Tct300Log> Tct300Logs => Set<Tct300Log>();
+    public DbSet<Tct301Log> Tct301Logs => Set<Tct301Log>();
     public DbSet<InvoiceUpdateLog> InvoiceUpdateLogs => Set<InvoiceUpdateLog>();
     public DbSet<TemplateRangeLog> TemplateRangeLogs => Set<TemplateRangeLog>();
     public DbSet<CancelInvoiceLog> CancelInvoiceLogs => Set<CancelInvoiceLog>();
@@ -84,6 +85,8 @@ public class AppDbContext : DbContext
     public DbSet<TctTransactionLog> TctTransactionLogs => Set<TctTransactionLog>();
     public DbSet<InvoiceInput> InvoiceInputs => Set<InvoiceInput>();
     public DbSet<InvoiceInputDtl> InvoiceInputDtls => Set<InvoiceInputDtl>();
+    public DbSet<ProductId> ProductIds => Set<ProductId>();
+    public DbSet<PrdIdCustomField> PrdIdCustomFields => Set<PrdIdCustomField>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -265,6 +268,12 @@ public class AppDbContext : DbContext
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<Tct300Log>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.InvoiceId });
+            e.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Tct301Log>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.InvoiceId });
             e.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
@@ -529,6 +538,16 @@ public class AppDbContext : DbContext
             e.Property(x => x.VatAmount).HasPrecision(18, 2);
             e.Property(x => x.Total).HasPrecision(18, 2);
             e.HasIndex(x => new { x.OrgId, x.InvoiceInputId });
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ProductId>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ProductID, x.SpecCode }).IsUnique();   // mỗi tổ chức một serial cho một sản phẩm
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PrdIdCustomField>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.PrdCustomFieldCode }).IsUnique();   // mỗi tổ chức một mã trường
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

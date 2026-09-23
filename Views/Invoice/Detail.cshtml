@@ -7,6 +7,7 @@
    var issueLogs = (List<IssueLog>)ViewBag.IssueLogs;
    var tctLogs = (List<TctReceiveLog>)ViewBag.TctLogs;
    var tct300Logs = (List<Tct300Log>)ViewBag.Tct300Logs;
+   var tct301Logs = (List<Tct301Log>)ViewBag.Tct301Logs;
    var updateLogs = (List<InvoiceUpdateLog>)ViewBag.UpdateLogs;
    var cancelLogs = (List<CancelInvoiceLog>)ViewBag.CancelLogs;
    var recordLogs = (List<InvoiceRecordLog>)ViewBag.RecordLogs;
@@ -387,6 +388,17 @@
                     <button class="btn btn-warning btn-sm w-100">Gửi thông báo 300 tới CQT</button>
                 </form>
             </div></div>
+            @if (Model.FlagSuaDoi == SuaDoiFlag.Sent)
+            {
+                <button class="btn btn-outline-success w-100 mt-2" type="button" data-bs-toggle="collapse" data-bs-target="#tct301Form"><i class="bi bi-check2-circle me-1"></i>Nhận kết quả xử lý từ CQT (301)</button>
+                <div class="collapse" id="tct301Form"><div class="border rounded p-2">
+                    <form asp-action="ReceiveTct301" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                        <div class="mb-2"><label class="form-label small mb-1">Mã V tham chiếu (để trống = dùng mã V đã lưu)</label><input name="tctRefNo" class="form-control form-control-sm" value="@Model.TCTSuaDoiRefNo" /></div>
+                        <div class="mb-2"><label class="form-label small mb-1">Người nhận</label><input name="by" class="form-control form-control-sm" placeholder="VD kế toán" /></div>
+                        <button class="btn btn-success btn-sm w-100">Xác nhận CQT đã xử lý (301)</button>
+                    </form>
+                </div></div>
+            }
         }
     </div></div>
 
@@ -514,6 +526,29 @@
                 </tr>
             }
             @if (tct300Logs.Count == 0) { <tr><td colspan="7" class="text-muted small">Chưa gửi thông báo sai sót.</td></tr> }
+            </tbody>
+        </table>
+    </div></div>
+
+    <div class="card mt-3"><div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="bi bi-check2-circle me-1"></i>Nhật ký nhận kết quả xử lý thông báo sai sót (301) từ CQT</h6>
+        <table class="table table-sm align-middle mb-0">
+            <thead><tr><th>Thời điểm</th><th>Mã V</th><th>Cờ thay thế/điều chỉnh</th><th>Kết quả</th><th>Thông báo</th><th>Người nhận</th></tr></thead>
+            <tbody>
+            @foreach (var l in tct301Logs)
+            {
+                var (at, acss) = Ui.ReplaceOrAdjust(l.FlagReplaceOrAdjust);
+                var (kt, kcss) = Ui.SuaDoi(l.KetQua);
+                <tr>
+                    <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM HH:mm")</td>
+                    <td class="small text-break">@l.TCTRefNo</td>
+                    <td><span class="badge bg-@acss">@at</span></td>
+                    <td><span class="badge bg-@kcss">@kt</span></td>
+                    <td class="small">@l.Message</td>
+                    <td class="small text-muted">@l.By</td>
+                </tr>
+            }
+            @if (tct301Logs.Count == 0) { <tr><td colspan="6" class="text-muted small">Chưa nhận kết quả xử lý 301.</td></tr> }
             </tbody>
         </table>
     </div></div>
