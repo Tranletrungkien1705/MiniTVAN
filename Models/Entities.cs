@@ -1250,6 +1250,24 @@ public class CurrencyEx : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Danh mục thuế suất VAT (theo bảng Mst_VATRate của TVAN gốc): mỗi tổ chức khai báo các mức
+// thuế suất VAT dùng khi lập hóa đơn (VD VAT0 = 0%, VAT5 = 5%, VAT8 = 8%, VAT10 = 10%,
+// KCT = không chịu thuế, KKKNT = không kê khai nộp thuế). Mã thuế suất (VATRateCode) là khóa
+// nghiệp vụ trong phạm vi tổ chức; VATRate là giá trị hiển thị (VD "10%").
+// Khóa nghiệp vụ: (OrgId, VATRateCode). FlagActive = thuế suất đang dùng hay không.
+public class VatRate : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string VATRateCode { get; set; } = "";      // Mã thuế suất (VD VAT10)
+    public string VATRate { get; set; } = "";          // Giá trị thuế suất (VD 10%)
+    public string? VATDesc { get; set; }                 // Mô tả
+    public bool FlagActive { get; set; } = true;         // Thuế suất đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 // Nhật ký đọc tiền bằng chữ (theo luồng DocTien của TVAN gốc —
 // Invoice_InvoiceController.DocTien gọi clsDocTien.DocSo). Mỗi lần đọc một số tiền
 // thành chữ tiếng Việt ghi lại để đối soát: số tiền, mã + tên tiền tệ, kết quả chữ.

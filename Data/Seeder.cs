@@ -526,6 +526,20 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Danh mục thuế suất VAT (theo Mst_VATRate của TVAN gốc):
+        // các mức thuế suất demo dùng khi lập hóa đơn (mã theo Client_Mst_VATRate của TVAN gốc).
+        if (!await db.VatRates.AnyAsync())
+        {
+            db.VatRates.AddRange(
+                new VatRate { VATRateCode = "VAT0", VATRate = "0%", VATDesc = "Thuế suất GTGT 0%", FlagActive = true, UpdatedBy = "kế toán" },
+                new VatRate { VATRateCode = "VAT5", VATRate = "5%", VATDesc = "Thuế suất GTGT 5%", FlagActive = true, UpdatedBy = "kế toán" },
+                new VatRate { VATRateCode = "VAT8", VATRate = "8%", VATDesc = "Thuế suất GTGT 8%", FlagActive = true, UpdatedBy = "kế toán" },
+                new VatRate { VATRateCode = "VAT10", VATRate = "10%", VATDesc = "Thuế suất GTGT 10%", FlagActive = true, UpdatedBy = "kế toán" },
+                new VatRate { VATRateCode = "KCT", VATRate = "KCT", VATDesc = "Không chịu thuế", FlagActive = true, UpdatedBy = "kế toán" },
+                new VatRate { VATRateCode = "KKKNT", VATRate = "KKKNT", VATDesc = "Không kê khai nộp thuế", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+
         // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):
         // các loại khách hàng demo dùng khi khai báo danh mục khách hàng.
         if (!await db.CustomerNntTypes.AnyAsync())

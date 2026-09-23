@@ -123,6 +123,10 @@ public interface ITvanService
     Task<CustomerNntType?> GetCustomerNntTypeAsync(int id);
     Task<(bool ok, string msg, int id)> SaveCustomerNntTypeAsync(int? id, string code, string name, string? remark, bool active, string? by);
     Task<(bool ok, string msg)> DeleteCustomerNntTypeAsync(int id);
+    Task<List<VatRate>> VatRatesAsync(string? keyword);
+    Task<VatRate?> GetVatRateAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveVatRateAsync(int? id, string code, string rate, string? desc, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteVatRateAsync(int id);
     Task<List<Province>> ProvincesAsync(string? keyword);
     Task<Province?> GetProvinceAsync(int id);
     Task<(bool ok, string msg, int id)> SaveProvinceAsync(int? id, string code, string name, bool active, string? by);
@@ -2725,6 +2729,73 @@ public class TvanService(AppDbContext db) : ITvanService
         db.NntTypes.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa loại người nộp thuế {code}.");
+    }
+
+    // Danh mục thuế suất VAT (theo Mst_VATRate của TVAN gốc):
+    // danh sách thuế suất (lọc theo từ khóa mã/giá trị/mô tả nếu có).
+    public Task<List<VatRate>> VatRatesAsync(string? keyword)
+    {
+        var q = db.VatRates.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.VATRateCode.Contains(k) || t.VATRate.Contains(k) || (t.VATDesc != null && t.VATDesc.Contains(k)));
+        }
+        return q.OrderBy(t => t.VATRateCode).ToListAsync();
+    }
+
+    public Task<VatRate?> GetVatRateAsync(int id) =>
+        db.VatRates.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) thuế suất VAT theo khóa nghiệp vụ (OrgId, VATRateCode)
+    // (theo Mst_VATRate_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã thuế suất + giá trị thuế suất;
+    //  - khi tạo: mã thuế suất chưa tồn tại trong tổ chức (Mst_VATRate_CheckDB_VATRateExist).
+    public async Task<(bool ok, string msg, int id)> SaveVatRateAsync(int? id, string code, string rate, string? desc, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        rate = (rate ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã thuế suất VAT.", 0);
+        if (rate.Length == 0) return (false, "Cần giá trị thuế suất VAT.", 0);
+
+        VatRate? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.VatRates.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.VatRates.FirstOrDefaultAsync(t => t.VATRateCode == code);
+
+        if (e == null)
+        {
+            if (await db.VatRates.AnyAsync(t => t.VATRateCode == code))
+                return (false, "Mã thuế suất VAT đã tồn tại.", 0);
+            e = new VatRate { VATRateCode = code };
+            db.VatRates.Add(e);
+        }
+        else
+        {
+            // Đổi mã thuế suất: chặn trùng với thuế suất khác.
+            if (!string.Equals(e.VATRateCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.VatRates.AnyAsync(t => t.VATRateCode == code && t.Id != e.Id))
+                return (false, "Mã thuế suất VAT đã tồn tại.", 0);
+            e.VATRateCode = code;
+        }
+
+        e.VATRate = rate;
+        e.VATDesc = desc;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu thuế suất VAT {code} — {rate}.", e.Id);
+    }
+
+    // Xóa thuế suất VAT theo id (theo Mst_VATRate_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteVatRateAsync(int id)
+    {
+        var e = await db.VatRates.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy thuế suất VAT.");
+        var code = e.VATRateCode;
+        db.VatRates.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa thuế suất VAT {code}.");
     }
 
     // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):

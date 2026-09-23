@@ -880,6 +880,33 @@ public class NntTypeController(ITvanService svc) : Controller
     }
 }
 
+// Danh mục thuế suất VAT (theo Mst_VATRate của TVAN gốc):
+// các mức thuế suất VAT (0%, 5%, 8%, 10%, KCT, KKKNT...) dùng khi lập hóa đơn.
+public class VatRateController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.VatRatesAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string rate, string? desc, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveVatRateAsync(id, code, rate, desc, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteVatRateAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):
 // phân loại khách hàng (Doanh nghiệp, Cá nhân, Tổ chức nước ngoài...) dùng khi khai báo danh mục khách hàng.
 public class CustomerNntTypeController(ITvanService svc) : Controller

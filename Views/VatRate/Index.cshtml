@@ -1,0 +1,67 @@
+@model List<VatRate>
+@{
+    ViewData["Title"] = "Thuế suất VAT";
+    var keyword = ViewBag.Keyword as string;
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-percent me-1"></i>Danh mục thuế suất VAT</h6>
+                <form method="get" action="/VatRate" class="d-flex gap-2">
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm mã / giá trị / mô tả" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã thuế suất</th><th>Thuế suất</th><th>Mô tả</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var t in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@t.VATRateCode</td>
+                        <td><span class="badge bg-info-subtle text-info-emphasis">@t.VATRate</span></td>
+                        <td class="small text-muted">@(string.IsNullOrWhiteSpace(t.VATDesc) ? "—" : t.VATDesc)</td>
+                        <td>
+                            @if (t.FlagActive) { <span class="badge bg-success">Đang dùng</span> }
+                            else { <span class="badge bg-secondary">Ngừng dùng</span> }
+                        </td>
+                        <td class="small text-muted">
+                            @if (t.UpdatedAt.HasValue) { <div>@t.UpdatedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div> }
+                            @if (!string.IsNullOrWhiteSpace(t.UpdatedBy)) { <div>@t.UpdatedBy</div> }
+                            @if (!t.UpdatedAt.HasValue && string.IsNullOrWhiteSpace(t.UpdatedBy)) { <span>—</span> }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/VatRate/Delete" class="d-inline" onsubmit="return confirm('Xóa thuế suất VAT @t.VATRateCode?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@t.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có thuế suất VAT nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm / cập nhật thuế suất VAT</h6>
+            <form method="post" action="/VatRate/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã thuế suất</label><input name="code" class="form-control form-control-sm" placeholder="VAT10" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Thuế suất</label><input name="rate" class="form-control form-control-sm" placeholder="10%" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Mô tả</label><textarea name="desc" class="form-control form-control-sm" rows="2" maxlength="400" placeholder="Thuế suất GTGT 10%"></textarea></div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="active" value="true" id="vatRateActive" checked />
+                    <label class="form-check-label small" for="vatRateActive">Đang dùng</label>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu thuế suất VAT</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Lưu cùng mã thuế suất = cập nhật thuế suất đã có (theo khóa nghiệp vụ OrgId + mã thuế suất).</p>
+        </div></div>
+    </div>
+</div>

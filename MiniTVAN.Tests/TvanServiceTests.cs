@@ -2518,6 +2518,62 @@ public class TvanServiceTests
         }
     }
 
+    // Danh mục thuế suất VAT (theo Mst_VATRate của TVAN gốc).
+    [Fact]
+    public async Task VatRate_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveVatRateAsync(null, "VAT10", "10%", "Thuế suất GTGT 10%", true, "kế toán");
+            Assert.True(ok);
+            var list = await svc.VatRatesAsync(null);
+            Assert.Single(list);
+            Assert.Equal("10%", list[0].VATRate);
+            Assert.Equal("Thuế suất GTGT 10%", list[0].VATDesc);
+            Assert.True(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task VatRate_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveVatRateAsync(null, "VAT8", "8%", null, true, null);
+            // Lưu lại cùng mã thuế suất = cập nhật (không tạo mới).
+            var (ok, _, id2) = await svc.SaveVatRateAsync(null, "VAT8", "8%", "Giảm thuế GTGT", false, null);
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            var list = await svc.VatRatesAsync(null);
+            Assert.Single(list);
+            Assert.Equal("Giảm thuế GTGT", list[0].VATDesc);
+            Assert.False(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task VatRate_Save_MissingRate_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveVatRateAsync(null, "VAT10", "  ", null, true, null);
+            Assert.False(ok);
+            Assert.Contains("thuế suất", msg);
+        }
+    }
+
+    [Fact]
+    public async Task VatRate_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveVatRateAsync(null, "KCT", "KCT", "Không chịu thuế", true, null);
+            var (ok, _) = await svc.DeleteVatRateAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.VatRatesAsync(null));
+        }
+    }
+
     // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc).
     [Fact]
     public async Task CustomerNntType_Save_Creates()
