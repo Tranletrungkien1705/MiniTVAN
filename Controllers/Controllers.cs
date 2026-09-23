@@ -1790,3 +1790,64 @@ public class OrgController(AppDbContext db) : Controller
         Response.Cookies.Append(TenantContext.CookieName, k, o); Response.Cookies.Append("org_name", n, o);
     }
 }
+
+// Hóa đơn đầu vào (theo Invoice_InvoiceInput của TVAN gốc):
+// hóa đơn do nhà cung cấp phát hành mà NNT nhận được, lưu riêng với hóa đơn đầu ra
+// để đối chiếu/khai thuế. Hỗ trợ lập/sửa (kèm dòng chi tiết) và xóa (đánh dấu DELETED).
+public class InvoiceInputController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? mst, string? keyword, InputInvoiceStatus? status)
+    {
+        ViewBag.Mst = mst;
+        ViewBag.Keyword = keyword;
+        ViewBag.Status = status;
+        return View(await svc.InvoiceInputsAsync(mst, keyword, status));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var e = await svc.GetInvoiceInputAsync(id);
+        if (e == null) { TempData["Error"] = "Không tìm thấy hóa đơn đầu vào."; return RedirectToAction(nameof(Index)); }
+        return View(e);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string mst, string invoiceCode, string? refNo, string? formNo, string? sign,
+        SourceInvoiceCode sourceCode, InvoiceAdjType adjType, PaymentMethod paymentMethod, string? invoiceType2, DateTime invoiceDate,
+        string? sellerName, string? sellerMst, string? sellerAddress, string? sellerPhone, string? sellerEmail, string? sellerBankName, string? sellerAccNo,
+        string? buyerName, string? buyerMst, string? buyerAddress, string? buyerPhone, string? buyerEmail,
+        string? tInvoiceCode, string? invoiceNo, string? emailSend, string? invoiceFileSpec, string? invoiceFilePath, string? invoicePDFFilePath,
+        string? invoiceVerifyCQTCode, string? currencyCode, decimal currencyRate, string? remark,
+        string[]? productName, string[]? unitCode, decimal[]? quantity, decimal[]? unitPrice, decimal[]? vatRate, string[]? lineRemark, string? by)
+    {
+        var lines = new List<InvoiceInputLine>();
+        if (productName != null)
+        {
+            for (int i = 0; i < productName.Length; i++)
+            {
+                var q = quantity != null && i < quantity.Length ? quantity[i] : 0;
+                var up = unitPrice != null && i < unitPrice.Length ? unitPrice[i] : 0;
+                var vr = vatRate != null && i < vatRate.Length ? vatRate[i] : 0;
+                if (string.IsNullOrWhiteSpace(productName[i]) && q == 0 && up == 0) continue;   // bỏ dòng trống
+                lines.Add(new InvoiceInputLine(
+                    productName[i], unitCode != null && i < unitCode.Length ? unitCode[i] : null,
+                    q, up, vr, lineRemark != null && i < lineRemark.Length ? lineRemark[i] : null));
+            }
+        }
+        var h = new InvoiceInputHeader(mst, invoiceCode, refNo, formNo, sign, sourceCode, adjType, paymentMethod, invoiceType2, invoiceDate,
+            sellerName, sellerMst, sellerAddress, sellerPhone, sellerEmail, sellerBankName, sellerAccNo,
+            buyerName, buyerMst, buyerAddress, buyerPhone, buyerEmail, tInvoiceCode, invoiceNo, emailSend,
+            invoiceFileSpec, invoiceFilePath, invoicePDFFilePath, invoiceVerifyCQTCode, currencyCode, currencyRate, remark);
+        var (ok, msg, newId) = await svc.SaveInvoiceInputAsync(id, h, lines, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Detail), new { id = newId }) : RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id, string? reason, string? by)
+    {
+        var (ok, msg) = await svc.DeleteInvoiceInputAsync(id, reason, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}

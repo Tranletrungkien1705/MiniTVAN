@@ -1,0 +1,115 @@
+@model InvoiceInput?
+@{
+    ViewData["Title"] = Model == null ? "Lập hóa đơn đầu vào" : $"Hóa đơn đầu vào {Model.InvoiceCode}";
+    var e = Model;
+    var lines = e?.Details.OrderBy(d => d.STT).ToList() ?? new List<InvoiceInputDtl>();
+    var rowCount = Math.Max(lines.Count, 1);
+}
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <h6 class="fw-bold mb-0"><i class="bi bi-box-arrow-in-down me-1"></i>@ViewData["Title"]</h6>
+        <a href="/InvoiceInput" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+    </div>
+    @if (e != null && e.Status == InputInvoiceStatus.Deleted)
+    {
+        <div class="alert alert-danger py-2 small mb-3"><i class="bi bi-trash me-1"></i>Hóa đơn đã bị xóa — lý do: @(e.DeleteReason ?? "—") (@e.DeleteBy, @(e.DeleteDTimeUTC?.ToLocalTime().ToString("dd/MM/yyyy HH:mm")))</div>
+    }
+    <form method="post" action="/InvoiceInput/Save" class="row g-2">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="id" value="@(e?.Id)" />
+
+        <div class="col-12"><div class="nav-section text-uppercase small fw-bold text-muted mt-1">Thông tin chung</div></div>
+        <div class="col-md-3"><label class="form-label small mb-1">MST người nộp thuế (bên mua)</label><input name="mst" value="@e?.MST" class="form-control form-control-sm" placeholder="0101243150" required /></div>
+        <div class="col-md-3"><label class="form-label small mb-1">Số tra cứu hóa đơn</label><input name="invoiceCode" value="@e?.InvoiceCode" class="form-control form-control-sm" placeholder="Mã tra cứu CQT" required /></div>
+        <div class="col-md-2"><label class="form-label small mb-1">Ngày hóa đơn</label><input type="date" name="invoiceDate" value="@((e?.InvoiceDate ?? DateTime.Today).ToString("yyyy-MM-dd"))" class="form-control form-control-sm" /></div>
+        <div class="col-md-2"><label class="form-label small mb-1">Mẫu số</label><input name="formNo" value="@e?.FormNo" class="form-control form-control-sm" placeholder="01GTKT" /></div>
+        <div class="col-md-2"><label class="form-label small mb-1">Ký hiệu</label><input name="sign" value="@e?.Sign" class="form-control form-control-sm" placeholder="1C26TAA" /></div>
+        <div class="col-md-2"><label class="form-label small mb-1">Số hóa đơn</label><input name="invoiceNo" value="@e?.InvoiceNo" class="form-control form-control-sm" /></div>
+        <div class="col-md-2"><label class="form-label small mb-1">Số tham chiếu (HĐ gốc)</label><input name="refNo" value="@e?.RefNo" class="form-control form-control-sm" /></div>
+        <div class="col-md-2"><label class="form-label small mb-1">Nguồn hóa đơn</label>
+            <select name="sourceCode" class="form-select form-select-sm">
+                @foreach (SourceInvoiceCode s in Enum.GetValues(typeof(SourceInvoiceCode)))
+                { <option value="@s" selected="@(e?.SourceCode == s)">@Ui.Source(s).text</option> }
+            </select>
+        </div>
+        <div class="col-md-2"><label class="form-label small mb-1">Loại điều chỉnh</label>
+            <select name="adjType" class="form-select form-select-sm">
+                @foreach (InvoiceAdjType a in Enum.GetValues(typeof(InvoiceAdjType)))
+                { <option value="@a" selected="@(e?.AdjType == a)">@Ui.Adj(a)</option> }
+            </select>
+        </div>
+        <div class="col-md-2"><label class="form-label small mb-1">Phương thức TT</label>
+            <select name="paymentMethod" class="form-select form-select-sm">
+                @foreach (PaymentMethod p in Enum.GetValues(typeof(PaymentMethod)))
+                { <option value="@p" selected="@(e?.PaymentMethod == p)">@Ui.Payment(p)</option> }
+            </select>
+        </div>
+        <div class="col-md-2"><label class="form-label small mb-1">Loại hóa đơn</label><input name="invoiceType2" value="@e?.InvoiceType2" class="form-control form-control-sm" placeholder="DMS" /></div>
+        <div class="col-md-2"><label class="form-label small mb-1">Mã xác thực CQT</label><input name="invoiceVerifyCQTCode" value="@e?.InvoiceVerifyCQTCode" class="form-control form-control-sm" /></div>
+        <div class="col-md-2"><label class="form-label small mb-1">Mã tiền tệ</label><input name="currencyCode" value="@e?.CurrencyCode" class="form-control form-control-sm" placeholder="VND" /></div>
+        <div class="col-md-2"><label class="form-label small mb-1">Tỷ giá</label><input type="number" step="0.01" name="currencyRate" value="@(e?.CurrencyRate ?? 0)" class="form-control form-control-sm" /></div>
+
+        <div class="col-12"><div class="nav-section text-uppercase small fw-bold text-muted mt-2">Người bán (nhà cung cấp)</div></div>
+        <div class="col-md-4"><label class="form-label small mb-1">Tên người bán</label><input name="sellerName" value="@e?.SellerName" class="form-control form-control-sm" /></div>
+        <div class="col-md-2"><label class="form-label small mb-1">MST người bán</label><input name="sellerMst" value="@e?.SellerMst" class="form-control form-control-sm" /></div>
+        <div class="col-md-3"><label class="form-label small mb-1">Địa chỉ</label><input name="sellerAddress" value="@e?.SellerAddress" class="form-control form-control-sm" /></div>
+        <div class="col-md-3"><label class="form-label small mb-1">Điện thoại</label><input name="sellerPhone" value="@e?.SellerPhone" class="form-control form-control-sm" /></div>
+        <div class="col-md-3"><label class="form-label small mb-1">Email</label><input name="sellerEmail" value="@e?.SellerEmail" class="form-control form-control-sm" /></div>
+        <div class="col-md-3"><label class="form-label small mb-1">Ngân hàng</label><input name="sellerBankName" value="@e?.SellerBankName" class="form-control form-control-sm" /></div>
+        <div class="col-md-3"><label class="form-label small mb-1">Số tài khoản</label><input name="sellerAccNo" value="@e?.SellerAccNo" class="form-control form-control-sm" /></div>
+
+        <div class="col-12"><div class="nav-section text-uppercase small fw-bold text-muted mt-2">Người mua</div></div>
+        <div class="col-md-4"><label class="form-label small mb-1">Tên người mua</label><input name="buyerName" value="@e?.BuyerName" class="form-control form-control-sm" /></div>
+        <div class="col-md-2"><label class="form-label small mb-1">MST người mua</label><input name="buyerMst" value="@e?.BuyerMst" class="form-control form-control-sm" /></div>
+        <div class="col-md-3"><label class="form-label small mb-1">Địa chỉ</label><input name="buyerAddress" value="@e?.BuyerAddress" class="form-control form-control-sm" /></div>
+        <div class="col-md-3"><label class="form-label small mb-1">Điện thoại</label><input name="buyerPhone" value="@e?.BuyerPhone" class="form-control form-control-sm" /></div>
+        <div class="col-md-3"><label class="form-label small mb-1">Email</label><input name="buyerEmail" value="@e?.BuyerEmail" class="form-control form-control-sm" /></div>
+        <div class="col-md-3"><label class="form-label small mb-1">Mẫu hóa đơn</label><input name="tInvoiceCode" value="@e?.TInvoiceCode" class="form-control form-control-sm" /></div>
+        <div class="col-md-3"><label class="form-label small mb-1">Email gửi HĐ</label><input name="emailSend" value="@e?.EmailSend" class="form-control form-control-sm" /></div>
+
+        <div class="col-12"><div class="nav-section text-uppercase small fw-bold text-muted mt-2">Dòng hàng hóa / dịch vụ</div></div>
+        <div class="col-12">
+            <table class="table table-sm align-middle" id="lineTable">
+                <thead><tr><th style="width:26%">Tên hàng hóa, dịch vụ</th><th style="width:10%">ĐVT</th><th style="width:10%">Số lượng</th><th style="width:14%">Đơn giá</th><th style="width:10%">Thuế suất %</th><th style="width:20%">Ghi chú</th><th></th></tr></thead>
+                <tbody>
+                @for (int i = 0; i < rowCount; i++)
+                {
+                    var d = i < lines.Count ? lines[i] : null;
+                    <tr>
+                        <td><input name="productName" value="@d?.ProductName" class="form-control form-control-sm" /></td>
+                        <td><input name="unitCode" value="@d?.UnitCode" class="form-control form-control-sm" /></td>
+                        <td><input type="number" step="0.01" name="quantity" value="@(d?.Quantity ?? 0)" class="form-control form-control-sm" /></td>
+                        <td><input type="number" step="0.01" name="unitPrice" value="@(d?.UnitPrice ?? 0)" class="form-control form-control-sm" /></td>
+                        <td><input type="number" step="0.01" name="vatRate" value="@(d?.VatRate ?? 0)" class="form-control form-control-sm" /></td>
+                        <td><input name="lineRemark" value="@d?.Remark" class="form-control form-control-sm" /></td>
+                        <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="bi bi-x"></i></button></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="addLine()"><i class="bi bi-plus-circle me-1"></i>Thêm dòng</button>
+        </div>
+
+        <div class="col-md-6"><label class="form-label small mb-1">Ghi chú</label><textarea name="remark" class="form-control form-control-sm" rows="2">@e?.Remark</textarea></div>
+        <div class="col-md-3"><label class="form-label small mb-1">Người thực hiện</label><input name="by" value="@e?.UpdatedBy" class="form-control form-control-sm" placeholder="kế toán" /></div>
+        <div class="col-12"><button class="btn btn-sm btn-primary"><i class="bi bi-save me-1"></i>Lưu hóa đơn đầu vào</button></div>
+    </form>
+    <p class="small text-muted mt-3 mb-0">Lưu cùng (MST + số tra cứu) = cập nhật hóa đơn đầu vào đã có (theo khóa nghiệp vụ OrgId + MST + số tra cứu). Tổng tiền hàng/thuế/thanh toán được tính lại từ các dòng chi tiết.</p>
+</div></div>
+
+@section Scripts {
+<script>
+    function addLine() {
+        var tb = document.querySelector('#lineTable tbody');
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td><input name="productName" class="form-control form-control-sm" /></td>'
+            + '<td><input name="unitCode" class="form-control form-control-sm" /></td>'
+            + '<td><input type="number" step="0.01" name="quantity" value="0" class="form-control form-control-sm" /></td>'
+            + '<td><input type="number" step="0.01" name="unitPrice" value="0" class="form-control form-control-sm" /></td>'
+            + '<td><input type="number" step="0.01" name="vatRate" value="0" class="form-control form-control-sm" /></td>'
+            + '<td><input name="lineRemark" class="form-control form-control-sm" /></td>'
+            + '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest(\'tr\').remove()"><i class="bi bi-x"></i></button></td>';
+        tb.appendChild(tr);
+    }
+</script>
+}

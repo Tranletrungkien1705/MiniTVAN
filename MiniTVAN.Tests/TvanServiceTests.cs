@@ -4779,4 +4779,92 @@ public class DocTienTests
             Assert.Equal("V123", e.MessageRefCode);
         }
     }
+
+    // Hóa đơn đầu vào (theo Invoice_InvoiceInput của TVAN gốc).
+    private static InvoiceInputHeader Hdr(string mst, string code, string? seller = "NCC A", decimal rate = 10) =>
+        new(mst, code, null, "01GTKT", "1C26TAA", SourceInvoiceCode.Root, InvoiceAdjType.Normal, PaymentMethod.Transfer, null,
+            DateTime.Today, seller, "0107654321", "Hà Nội", null, null, null, null,
+            "Cty Mua", mst, "Hà Nội", null, null, null, "00001234", null, null, null, null, null, "VND", 1, null);
+
+    [Fact]
+    public async Task InvoiceInput_Save_ComputesTotalsFromLines()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var lines = new List<InvoiceInputLine>
+            {
+                new("Thép tấm", "KG", 100, 200_000, 10, null),
+                new("Bu lông", "CAI", 500, 10_000, 10, null)
+            };
+            var (ok, _, id) = await svc.SaveInvoiceInputAsync(null, Hdr("0101243150", "0026082012345001"), lines, "kế toán");
+            Assert.True(ok);
+            var e = await svc.GetInvoiceInputAsync(id);
+            Assert.NotNull(e);
+            Assert.Equal(2, e!.Details.Count);
+            Assert.Equal(25_000_000, e.TotalValInvoice);
+            Assert.Equal(2_500_000, e.TotalValVAT);
+            Assert.Equal(27_500_000, e.TotalValPmt);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceInput_Save_SameCode_Upserts()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id1) = await svc.SaveInvoiceInputAsync(null, Hdr("0101243150", "0026082012345001"), new(), "kế toán");
+            // Lưu lại cùng (MST + số tra cứu) = cập nhật, không tạo bản ghi mới.
+            var (ok, _, id2) = await svc.SaveInvoiceInputAsync(null, Hdr("0101243150", "0026082012345001", seller: "NCC B"), new(), "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id1, id2);
+            Assert.Single(await svc.InvoiceInputsAsync("0101243150", null, null));
+            Assert.Equal("NCC B", (await svc.GetInvoiceInputAsync(id1))!.SellerName);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceInput_Save_MissingCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveInvoiceInputAsync(null, Hdr("0101243150", ""), new(), "kế toán");
+            Assert.False(ok);
+            Assert.Contains("số tra cứu", msg);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceInput_Delete_MarksDeleted()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveInvoiceInputAsync(null, Hdr("0101243150", "0026082012345001"), new(), "kế toán");
+            var (ok, _) = await svc.DeleteInvoiceInputAsync(id, "Nhập trùng", "kế toán");
+            Assert.True(ok);
+            var e = await svc.GetInvoiceInputAsync(id);
+            Assert.Equal(InputInvoiceStatus.Deleted, e!.Status);
+            Assert.Equal("Nhập trùng", e.DeleteReason);
+            // Xóa lần hai bị chặn.
+            var (ok2, msg2) = await svc.DeleteInvoiceInputAsync(id, null, null);
+            Assert.False(ok2);
+            Assert.Contains("đã bị xóa", msg2);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceInput_List_FiltersByMstAndStatus()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveInvoiceInputAsync(null, Hdr("0101243150", "0026082012345001"), new(), "kế toán");
+            var (_, _, id2) = await svc.SaveInvoiceInputAsync(null, Hdr("0101243150", "0026082012345002"), new(), "kế toán");
+            await svc.SaveInvoiceInputAsync(null, Hdr("0312345678", "0026082012345003"), new(), "kế toán");
+            await svc.DeleteInvoiceInputAsync(id2, "xóa", "kế toán");
+
+            Assert.Equal(3, (await svc.InvoiceInputsAsync(null, null, null)).Count);
+            Assert.Equal(2, (await svc.InvoiceInputsAsync("0101243150", null, null)).Count);
+            Assert.Single(await svc.InvoiceInputsAsync(null, null, InputInvoiceStatus.Deleted));
+            Assert.Single(await svc.InvoiceInputsAsync(null, "0026082012345003", null));
+        }
+    }
 }

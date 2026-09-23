@@ -1275,6 +1275,48 @@ app.MapPost("/api/tct-transactions", async (TctTransactionLogDto dto, ITvanServi
     return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
 });
 
+// Hóa đơn đầu vào (theo Invoice_InvoiceInput của TVAN gốc): danh sách (lọc theo MST/từ khóa/trạng thái).
+app.MapGet("/api/invoice-inputs", async (string? mst, string? keyword, InputInvoiceStatus? status, ITvanService svc) =>
+{
+    var ls = await svc.InvoiceInputsAsync(mst, keyword, status);
+    return Results.Ok(ls.Select(i => new { i.Id, i.MST, i.InvoiceCode, i.RefNo, i.FormNo, i.Sign, source = i.SourceCode.ToString(), adj = i.AdjType.ToString(), payment = i.PaymentMethod.ToString(), i.InvoiceDate, i.SellerName, i.SellerMst, i.BuyerName, i.BuyerMst, i.InvoiceNo, i.TotalValInvoice, i.TotalValVAT, i.TotalValPmt, status = i.Status.ToString(), lines = i.Details.Count }));
+});
+
+// Chi tiết một hóa đơn đầu vào (kèm dòng chi tiết).
+app.MapGet("/api/invoice-inputs/{id:int}", async (int id, ITvanService svc) =>
+{
+    var i = await svc.GetInvoiceInputAsync(id);
+    if (i == null) return Results.NotFound(new { error = "Không tìm thấy hóa đơn đầu vào." });
+    return Results.Ok(new
+    {
+        i.Id, i.MST, i.InvoiceCode, i.RefNo, i.FormNo, i.Sign, source = i.SourceCode.ToString(), adj = i.AdjType.ToString(), payment = i.PaymentMethod.ToString(), i.InvoiceType2, i.InvoiceDate,
+        i.SellerName, i.SellerMst, i.SellerAddress, i.SellerPhone, i.SellerEmail, i.SellerBankName, i.SellerAccNo,
+        i.BuyerName, i.BuyerMst, i.BuyerAddress, i.BuyerPhone, i.BuyerEmail, i.TInvoiceCode, i.InvoiceNo, i.EmailSend,
+        i.InvoiceVerifyCQTCode, i.CurrencyCode, i.CurrencyRate, i.TotalValInvoice, i.TotalValVAT, i.TotalValPmt,
+        status = i.Status.ToString(), i.DeleteReason, i.DeleteDTimeUTC, i.DeleteBy, i.Remark, i.UpdatedBy, i.CreatedAt,
+        lines = i.Details.OrderBy(d => d.STT).Select(d => new { d.STT, d.ProductName, d.UnitCode, d.Quantity, d.UnitPrice, d.Amount, d.VatRate, d.VatAmount, d.Total, d.Remark })
+    });
+});
+
+// Lưu (tạo mới/cập nhật) hóa đơn đầu vào theo khóa nghiệp vụ (OrgId, MST, số tra cứu).
+app.MapPost("/api/invoice-inputs", async (InvoiceInputDto dto, ITvanService svc) =>
+{
+    var lines = (dto.Lines ?? new()).Select(l => new InvoiceInputLine(l.ProductName, l.UnitCode, l.Quantity, l.UnitPrice, l.VatRate, l.Remark)).ToList();
+    var h = new InvoiceInputHeader(dto.Mst ?? "", dto.InvoiceCode ?? "", dto.RefNo, dto.FormNo, dto.Sign, dto.SourceCode, dto.AdjType, dto.PaymentMethod, dto.InvoiceType2, dto.InvoiceDate,
+        dto.SellerName, dto.SellerMst, dto.SellerAddress, dto.SellerPhone, dto.SellerEmail, dto.SellerBankName, dto.SellerAccNo,
+        dto.BuyerName, dto.BuyerMst, dto.BuyerAddress, dto.BuyerPhone, dto.BuyerEmail, dto.TInvoiceCode, dto.InvoiceNo, dto.EmailSend,
+        dto.InvoiceFileSpec, dto.InvoiceFilePath, dto.InvoicePDFFilePath, dto.InvoiceVerifyCQTCode, dto.CurrencyCode, dto.CurrencyRate, dto.Remark);
+    var (ok, msg, id) = await svc.SaveInvoiceInputAsync(dto.Id, h, lines, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa hóa đơn đầu vào (theo Invoice_InvoiceInput_DeleteX của TVAN gốc): đánh dấu DELETED kèm lý do.
+app.MapPost("/api/invoice-inputs/{id:int}/delete", async (int id, InvoiceInputDeleteDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteInvoiceInputAsync(id, dto.Reason, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 // Nhóm người dùng (theo Sys_Group của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
 app.MapGet("/api/sys-groups", async (string? keyword, ITvanService svc) =>
 {
@@ -1481,3 +1523,6 @@ record SaveSysObjectInModulesDto(int ModuleId, List<string>? ObjectCodes, string
 record TvanIntegDto(int? Id, string? OrgCode, string? MsttctnIn, string? MsttctnOut, string? By);
 record TaxOfficeDto(int? Id, string? Code, string? CodeParent, string? ProvinceCode, string? DistrictCode, string? Name, string? Level, string? Address, string? ContactEmail, string? ContactPhone, bool Active, string? By);
 record TctTransactionLogDto(string? MessageCode, string? MstSeller, TctMessageAction Action, DateTime? MessageDTime, string? TypeCode, TctMessageStatus Status, TctMessageResult Result, string? MessageRefCode, string? Partner, DateTime? MessageDate, string? MstBuyer, int InvoiceQty, string? MessageDesc, string? Tag, string? XmlFilePath, string? By);
+record InvoiceInputLineDto(string? ProductName, string? UnitCode, decimal Quantity, decimal UnitPrice, decimal VatRate, string? Remark);
+record InvoiceInputDto(int? Id, string? Mst, string? InvoiceCode, string? RefNo, string? FormNo, string? Sign, SourceInvoiceCode SourceCode, InvoiceAdjType AdjType, PaymentMethod PaymentMethod, string? InvoiceType2, DateTime InvoiceDate, string? SellerName, string? SellerMst, string? SellerAddress, string? SellerPhone, string? SellerEmail, string? SellerBankName, string? SellerAccNo, string? BuyerName, string? BuyerMst, string? BuyerAddress, string? BuyerPhone, string? BuyerEmail, string? TInvoiceCode, string? InvoiceNo, string? EmailSend, string? InvoiceFileSpec, string? InvoiceFilePath, string? InvoicePDFFilePath, string? InvoiceVerifyCQTCode, string? CurrencyCode, decimal CurrencyRate, string? Remark, List<InvoiceInputLineDto>? Lines, string? By);
+record InvoiceInputDeleteDto(string? Reason, string? By);

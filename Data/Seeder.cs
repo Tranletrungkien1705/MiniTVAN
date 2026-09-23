@@ -961,6 +961,33 @@ public static class Seeder
                 });
             await db.SaveChangesAsync();
         }
+
+        // Hóa đơn đầu vào (theo Invoice_InvoiceInput của TVAN gốc):
+        // NNT demo nhận 1 hóa đơn đầu vào từ nhà cung cấp (kèm 2 dòng hàng hóa).
+        if (!await db.InvoiceInputs.AnyAsync())
+        {
+            var seller = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == "0101243150");
+            if (seller != null)
+            {
+                var input = new InvoiceInput
+                {
+                    MST = seller.Mst, InvoiceCode = "0026082012345001", FormNo = "01GTKT", Sign = "1C26TAA",
+                    InvoiceNo = "00001234", SourceCode = SourceInvoiceCode.Root, AdjType = InvoiceAdjType.Normal,
+                    PaymentMethod = PaymentMethod.Transfer, InvoiceDate = DateTime.Today.AddDays(-3),
+                    SellerName = "Công ty TNHH Vật tư Minh Phát", SellerMst = "0107654321", SellerAddress = "Số 8 Trần Phú, Hà Nội",
+                    SellerPhone = "024 3555 6677", SellerEmail = "ketoan@minhphat.vn", SellerBankName = "Techcombank - CN Hà Nội", SellerAccNo = "19001234567",
+                    BuyerName = seller.Name, BuyerMst = seller.Mst, BuyerAddress = seller.Address, BuyerEmail = seller.Email,
+                    TInvoiceCode = "TINV-1C26TAA", EmailSend = seller.Email,
+                    InvoiceVerifyCQTCode = "0026082012345001", CurrencyCode = "VND", CurrencyRate = 1,
+                    Status = InputInvoiceStatus.Issued, Remark = "Hóa đơn mua vật tư", CreatedBy = "kế toán"
+                };
+                input.Details.Add(new InvoiceInputDtl { STT = 1, ProductName = "Thép tấm 5mm", UnitCode = "KG", Quantity = 100, UnitPrice = 200_000, Amount = 20_000_000, VatRate = 10, VatAmount = 2_000_000, Total = 22_000_000 });
+                input.Details.Add(new InvoiceInputDtl { STT = 2, ProductName = "Bu lông M12", UnitCode = "CAI", Quantity = 500, UnitPrice = 10_000, Amount = 5_000_000, VatRate = 10, VatAmount = 500_000, Total = 5_500_000 });
+                input.TotalValInvoice = 25_000_000; input.TotalValVAT = 2_500_000; input.TotalValPmt = 27_500_000;
+                db.InvoiceInputs.Add(input);
+                await db.SaveChangesAsync();
+            }
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

@@ -346,4 +346,13 @@ public static class Ui
         TctMessageResult.Reject => ("Từ chối", "danger"),
         _ => ("Chưa có", "secondary")
     };
+
+    // Trạng thái hóa đơn đầu vào (theo Invoice_InvoiceInput.InvoiceStatus của TVAN gốc).
+    public static (string text, string css) InputInv(InputInvoiceStatus s) => s switch
+    {
+        InputInvoiceStatus.Draft   => ("Mới nhập", "secondary"),
+        InputInvoiceStatus.Issued  => ("Đã ghi nhận", "success"),
+        InputInvoiceStatus.Deleted => ("Đã xóa", "danger"),
+        _ => (s.ToString(), "secondary")
+    };
 }

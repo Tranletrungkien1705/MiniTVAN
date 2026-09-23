@@ -77,6 +77,8 @@ public class AppDbContext : DbContext
     public DbSet<TvanInteg> TvanIntegs => Set<TvanInteg>();
     public DbSet<MstTypeCode> TypeCodes => Set<MstTypeCode>();
     public DbSet<TctTransactionLog> TctTransactionLogs => Set<TctTransactionLog>();
+    public DbSet<InvoiceInput> InvoiceInputs => Set<InvoiceInput>();
+    public DbSet<InvoiceInputDtl> InvoiceInputDtls => Set<InvoiceInputDtl>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -467,6 +469,27 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => new { x.OrgId, x.MessageCode }).IsUnique();   // mỗi tổ chức một mã thông điệp
             e.HasIndex(x => new { x.OrgId, x.MessageDTime });
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InvoiceInput>(e =>
+        {
+            e.Property(x => x.TotalValInvoice).HasPrecision(18, 2);
+            e.Property(x => x.TotalValVAT).HasPrecision(18, 2);
+            e.Property(x => x.TotalValPmt).HasPrecision(18, 2);
+            e.Property(x => x.CurrencyRate).HasPrecision(18, 2);
+            e.HasIndex(x => new { x.OrgId, x.MST, x.InvoiceCode }).IsUnique();   // mỗi NNT một số tra cứu
+            e.HasMany(x => x.Details).WithOne().HasForeignKey(x => x.InvoiceInputId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InvoiceInputDtl>(e =>
+        {
+            e.Property(x => x.Quantity).HasPrecision(18, 2);
+            e.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.Property(x => x.VatRate).HasPrecision(9, 2);
+            e.Property(x => x.VatAmount).HasPrecision(18, 2);
+            e.Property(x => x.Total).HasPrecision(18, 2);
+            e.HasIndex(x => new { x.OrgId, x.InvoiceInputId });
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

@@ -261,6 +261,12 @@ public interface ITvanService
     Task<List<TctTransactionLog>> TctTransactionLogsAsync(string? messageCode, TctMessageAction? action, string? mstSeller, TctMessageStatus? status, TctMessageResult? result, string? typeCode, DateTime? fromDate, DateTime? toDate);
     Task<TctTransactionLog?> GetTctTransactionLogAsync(int id);
     Task<(bool ok, string msg, int id)> CreateTctTransactionLogAsync(string messageCode, string? mstSeller, TctMessageAction action, DateTime? messageDTime, string? typeCode, TctMessageStatus status, TctMessageResult result, string? messageRefCode, string? partner, DateTime? messageDate, string? mstBuyer, int invoiceQty, string? messageDesc, string? tag, string? xmlFilePath, string? by);
+
+    // Hóa đơn đầu vào (theo Invoice_InvoiceInput của TVAN gốc)
+    Task<List<InvoiceInput>> InvoiceInputsAsync(string? mst, string? keyword, InputInvoiceStatus? status);
+    Task<InvoiceInput?> GetInvoiceInputAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveInvoiceInputAsync(int? id, InvoiceInputHeader h, List<InvoiceInputLine> lines, string? by);
+    Task<(bool ok, string msg)> DeleteInvoiceInputAsync(int id, string? reason, string? by);
 }
 
 // Hồ sơ NNT đầy đủ dùng khi lưu (theo Mst_NNT_Create/Update của TVAN gốc).
@@ -271,6 +277,20 @@ public record NntProfile(
     string? ContactPhone, string? ContactEmail, string? Website, string? CANumber, string? CAOrg,
     DateTime? CAEffDTimeUTCStart, DateTime? CAEffDTimeUTCEnd, string? AccNo, string? AccHolder, string? BankName,
     string? BizType, string? BizFieldCode, string? BizSizeCode, bool Active, string? By);
+
+// Header hóa đơn đầu vào dùng khi lưu (theo Invoice_InvoiceInput của TVAN gốc).
+public record InvoiceInputHeader(
+    string Mst, string InvoiceCode, string? RefNo, string? FormNo, string? Sign,
+    SourceInvoiceCode SourceCode, InvoiceAdjType AdjType, PaymentMethod PaymentMethod, string? InvoiceType2,
+    DateTime InvoiceDate, string? SellerName, string? SellerMst, string? SellerAddress, string? SellerPhone,
+    string? SellerEmail, string? SellerBankName, string? SellerAccNo, string? BuyerName, string? BuyerMst,
+    string? BuyerAddress, string? BuyerPhone, string? BuyerEmail, string? TInvoiceCode, string? InvoiceNo,
+    string? EmailSend, string? InvoiceFileSpec, string? InvoiceFilePath, string? InvoicePDFFilePath,
+    string? InvoiceVerifyCQTCode, string? CurrencyCode, decimal CurrencyRate, string? Remark);
+
+// Dòng chi tiết hóa đơn đầu vào dùng khi lưu (theo Invoice_InvoiceInputDtl của TVAN gốc).
+public record InvoiceInputLine(
+    string? ProductName, string? UnitCode, decimal Quantity, decimal UnitPrice, decimal VatRate, string? Remark);
 
 public class TvanService(AppDbContext db) : ITvanService
 {
@@ -4942,6 +4962,138 @@ public class TvanService(AppDbContext db) : ITvanService
         db.TctTransactionLogs.Add(e);
         await db.SaveChangesAsync();
         return (true, $"Đã ghi nhật ký thông điệp {messageCode}.", e.Id);
+    }
+
+    // Danh sách hóa đơn đầu vào (theo Invoice_InvoiceInput_Get của TVAN gốc): lọc theo MST NNT,
+    // từ khóa (số tra cứu / số hóa đơn / tên người bán) và trạng thái.
+    public Task<List<InvoiceInput>> InvoiceInputsAsync(string? mst, string? keyword, InputInvoiceStatus? status)
+    {
+        var q = db.InvoiceInputs.Include(i => i.Details).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(mst)) { var m = mst.Trim(); q = q.Where(i => i.MST == m); }
+        if (status.HasValue) q = q.Where(i => i.Status == status.Value);
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(i => i.InvoiceCode.Contains(k)
+                || (i.InvoiceNo != null && i.InvoiceNo.Contains(k))
+                || (i.SellerName != null && i.SellerName.Contains(k))
+                || (i.SellerMst != null && i.SellerMst.Contains(k)));
+        }
+        return q.OrderByDescending(i => i.Id).ToListAsync();
+    }
+
+    public Task<InvoiceInput?> GetInvoiceInputAsync(int id) =>
+        db.InvoiceInputs.Include(i => i.Details).FirstOrDefaultAsync(i => i.Id == id);
+
+    // Lưu (tạo mới/cập nhật) hóa đơn đầu vào theo khóa nghiệp vụ (OrgId, MST, InvoiceCode)
+    // (theo Invoice_InvoiceInput_Save của TVAN gốc). Ràng buộc:
+    //  - cần MST NNT nhận hóa đơn + số tra cứu hóa đơn (Invoice_InvoiceInput_Save_InvalidMST / _InvalidInvoiceCode);
+    //  - khi tạo: số tra cứu chưa tồn tại trong phạm vi NNT (Invoice_InvoiceInput_CheckDB_InvoiceCodeExist);
+    //  - khi sửa: hóa đơn phải tồn tại và chưa bị xóa (Invoice_InvoiceInput_CheckDB_InvoiceCodeNotFound);
+    //  - tổng tiền hàng/thuế/thanh toán được tính lại từ danh sách dòng chi tiết.
+    public async Task<(bool ok, string msg, int id)> SaveInvoiceInputAsync(int? id, InvoiceInputHeader h, List<InvoiceInputLine> lines, string? by)
+    {
+        var mst = (h.Mst ?? "").Trim();
+        var code = (h.InvoiceCode ?? "").Trim();
+        if (mst.Length == 0) return (false, "Cần MST người nộp thuế nhận hóa đơn.", 0);
+        if (code.Length == 0) return (false, "Cần số tra cứu hóa đơn đầu vào.", 0);
+        lines ??= new();
+
+        InvoiceInput? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.InvoiceInputs.Include(i => i.Details).FirstOrDefaultAsync(i => i.Id == id.Value);
+        else e = await db.InvoiceInputs.Include(i => i.Details).FirstOrDefaultAsync(i => i.MST == mst && i.InvoiceCode == code);
+
+        if (e == null)
+        {
+            if (await db.InvoiceInputs.AnyAsync(i => i.MST == mst && i.InvoiceCode == code))
+                return (false, "Số tra cứu hóa đơn đầu vào đã tồn tại.", 0);
+            e = new InvoiceInput { MST = mst, InvoiceCode = code, CreatedBy = by };
+            db.InvoiceInputs.Add(e);
+        }
+        else
+        {
+            if (e.Status == InputInvoiceStatus.Deleted) return (false, "Hóa đơn đầu vào đã bị xóa, không sửa được.", e.Id);
+            // Đổi số tra cứu: chặn trùng với hóa đơn khác cùng NNT.
+            if (!string.Equals(e.InvoiceCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.InvoiceInputs.AnyAsync(i => i.MST == mst && i.InvoiceCode == code && i.Id != e.Id))
+                return (false, "Số tra cứu hóa đơn đầu vào đã tồn tại.", e.Id);
+            e.MST = mst; e.InvoiceCode = code;
+        }
+
+        e.RefNo = h.RefNo;
+        e.FormNo = h.FormNo;
+        e.Sign = h.Sign;
+        e.SourceCode = h.SourceCode;
+        e.AdjType = h.AdjType;
+        e.PaymentMethod = h.PaymentMethod;
+        e.InvoiceType2 = h.InvoiceType2;
+        e.InvoiceDate = h.InvoiceDate;
+        e.SellerName = h.SellerName;
+        e.SellerMst = h.SellerMst;
+        e.SellerAddress = h.SellerAddress;
+        e.SellerPhone = h.SellerPhone;
+        e.SellerEmail = h.SellerEmail;
+        e.SellerBankName = h.SellerBankName;
+        e.SellerAccNo = h.SellerAccNo;
+        e.BuyerName = h.BuyerName;
+        e.BuyerMst = h.BuyerMst;
+        e.BuyerAddress = h.BuyerAddress;
+        e.BuyerPhone = h.BuyerPhone;
+        e.BuyerEmail = h.BuyerEmail;
+        e.TInvoiceCode = h.TInvoiceCode;
+        e.InvoiceNo = h.InvoiceNo;
+        e.EmailSend = h.EmailSend;
+        e.InvoiceFileSpec = h.InvoiceFileSpec;
+        e.InvoiceFilePath = h.InvoiceFilePath;
+        e.InvoicePDFFilePath = h.InvoicePDFFilePath;
+        e.InvoiceVerifyCQTCode = h.InvoiceVerifyCQTCode;
+        e.CurrencyCode = h.CurrencyCode;
+        e.CurrencyRate = h.CurrencyRate;
+        e.Remark = h.Remark;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+
+        // Thay thế toàn bộ dòng chi tiết và tính lại tổng tiền (theo Invoice_InvoiceInput_SaveX của TVAN gốc).
+        db.InvoiceInputDtls.RemoveRange(e.Details);
+        e.Details.Clear();
+        int stt = 1;
+        decimal totalInvoice = 0, totalVat = 0, totalPmt = 0;
+        foreach (var l in lines)
+        {
+            var amount = Math.Round(l.Quantity * l.UnitPrice, 2);
+            var vat = Math.Round(amount * l.VatRate / 100m, 2);
+            var total = amount + vat;
+            e.Details.Add(new InvoiceInputDtl
+            {
+                STT = stt++, ProductName = l.ProductName, UnitCode = l.UnitCode,
+                Quantity = l.Quantity, UnitPrice = l.UnitPrice, Amount = amount,
+                VatRate = l.VatRate, VatAmount = vat, Total = total, Remark = l.Remark
+            });
+            totalInvoice += amount; totalVat += vat; totalPmt += total;
+        }
+        e.TotalValInvoice = totalInvoice;
+        e.TotalValVAT = totalVat;
+        e.TotalValPmt = totalPmt;
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu hóa đơn đầu vào {code} ({e.Details.Count} dòng).", e.Id);
+    }
+
+    // Xóa hóa đơn đầu vào (theo Invoice_InvoiceInput_DeleteX của TVAN gốc): đánh dấu DELETED
+    // kèm lý do + thời điểm/người xóa; chặn khi không tồn tại hoặc đã xóa.
+    public async Task<(bool ok, string msg)> DeleteInvoiceInputAsync(int id, string? reason, string? by)
+    {
+        var e = await db.InvoiceInputs.FirstOrDefaultAsync(i => i.Id == id);
+        if (e == null) return (false, "Không tìm thấy hóa đơn đầu vào.");
+        if (e.Status == InputInvoiceStatus.Deleted) return (false, "Hóa đơn đầu vào đã bị xóa.");
+        e.Status = InputInvoiceStatus.Deleted;
+        e.DeleteReason = reason;
+        e.DeleteDTimeUTC = DateTime.UtcNow;
+        e.DeleteBy = by;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa hóa đơn đầu vào {e.InvoiceCode}.");
     }
 
     private static (DateTime from, DateTime to) PeriodRange(PeriodType t, string kdlieu)

@@ -1642,3 +1642,91 @@ public class TctTransactionLog : IOrgOwned
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
+
+// Trạng thái hóa đơn đầu vào (theo Invoice_InvoiceInput.InvoiceStatus của TVAN gốc):
+// Draft = mới nhập, Issued = đã phát hành/ghi nhận, Deleted = đã xóa (kèm lý do).
+public enum InputInvoiceStatus { Draft = 0, Issued = 1, Deleted = 2 }
+
+// Hóa đơn đầu vào (theo bảng Invoice_InvoiceInput của TVAN gốc): hóa đơn do nhà cung cấp
+// phát hành mà NNT nhận được, lưu riêng với hóa đơn đầu ra để đối chiếu/khai thuế.
+// Khóa nghiệp vụ: (OrgId, MST, InvoiceCode) — MST là mã số thuế của NNT nhận hóa đơn.
+public class InvoiceInput : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string MST { get; set; } = "";                 // MST của NNT nhận hóa đơn (bên mua)
+    public string InvoiceCode { get; set; } = "";          // Số tra cứu hóa đơn đầu vào
+    public string? RefNo { get; set; }                     // Số tham chiếu (hóa đơn gốc bị điều chỉnh/thay thế)
+    public string? FormNo { get; set; }                    // Mẫu số
+    public string? Sign { get; set; }                      // Ký hiệu
+    public SourceInvoiceCode SourceCode { get; set; } = SourceInvoiceCode.Root;   // Nguồn hóa đơn
+    public InvoiceAdjType AdjType { get; set; } = InvoiceAdjType.Normal;          // Loại điều chỉnh
+    public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.CashOrTransfer;   // Phương thức thanh toán
+    public string? InvoiceType2 { get; set; }              // Loại hóa đơn (DMS, null...)
+    public DateTime InvoiceDate { get; set; } = DateTime.Today;   // Ngày hóa đơn
+
+    // Thông tin người bán (nhà cung cấp phát hành hóa đơn).
+    public string? SellerName { get; set; }                // Tên người bán (NNTFullName)
+    public string? SellerMst { get; set; }                 // MST người bán (CustomerMST)
+    public string? SellerAddress { get; set; }             // Địa chỉ người bán
+    public string? SellerPhone { get; set; }               // Điện thoại người bán
+    public string? SellerEmail { get; set; }               // Email người bán
+    public string? SellerBankName { get; set; }            // Tên ngân hàng người bán
+    public string? SellerAccNo { get; set; }               // Số tài khoản người bán
+
+    // Thông tin người mua (NNT nhận hóa đơn).
+    public string? BuyerName { get; set; }                 // Tên người mua (CustomerNNTBuyerName)
+    public string? BuyerMst { get; set; }                  // MST người mua
+    public string? BuyerAddress { get; set; }              // Địa chỉ người mua
+    public string? BuyerPhone { get; set; }                // Điện thoại người mua
+    public string? BuyerEmail { get; set; }                // Email người mua
+
+    public string? TInvoiceCode { get; set; }              // Mẫu hóa đơn
+    public string? InvoiceNo { get; set; }                 // Số hóa đơn
+    public string? EmailSend { get; set; }                 // Email gửi hóa đơn
+    public string? InvoiceFileSpec { get; set; }           // Nội dung hóa đơn (base64 XML)
+    public string? InvoiceFilePath { get; set; }           // Đường dẫn file hóa đơn
+    public string? InvoicePDFFilePath { get; set; }        // Đường dẫn file PDF hóa đơn
+
+    public decimal TotalValInvoice { get; set; }           // Tổng tiền hàng
+    public decimal TotalValVAT { get; set; }               // Tổng tiền thuế
+    public decimal TotalValPmt { get; set; }               // Tổng tiền thanh toán
+
+    public InputInvoiceStatus Status { get; set; } = InputInvoiceStatus.Draft;
+    public string? InvoiceVerifyCQTCode { get; set; }      // Mã xác thực CQT
+    public string? CurrencyCode { get; set; }              // Mã tiền tệ
+    public decimal CurrencyRate { get; set; }              // Tỷ giá
+
+    // Xóa hóa đơn đầu vào (theo Invoice_InvoiceInput_DeleteX của TVAN gốc):
+    // DeleteReason = lý do xóa, DeleteDTimeUTC/DeleteBy = thời điểm & người xóa.
+    public string? DeleteReason { get; set; }
+    public DateTime? DeleteDTimeUTC { get; set; }
+    public string? DeleteBy { get; set; }
+
+    public string? Remark { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public string? CreatedBy { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+
+    public List<InvoiceInputDtl> Details { get; set; } = new();
+}
+
+// Dòng chi tiết hóa đơn đầu vào (theo bảng Invoice_InvoiceInputDtl của TVAN gốc):
+// mỗi dòng là một hàng hóa/dịch vụ trên hóa đơn nhận được.
+public class InvoiceInputDtl : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InvoiceInputId { get; set; }
+    public int STT { get; set; }                           // Số thứ tự dòng
+    public string? ProductName { get; set; }               // Tên hàng hóa, dịch vụ
+    public string? UnitCode { get; set; }                  // Đơn vị tính
+    public decimal Quantity { get; set; }                  // Số lượng
+    public decimal UnitPrice { get; set; }                 // Đơn giá
+    public decimal Amount { get; set; }                    // Thành tiền (chưa thuế)
+    public decimal VatRate { get; set; }                   // Thuế suất
+    public decimal VatAmount { get; set; }                 // Tiền thuế
+    public decimal Total { get; set; }                     // Tổng tiền thanh toán
+    public string? Remark { get; set; }
+}

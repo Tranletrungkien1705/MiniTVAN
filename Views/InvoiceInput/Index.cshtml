@@ -1,0 +1,69 @@
+@model List<InvoiceInput>
+@{
+    ViewData["Title"] = "Hóa đơn đầu vào";
+    var mst = ViewBag.Mst as string;
+    var keyword = ViewBag.Keyword as string;
+    var status = ViewBag.Status as InputInvoiceStatus?;
+}
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <h6 class="fw-bold mb-0"><i class="bi bi-box-arrow-in-down me-1"></i>Hóa đơn đầu vào (nhận từ nhà cung cấp)</h6>
+        <a href="/InvoiceInput/Detail" class="btn btn-sm btn-primary"><i class="bi bi-plus-circle me-1"></i>Lập hóa đơn đầu vào</a>
+    </div>
+    <form method="get" action="/InvoiceInput" class="row g-2 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label small mb-1">MST người nộp thuế</label>
+            <input name="mst" value="@mst" class="form-control form-control-sm" placeholder="0101243150" />
+        </div>
+        <div class="col-md-4">
+            <label class="form-label small mb-1">Từ khóa</label>
+            <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Số tra cứu / số HĐ / tên người bán" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small mb-1">Trạng thái</label>
+            <select name="status" class="form-select form-select-sm">
+                <option value="">— Tất cả —</option>
+                @foreach (InputInvoiceStatus s in Enum.GetValues(typeof(InputInvoiceStatus)))
+                {
+                    <option value="@s" selected="@(status == s)">@Ui.InputInv(s).text</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2"><button class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-search me-1"></i>Lọc</button></div>
+    </form>
+</div></div>
+
+<div class="card"><div class="card-body">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Số tra cứu</th><th>Ngày HĐ</th><th>Người bán</th><th>Người mua</th><th class="text-end">Tiền hàng</th><th class="text-end">Thuế</th><th class="text-end">Thanh toán</th><th>Trạng thái</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var t in Model)
+        {
+            var st = Ui.InputInv(t.Status);
+            <tr>
+                <td class="fw-semibold">@t.InvoiceCode<div class="small text-muted">@t.FormNo @t.Sign @t.InvoiceNo</div></td>
+                <td class="small">@t.InvoiceDate.ToString("dd/MM/yyyy")</td>
+                <td class="small">@(string.IsNullOrWhiteSpace(t.SellerName) ? "—" : t.SellerName)<div class="text-muted">@t.SellerMst</div></td>
+                <td class="small">@(string.IsNullOrWhiteSpace(t.BuyerName) ? "—" : t.BuyerName)<div class="text-muted">@t.BuyerMst</div></td>
+                <td class="text-end">@Ui.Money(t.TotalValInvoice)</td>
+                <td class="text-end">@Ui.Money(t.TotalValVAT)</td>
+                <td class="text-end fw-semibold">@Ui.Money(t.TotalValPmt)</td>
+                <td><span class="badge bg-@st.css">@st.text</span></td>
+                <td class="text-end">
+                    <a href="/InvoiceInput/Detail/@t.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
+                    @if (t.Status != InputInvoiceStatus.Deleted)
+                    {
+                        <form method="post" action="/InvoiceInput/Delete" class="d-inline" onsubmit="return confirm('Xóa hóa đơn đầu vào @t.InvoiceCode?');">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@t.Id" />
+                            <input type="hidden" name="reason" value="Xóa theo yêu cầu" />
+                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                        </form>
+                    }
+                </td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="9" class="text-center text-muted py-4">Chưa có hóa đơn đầu vào nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>
