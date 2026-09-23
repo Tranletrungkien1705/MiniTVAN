@@ -1114,6 +1114,41 @@ public class InvoiceUsageRow
     public int QtyClosing { get; set; }                  // Số lượng tồn cuối kỳ
 }
 
+// Loại số liệu trên Bảng điều khiển hóa đơn (theo cột ReportType của Rpt_InvoiceForDashboardX
+// trong idN.TVAN.Biz/Report.cs của TVAN gốc). Mỗi loại ứng với một khối thống kê:
+//   InvoiceCreateDate     — Hóa đơn tạo trong ngày (theo CreateDTimeUTC).
+//   InvoicePending        — Hóa đơn chờ ký (InvoiceStatus = PENDING).
+//   InvoiceInvoiceDate    — Hóa đơn lập trong ngày (theo InvoiceDateUTC, đã phát hành).
+//   InvoiceInvoiceMonth   — Hóa đơn lập trong tháng.
+//   InvoiceInvoiceQuarter — Hóa đơn lập trong quý.
+//   InvoiceInvoiceYear    — Hóa đơn lập trong năm.
+public enum DashboardReportType
+{
+    InvoiceCreateDate = 0,
+    InvoicePending = 1,
+    InvoiceInvoiceDate = 2,
+    InvoiceInvoiceMonth = 3,
+    InvoiceInvoiceQuarter = 4,
+    InvoiceInvoiceYear = 5
+}
+
+// Dòng dữ liệu Bảng điều khiển hóa đơn (theo model Rpt_InvoiceForDashboard của TVAN gốc
+// — idN.TVAN.Common/Models/Rpt_InvoiceForDashboard.cs). Mỗi dòng ứng với một loại số liệu
+// (ReportType) của một NNT (MST): số lượng hóa đơn (TotalQtyInvoice) + tổng giá trị sau VAT
+// (TotalAmontAfterVAT), kèm thông tin hạn mức hóa đơn (TotalQty/TotalQtyIssued/TotalQtyUsed/QtyRemain).
+public class DashboardRow
+{
+    public string Mst { get; set; } = "";               // MST người nộp thuế (bên bán)
+    public DashboardReportType ReportType { get; set; }  // Loại số liệu
+    public decimal TotalAmountAfterVat { get; set; }     // Tổng giá trị sau VAT (TotalAmontAfterVAT)
+    public int TotalQtyInvoice { get; set; }             // Số lượng hóa đơn
+    // Hạn mức hóa đơn của NNT (theo Invoice_license của TVAN gốc).
+    public int TotalQty { get; set; }                    // Hạn mức tổng được cấp
+    public int TotalQtyIssued { get; set; }              // Đã phát hành
+    public int TotalQtyUsed { get; set; }                // Đã sử dụng
+    public int QtyRemain { get; set; }                   // Còn lại (đã phát hành - đã sử dụng)
+}
+
 // Trường động của nhóm mẫu hóa đơn (theo bảng Invoice_TempGroupField của TVAN gốc):
 // mỗi nhóm mẫu khai báo danh sách trường động (DBFieldName) + kiểu trường (TCFType).
 // Khóa nghiệp vụ: (OrgId, InvoiceTGroupCode, DBFieldName).
