@@ -1183,6 +1183,37 @@ public class SpecController(ITvanService svc) : Controller
     }
 }
 
+// Đơn vị quy đổi của sản phẩm (theo Mst_SpecUnit của TVAN gốc — màn OS_PrdCenter_Mst_SpecUnitController):
+// mỗi sản phẩm có nhiều đơn vị tính với hệ số quy đổi về đơn vị chuẩn + kích thước/khối lượng.
+public class SpecUnitController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword, string? specCode, string? unitCode)
+    {
+        ViewBag.Keyword = keyword;
+        ViewBag.SpecCode = specCode;
+        ViewBag.UnitCode = unitCode;
+        ViewBag.Specs = await svc.SpecsAsync(null, null, null, null);
+        ViewBag.Units = await svc.UnitsAsync(null);
+        return View(await svc.SpecUnitsAsync(keyword, specCode, unitCode));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string specCode, string unitCode, string standardUnitCode, string? desc, decimal qty, decimal? length, decimal? width, decimal? height, decimal? volume, decimal? weight, string? remark, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveSpecUnitAsync(id, specCode, unitCode, standardUnitCode, desc, qty, length, width, height, volume, weight, remark, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteSpecUnitAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):
 // phân loại khách hàng (Doanh nghiệp, Cá nhân, Tổ chức nước ngoài...) dùng khi khai báo danh mục khách hàng.
 public class CustomerNntTypeController(ITvanService svc) : Controller

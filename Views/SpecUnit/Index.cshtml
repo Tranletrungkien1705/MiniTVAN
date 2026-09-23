@@ -1,0 +1,130 @@
+@model List<SpecUnit>
+@{
+    ViewData["Title"] = "Đơn vị quy đổi sản phẩm";
+    var keyword = ViewBag.Keyword as string;
+    var specCode = ViewBag.SpecCode as string;
+    var unitCode = ViewBag.UnitCode as string;
+    var specs = ViewBag.Specs as List<Spec> ?? new List<Spec>();
+    var units = ViewBag.Units as List<Unit> ?? new List<Unit>();
+    string Sp(string? c) => specs.FirstOrDefault(x => x.SpecCode == c)?.SpecName ?? c ?? "";
+    string Un(string? c) => units.FirstOrDefault(x => x.UnitCode == c)?.UnitName ?? c ?? "";
+    string Num(decimal? v) => v.HasValue ? v.Value.ToString("N2") : "—";
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-arrow-left-right me-1"></i>Đơn vị quy đổi của sản phẩm</h6>
+                <form method="get" action="/SpecUnit" class="d-flex gap-2 flex-wrap">
+                    <select name="specCode" class="form-select form-select-sm" style="width:auto">
+                        <option value="">— Tất cả sản phẩm —</option>
+                        @foreach (var s in specs)
+                        {
+                            <option value="@s.SpecCode" selected="@(s.SpecCode == specCode)">@s.SpecCode — @s.SpecName</option>
+                        }
+                    </select>
+                    <select name="unitCode" class="form-select form-select-sm" style="width:auto">
+                        <option value="">— Tất cả đơn vị —</option>
+                        @foreach (var u in units)
+                        {
+                            <option value="@u.UnitCode" selected="@(u.UnitCode == unitCode)">@u.UnitCode — @u.UnitName</option>
+                        }
+                    </select>
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm mã SP / ĐVT / mô tả" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Sản phẩm</th><th>Đơn vị</th><th class="text-end">Quy đổi</th><th>Kích thước (D×R×C)</th><th class="text-end">Thể tích</th><th class="text-end">Khối lượng</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var t in Model)
+                {
+                    <tr>
+                        <td>
+                            <span class="fw-semibold">@t.SpecCode</span>
+                            <div class="small text-muted">@Sp(t.SpecCode)</div>
+                        </td>
+                        <td>
+                            <span class="badge bg-primary-subtle text-primary-emphasis">@t.UnitCode</span>
+                            <div class="small text-muted">@Un(t.UnitCode)</div>
+                        </td>
+                        <td class="text-end small">
+                            <span class="fw-semibold">@t.Qty.ToString("N2")</span>
+                            <span class="text-muted">@t.StandardUnitCode</span>
+                        </td>
+                        <td class="small">@Num(t.Length) × @Num(t.Width) × @Num(t.Height)</td>
+                        <td class="text-end small">@Num(t.Volume)</td>
+                        <td class="text-end small">@Num(t.Weight)</td>
+                        <td>
+                            @if (t.FlagActive) { <span class="badge bg-success">Đang dùng</span> }
+                            else { <span class="badge bg-secondary">Ngừng dùng</span> }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/SpecUnit/Delete" class="d-inline" onsubmit="return confirm('Xóa đơn vị quy đổi @t.UnitCode của @t.SpecCode?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@t.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="8" class="text-center text-muted py-4">Chưa có đơn vị quy đổi nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm / cập nhật đơn vị quy đổi</h6>
+            <form method="post" action="/SpecUnit/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12">
+                    <label class="form-label small mb-1">Sản phẩm</label>
+                    <select name="specCode" class="form-select form-select-sm" required>
+                        <option value="">— Chọn sản phẩm —</option>
+                        @foreach (var s in specs.Where(x => x.FlagActive))
+                        {
+                            <option value="@s.SpecCode">@s.SpecCode — @s.SpecName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">Đơn vị tính</label>
+                    <select name="unitCode" class="form-select form-select-sm" required>
+                        <option value="">— Chọn —</option>
+                        @foreach (var u in units.Where(x => x.FlagActive))
+                        {
+                            <option value="@u.UnitCode">@u.UnitCode — @u.UnitName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">Đơn vị chuẩn</label>
+                    <select name="standardUnitCode" class="form-select form-select-sm" required>
+                        <option value="">— Chọn —</option>
+                        @foreach (var u in units.Where(x => x.FlagActive))
+                        {
+                            <option value="@u.UnitCode">@u.UnitCode — @u.UnitName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Mô tả</label><input name="desc" class="form-control form-control-sm" placeholder="(tùy chọn)" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Số lượng quy đổi</label><input name="qty" type="number" step="0.01" min="0" value="1" class="form-control form-control-sm" required /></div>
+                <div class="col-4"><label class="form-label small mb-1">Dài</label><input name="length" type="number" step="0.01" class="form-control form-control-sm" /></div>
+                <div class="col-4"><label class="form-label small mb-1">Rộng</label><input name="width" type="number" step="0.01" class="form-control form-control-sm" /></div>
+                <div class="col-4"><label class="form-label small mb-1">Cao</label><input name="height" type="number" step="0.01" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Thể tích</label><input name="volume" type="number" step="0.01" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Khối lượng</label><input name="weight" type="number" step="0.01" class="form-control form-control-sm" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Ghi chú</label><textarea name="remark" class="form-control form-control-sm" rows="2" maxlength="400"></textarea></div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="active" value="true" id="suActive" checked />
+                    <label class="form-check-label small" for="suActive">Đang dùng</label>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu đơn vị quy đổi</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Sản phẩm / đơn vị tính / đơn vị chuẩn (nếu chọn) phải tồn tại và đang dùng. Lưu cùng cặp (sản phẩm, đơn vị) = cập nhật bản ghi đã có.</p>
+        </div></div>
+    </div>
+</div>

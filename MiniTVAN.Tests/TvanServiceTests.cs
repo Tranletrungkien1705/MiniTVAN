@@ -4867,4 +4867,114 @@ public class DocTienTests
             Assert.Single(await svc.InvoiceInputsAsync(null, "0026082012345003", null));
         }
     }
+
+    [Fact]
+    public async Task SpecUnit_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveUnitAsync(null, "CHIEC", "Chiếc", null, true, "kế toán");
+            await svc.SaveUnitAsync(null, "HOP", "Hộp", null, true, "kế toán");
+            await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            var (ok, _, id) = await svc.SaveSpecUnitAsync(null, "SP-A54", "HOP", "CHIEC", "Hộp 10 chiếc", 10, 20, 12, 6, 1440, 0.5m, "Đóng gói", true, "kế toán");
+            Assert.True(ok);
+            var e = await svc.GetSpecUnitAsync(id);
+            Assert.Equal("SP-A54", e!.SpecCode);
+            Assert.Equal("HOP", e.UnitCode);
+            Assert.Equal("CHIEC", e.StandardUnitCode);
+            Assert.Equal(10, e.Qty);
+            Assert.Equal(0.5m, e.Weight);
+            Assert.True(e.FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task SpecUnit_Save_SameKey_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveUnitAsync(null, "CHIEC", "Chiếc", null, true, "kế toán");
+            await svc.SaveUnitAsync(null, "HOP", "Hộp", null, true, "kế toán");
+            await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            var (_, _, id) = await svc.SaveSpecUnitAsync(null, "SP-A54", "HOP", "CHIEC", null, 10, null, null, null, null, null, null, true, "kế toán");
+            // Lưu lại cùng cặp (sản phẩm, đơn vị) = cập nhật (không tạo bản ghi mới).
+            var (ok, _, id2) = await svc.SaveSpecUnitAsync(null, "SP-A54", "HOP", "CHIEC", null, 24, null, null, null, null, null, null, true, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            Assert.Single(await svc.SpecUnitsAsync(null, null, null));
+            Assert.Equal(24, (await svc.GetSpecUnitAsync(id))!.Qty);
+        }
+    }
+
+    [Fact]
+    public async Task SpecUnit_Save_MissingKey_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok1, msg1, _) = await svc.SaveSpecUnitAsync(null, "  ", "HOP", "CHIEC", null, 1, null, null, null, null, null, null, true, "kế toán");
+            Assert.False(ok1);
+            Assert.Contains("mã sản phẩm", msg1);
+            var (ok2, msg2, _) = await svc.SaveSpecUnitAsync(null, "SP-A54", "  ", "CHIEC", null, 1, null, null, null, null, null, null, true, "kế toán");
+            Assert.False(ok2);
+            Assert.Contains("mã đơn vị tính", msg2);
+            var (ok3, msg3, _) = await svc.SaveSpecUnitAsync(null, "SP-A54", "HOP", "  ", null, 1, null, null, null, null, null, null, true, "kế toán");
+            Assert.False(ok3);
+            Assert.Contains("mã đơn vị chuẩn", msg3);
+        }
+    }
+
+    [Fact]
+    public async Task SpecUnit_Save_InvalidReferences_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveUnitAsync(null, "CHIEC", "Chiếc", null, true, "kế toán");
+            // Sản phẩm chưa tồn tại → chặn.
+            var (ok1, msg1, _) = await svc.SaveSpecUnitAsync(null, "SP-A54", "CHIEC", "CHIEC", null, 1, null, null, null, null, null, null, true, "kế toán");
+            Assert.False(ok1);
+            Assert.Contains("Sản phẩm", msg1);
+            // Đơn vị tính chưa tồn tại → chặn.
+            await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            var (ok2, msg2, _) = await svc.SaveSpecUnitAsync(null, "SP-A54", "HOP", "CHIEC", null, 1, null, null, null, null, null, null, true, "kế toán");
+            Assert.False(ok2);
+            Assert.Contains("Đơn vị tính", msg2);
+            // Đơn vị chuẩn đã ngừng dùng → chặn.
+            await svc.SaveUnitAsync(null, "HOP", "Hộp", null, false, "kế toán");
+            var (ok3, msg3, _) = await svc.SaveSpecUnitAsync(null, "SP-A54", "CHIEC", "HOP", null, 1, null, null, null, null, null, null, true, "kế toán");
+            Assert.False(ok3);
+            Assert.Contains("ngừng dùng", msg3);
+        }
+    }
+
+    [Fact]
+    public async Task SpecUnit_List_FilteredBySpecAndUnit()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveUnitAsync(null, "CHIEC", "Chiếc", null, true, "kế toán");
+            await svc.SaveUnitAsync(null, "HOP", "Hộp", null, true, "kế toán");
+            await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            await svc.SaveSpecAsync(null, "SP-IP15", "iPhone 15", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            await svc.SaveSpecUnitAsync(null, "SP-A54", "HOP", "CHIEC", null, 10, null, null, null, null, null, null, true, "kế toán");
+            await svc.SaveSpecUnitAsync(null, "SP-A54", "CHIEC", "CHIEC", null, 1, null, null, null, null, null, null, true, "kế toán");
+            await svc.SaveSpecUnitAsync(null, "SP-IP15", "HOP", "CHIEC", null, 5, null, null, null, null, null, null, true, "kế toán");
+            Assert.Equal(3, (await svc.SpecUnitsAsync(null, null, null)).Count);
+            Assert.Equal(2, (await svc.SpecUnitsAsync(null, "SP-A54", null)).Count);
+            Assert.Equal(2, (await svc.SpecUnitsAsync(null, null, "HOP")).Count);
+        }
+    }
+
+    [Fact]
+    public async Task SpecUnit_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveUnitAsync(null, "CHIEC", "Chiếc", null, true, "kế toán");
+            await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            var (_, _, id) = await svc.SaveSpecUnitAsync(null, "SP-A54", "CHIEC", "CHIEC", null, 1, null, null, null, null, null, null, true, "kế toán");
+            var (ok, _) = await svc.DeleteSpecUnitAsync(id);
+            Assert.True(ok);
+            Assert.Null(await svc.GetSpecUnitAsync(id));
+        }
+    }
 }

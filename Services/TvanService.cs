@@ -157,6 +157,10 @@ public interface ITvanService
     Task<Spec?> GetSpecAsync(int id);
     Task<(bool ok, string msg, int id)> SaveSpecAsync(int? id, string code, string name, string? desc, string? modelCode, string? specType1, string? specType2, string? color, bool hasSerial, bool hasLot, string? defaultUnitCode, string? standardUnitCode, string? remark, bool active, string? by);
     Task<(bool ok, string msg)> DeleteSpecAsync(int id);
+    Task<List<SpecUnit>> SpecUnitsAsync(string? keyword, string? specCode, string? unitCode);
+    Task<SpecUnit?> GetSpecUnitAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveSpecUnitAsync(int? id, string specCode, string unitCode, string standardUnitCode, string? desc, decimal qty, decimal? length, decimal? width, decimal? height, decimal? volume, decimal? weight, string? remark, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteSpecUnitAsync(int id);
     Task<List<MstTypeCode>> TypeCodesAsync(string? keyword);
     Task<MstTypeCode?> GetTypeCodeAsync(int id);
     Task<(bool ok, string msg, int id)> SaveTypeCodeAsync(int? id, string code, string? desc, string? group, bool active, string? by);
@@ -3470,6 +3474,109 @@ public class TvanService(AppDbContext db) : ITvanService
         db.Specs.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa sản phẩm {code}.");
+    }
+
+    // Đơn vị quy đổi của sản phẩm (theo Mst_SpecUnit của TVAN gốc — màn OS_PrdCenter_Mst_SpecUnitController):
+    // danh sách đơn vị quy đổi (lọc theo từ khóa mã SP/mã ĐVT/mô tả + sản phẩm + đơn vị nếu có).
+    public Task<List<SpecUnit>> SpecUnitsAsync(string? keyword, string? specCode, string? unitCode)
+    {
+        var q = db.SpecUnits.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.SpecCode.Contains(k) || t.UnitCode.Contains(k)
+                || (t.SpecUnitDesc != null && t.SpecUnitDesc.Contains(k)));
+        }
+        if (!string.IsNullOrWhiteSpace(specCode))
+        {
+            var v = specCode.Trim();
+            q = q.Where(t => t.SpecCode == v);
+        }
+        if (!string.IsNullOrWhiteSpace(unitCode))
+        {
+            var v = unitCode.Trim();
+            q = q.Where(t => t.UnitCode == v);
+        }
+        return q.OrderBy(t => t.SpecCode).ThenBy(t => t.UnitCode).ToListAsync();
+    }
+
+    public Task<SpecUnit?> GetSpecUnitAsync(int id) =>
+        db.SpecUnits.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) đơn vị quy đổi theo khóa nghiệp vụ (OrgId, SpecCode, UnitCode)
+    // (theo Mst_SpecUnit_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã sản phẩm + mã đơn vị tính + mã đơn vị chuẩn (Mst_SpecUnit_Create_Invalid...);
+    //  - sản phẩm phải tồn tại + đang dùng (Mst_Spec_CheckDB);
+    //  - đơn vị tính + đơn vị chuẩn phải tồn tại + đang dùng (Mst_Unit_CheckDB);
+    //  - khi tạo: cặp (sản phẩm, đơn vị) chưa tồn tại (Mst_SpecUnit_CheckDB_SpecPriceExist).
+    public async Task<(bool ok, string msg, int id)> SaveSpecUnitAsync(int? id, string specCode, string unitCode, string standardUnitCode, string? desc, decimal qty, decimal? length, decimal? width, decimal? height, decimal? volume, decimal? weight, string? remark, bool active, string? by)
+    {
+        specCode = (specCode ?? "").Trim();
+        unitCode = (unitCode ?? "").Trim();
+        standardUnitCode = (standardUnitCode ?? "").Trim();
+        if (specCode.Length == 0) return (false, "Cần mã sản phẩm.", 0);
+        if (unitCode.Length == 0) return (false, "Cần mã đơn vị tính.", 0);
+        if (standardUnitCode.Length == 0) return (false, "Cần mã đơn vị chuẩn.", 0);
+
+        var spec = await db.Specs.FirstOrDefaultAsync(t => t.SpecCode == specCode);
+        if (spec == null) return (false, $"Sản phẩm {specCode} không tồn tại.", 0);
+        if (!spec.FlagActive) return (false, $"Sản phẩm {specCode} đã ngừng dùng.", 0);
+
+        var unit = await db.Units.FirstOrDefaultAsync(t => t.UnitCode == unitCode);
+        if (unit == null) return (false, $"Đơn vị tính {unitCode} không tồn tại.", 0);
+        if (!unit.FlagActive) return (false, $"Đơn vị tính {unitCode} đã ngừng dùng.", 0);
+
+        var stdUnit = await db.Units.FirstOrDefaultAsync(t => t.UnitCode == standardUnitCode);
+        if (stdUnit == null) return (false, $"Đơn vị chuẩn {standardUnitCode} không tồn tại.", 0);
+        if (!stdUnit.FlagActive) return (false, $"Đơn vị chuẩn {standardUnitCode} đã ngừng dùng.", 0);
+
+        SpecUnit? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.SpecUnits.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.SpecUnits.FirstOrDefaultAsync(t => t.SpecCode == specCode && t.UnitCode == unitCode);
+
+        if (e == null)
+        {
+            if (await db.SpecUnits.AnyAsync(t => t.SpecCode == specCode && t.UnitCode == unitCode))
+                return (false, $"Đơn vị quy đổi {unitCode} của sản phẩm {specCode} đã tồn tại.", 0);
+            e = new SpecUnit { SpecCode = specCode, UnitCode = unitCode };
+            db.SpecUnits.Add(e);
+        }
+        else
+        {
+            // Đổi khóa (sản phẩm, đơn vị): chặn trùng với bản ghi khác.
+            if ((!string.Equals(e.SpecCode, specCode, StringComparison.OrdinalIgnoreCase)
+                 || !string.Equals(e.UnitCode, unitCode, StringComparison.OrdinalIgnoreCase))
+                && await db.SpecUnits.AnyAsync(t => t.SpecCode == specCode && t.UnitCode == unitCode && t.Id != e.Id))
+                return (false, $"Đơn vị quy đổi {unitCode} của sản phẩm {specCode} đã tồn tại.", 0);
+            e.SpecCode = specCode;
+            e.UnitCode = unitCode;
+        }
+
+        e.StandardUnitCode = standardUnitCode;
+        e.SpecUnitDesc = desc;
+        e.Qty = qty;
+        e.Length = length;
+        e.Width = width;
+        e.Height = height;
+        e.Volume = volume;
+        e.Weight = weight;
+        e.Remark = remark;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu đơn vị quy đổi {unitCode} của sản phẩm {specCode}.", e.Id);
+    }
+
+    // Xóa đơn vị quy đổi theo id (theo Mst_SpecUnit_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteSpecUnitAsync(int id)
+    {
+        var e = await db.SpecUnits.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy đơn vị quy đổi.");
+        var label = $"{e.UnitCode} / {e.SpecCode}";
+        db.SpecUnits.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa đơn vị quy đổi {label}.");
     }
 
     // Danh mục mã loại (theo Mst_TypeCode của TVAN gốc):

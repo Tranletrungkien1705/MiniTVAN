@@ -74,6 +74,7 @@ public class AppDbContext : DbContext
     public DbSet<SpecType1> SpecType1s => Set<SpecType1>();
     public DbSet<SpecType2> SpecType2s => Set<SpecType2>();
     public DbSet<Spec> Specs => Set<Spec>();
+    public DbSet<SpecUnit> SpecUnits => Set<SpecUnit>();
     public DbSet<TvanInteg> TvanIntegs => Set<TvanInteg>();
     public DbSet<MstTypeCode> TypeCodes => Set<MstTypeCode>();
     public DbSet<TctTransactionLog> TctTransactionLogs => Set<TctTransactionLog>();
@@ -453,6 +454,17 @@ public class AppDbContext : DbContext
         b.Entity<Spec>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.SpecCode }).IsUnique();   // mỗi tổ chức một mã sản phẩm
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SpecUnit>(e =>
+        {
+            e.Property(x => x.Qty).HasPrecision(18, 2);
+            e.Property(x => x.Length).HasPrecision(18, 2);
+            e.Property(x => x.Width).HasPrecision(18, 2);
+            e.Property(x => x.Height).HasPrecision(18, 2);
+            e.Property(x => x.Volume).HasPrecision(18, 2);
+            e.Property(x => x.Weight).HasPrecision(18, 2);
+            e.HasIndex(x => new { x.OrgId, x.SpecCode, x.UnitCode }).IsUnique();   // mỗi sản phẩm một đơn vị quy đổi
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<TvanInteg>(e =>

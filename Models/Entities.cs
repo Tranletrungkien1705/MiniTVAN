@@ -1568,6 +1568,32 @@ public class Spec : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Đơn vị quy đổi của sản phẩm (theo bảng Mst_SpecUnit của TVAN gốc — màn
+// OS_PrdCenter_Mst_SpecUnitController): mỗi sản phẩm (SpecCode) có thể có nhiều đơn vị tính
+// với hệ số quy đổi (Qty) về đơn vị chuẩn (StandardUnitCode), kèm kích thước/khối lượng/thể tích
+// (Length/Width/Height/Volume/Weight) dùng khi đóng gói/vận chuyển.
+// Khóa nghiệp vụ: (OrgId, SpecCode, UnitCode). FlagActive = đơn vị quy đổi đang dùng hay không.
+public class SpecUnit : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string SpecCode { get; set; } = "";          // Mã sản phẩm (Mst_Spec)
+    public string UnitCode { get; set; } = "";          // Mã đơn vị tính (Mst_Unit)
+    public string StandardUnitCode { get; set; } = "";   // Mã đơn vị chuẩn quy đổi về (Mst_Unit)
+    public string? SpecUnitDesc { get; set; }             // Mô tả đơn vị quy đổi
+    public decimal Qty { get; set; }                      // Số lượng quy đổi (1 đơn vị này = Qty đơn vị chuẩn)
+    public decimal? Length { get; set; }                  // Chiều dài
+    public decimal? Width { get; set; }                   // Chiều rộng
+    public decimal? Height { get; set; }                  // Chiều cao
+    public decimal? Volume { get; set; }                  // Thể tích
+    public decimal? Weight { get; set; }                  // Khối lượng
+    public string? Remark { get; set; }                   // Ghi chú
+    public bool FlagActive { get; set; } = true;          // Đơn vị quy đổi đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 // Tích hợp TVAN (theo bảng Mst_TVANInteg của TVAN gốc): mỗi tổ chức (OrgID) khai báo tổ chức
 // giải pháp TVAN tương ứng để trao đổi hóa đơn — MSTTCTN_In (hóa đơn đầu vào) và MSTTCTN_Out
 // (hóa đơn đầu ra). Lưu theo kiểu upsert theo OrgID (theo Mst_TVANInteg_Save của TVAN gốc:

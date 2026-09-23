@@ -657,6 +657,26 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Đơn vị quy đổi của sản phẩm (theo Mst_SpecUnit của TVAN gốc):
+        // các đơn vị quy đổi demo gắn với sản phẩm / đơn vị tính ở trên.
+        if (!await db.SpecUnits.AnyAsync())
+        {
+            db.SpecUnits.AddRange(
+                new SpecUnit
+                {
+                    SpecCode = "SP-A54", UnitCode = "HOP", StandardUnitCode = "CHIEC", SpecUnitDesc = "Hộp 10 chiếc",
+                    Qty = 10, Length = 20, Width = 12, Height = 6, Volume = 1440, Weight = 0.5m,
+                    Remark = "Đóng gói theo hộp", FlagActive = true, UpdatedBy = "kế toán"
+                },
+                new SpecUnit
+                {
+                    SpecCode = "SP-WH1000", UnitCode = "CAI", StandardUnitCode = "HOP", SpecUnitDesc = "Bán lẻ theo cái",
+                    Qty = 1, Length = 18, Width = 8, Height = 8, Volume = 1152, Weight = 0.25m,
+                    Remark = "Quy đổi lẻ", FlagActive = true, UpdatedBy = "kế toán"
+                });
+            await db.SaveChangesAsync();
+        }
+
         // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):
         // các loại khách hàng demo dùng khi khai báo danh mục khách hàng.
         if (!await db.CustomerNntTypes.AnyAsync())
