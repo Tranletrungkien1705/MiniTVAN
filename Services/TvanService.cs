@@ -345,6 +345,12 @@ public interface ITvanService
     Task<LicOrderCommission?> GetLicOrderCommissionAsync(int id);
     Task<(bool ok, string msg, int id)> SaveLicOrderCommissionAsync(int? id, string orderNo, string? mst, string? dlCode, string? presenter1, string? presenter2, string? telesale, string? consultants, string? implementer, decimal commissionPresenter1, decimal commissionPresenter2, decimal commissionTelesale, decimal commissionConsultants, decimal commissionImplementer, string? remark, string? by);
     Task<(bool ok, string msg, int approvedCount)> ApproveLicOrderCommissionsAsync(List<int> ids, string? by);
+
+    // Mẫu thông điệp trao đổi với cơ quan thuế (theo Mst_MessageTemplate của TVAN gốc)
+    Task<List<TctMessageTemplate>> TctMessageTemplatesAsync(TctMessageTypeCode? type, string? keyword);
+    Task<TctMessageTemplate?> GetTctMessageTemplateAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveTctMessageTemplateAsync(int? id, string code, string name, TctMessageTypeCode type, string? body, string? fileName, string? filePath, bool active, List<TctMessageTemplateField> fields, string? by);
+    Task<(bool ok, string msg)> DeleteTctMessageTemplateAsync(int id);
 }
 
 // Hồ sơ NNT đầy đủ dùng khi lưu (theo Mst_NNT_Create/Update của TVAN gốc).
@@ -372,6 +378,9 @@ public record InvoiceInputLine(
 
 // Dòng chi tiết đơn hàng license dùng khi lưu (theo Inos_LicOrderDetail của TVAN gốc).
 public record LicOrderLine(string PackageId, string? PackageName, LicOrderType OrderType, decimal Price, int Qty);
+
+// Trường động của mẫu thông điệp dùng khi lưu (theo Mst_MessageTemplateDtl của TVAN gốc).
+public record TctMessageTemplateField(string FieldName, string? FieldType, string? FieldDesc);
 
 public class TvanService(AppDbContext db) : ITvanService
 {
@@ -6582,5 +6591,82 @@ public class TvanService(AppDbContext db) : ITvanService
             "ERROR" => CommissionStatus.Error,
             _ => null
         };
+    }
+
+    // ===== Mẫu thông điệp trao đổi với cơ quan thuế (theo Mst_MessageTemplate của TVAN gốc) =====
+
+    // Danh sách mẫu thông điệp (lọc theo loại thông điệp + từ khóa mã/tên nếu có).
+    public Task<List<TctMessageTemplate>> TctMessageTemplatesAsync(TctMessageTypeCode? type, string? keyword)
+    {
+        var q = db.TctMessageTemplates.Include(t => t.Details).AsQueryable();
+        if (type.HasValue) q = q.Where(t => t.MessageTypeCode == type.Value);
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.MessageTplCode.Contains(k) || t.MessageTplName.Contains(k));
+        }
+        return q.OrderBy(t => t.MessageTypeCode).ThenBy(t => t.MessageTplCode).ToListAsync();
+    }
+
+    public Task<TctMessageTemplate?> GetTctMessageTemplateAsync(int id) =>
+        db.TctMessageTemplates.Include(t => t.Details).FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) mẫu thông điệp theo mã (theo Mst_MessageTemplate_Create/Update của TVAN gốc):
+    // lưu lần đầu = tạo mới, lưu lại cùng mã = cập nhật; thay thế toàn bộ danh sách trường động.
+    public async Task<(bool ok, string msg, int id)> SaveTctMessageTemplateAsync(int? id, string code, string name, TctMessageTypeCode type, string? body, string? fileName, string? filePath, bool active, List<TctMessageTemplateField> fields, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã mẫu thông điệp.", 0);
+        if (name.Length == 0) return (false, "Cần tên mẫu thông điệp.", 0);
+
+        TctMessageTemplate? e;
+        if (id.HasValue && id.Value > 0)
+        {
+            e = await db.TctMessageTemplates.Include(t => t.Details).FirstOrDefaultAsync(t => t.Id == id.Value);
+            if (e == null) return (false, "Không tìm thấy mẫu thông điệp.", 0);
+            if (!string.Equals(e.MessageTplCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.TctMessageTemplates.AnyAsync(t => t.MessageTplCode == code))
+                return (false, $"Mã mẫu thông điệp '{code}' đã tồn tại.", 0);
+        }
+        else
+        {
+            if (await db.TctMessageTemplates.AnyAsync(t => t.MessageTplCode == code))
+                return (false, $"Mã mẫu thông điệp '{code}' đã tồn tại.", 0);
+            e = new TctMessageTemplate { MessageTplCode = code };
+            db.TctMessageTemplates.Add(e);
+        }
+
+        e.MessageTplCode = code;
+        e.MessageTplName = name;
+        e.MessageTypeCode = type;
+        e.MessageTplBody = body;
+        e.MessageTplFileName = fileName;
+        e.MessageTplFilePath = filePath;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+
+        // Thay thế toàn bộ danh sách trường động (theo Mst_MessageTemplate_SaveX của TVAN gốc).
+        e.Details.Clear();
+        foreach (var f in fields ?? new())
+        {
+            var fn = (f.FieldName ?? "").Trim();
+            if (fn.Length == 0) continue;
+            e.Details.Add(new TctMessageTemplateDtl { FieldName = fn, FieldType = f.FieldType, FieldDesc = f.FieldDesc });
+        }
+
+        await db.SaveChangesAsync();
+        return (true, id.HasValue && id.Value > 0 ? $"Đã cập nhật mẫu thông điệp '{code}'." : $"Đã tạo mẫu thông điệp '{code}'.", e.Id);
+    }
+
+    // Xóa mẫu thông điệp theo id (theo Mst_MessageTemplate_Delete của TVAN gốc).
+    public async Task<(bool ok, string msg)> DeleteTctMessageTemplateAsync(int id)
+    {
+        var e = await db.TctMessageTemplates.Include(t => t.Details).FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy mẫu thông điệp.");
+        db.TctMessageTemplates.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa mẫu thông điệp '{e.MessageTplCode}'.");
     }
 }

@@ -2253,3 +2253,49 @@ public class PasswordChangeLog : IOrgOwned
     public string? By { get; set; }                        // Người thực hiện
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
+// Loại thông điệp trao đổi với cơ quan thuế (theo TConst.MLTDiep của TVAN gốc — Nghị định 70/2025/NĐ-CP):
+// 100 = tờ khai đăng ký/thay đổi thông tin sử dụng HĐĐT; 102 = CQT tiếp nhận tờ khai;
+// 103 = CQT chấp nhận/từ chối tờ khai; 107 = thông báo giải trình; 108 = thông báo ngừng sử dụng HĐĐT;
+// 200 = dữ liệu hóa đơn; 202 = CQT phát hành HĐ thành công; 204 = CQT từ chối HĐ;
+// 300 = thông báo HĐĐT có sai sót; 301 = CQT tiếp nhận & xử lý HĐĐT sai sót.
+public enum TctMessageTypeCode
+{
+    Register100 = 100, Receive102 = 102, Accept103 = 103, Explain107 = 107, Stop108 = 108,
+    Invoice200 = 200, Issued202 = 202, Reject204 = 204, Error300 = 300, ErrorReply301 = 301
+}
+
+// Mẫu thông điệp trao đổi với cơ quan thuế (theo bảng Mst_MessageTemplate của TVAN gốc):
+// mỗi mẫu gắn với một loại thông điệp (MLTDiep) và định nghĩa thân thông điệp (XML/HTML) dùng để
+// dựng nội dung gửi CQT. Khóa nghiệp vụ: (OrgId, MessageTplCode).
+public class TctMessageTemplate : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string MessageTplCode { get; set; } = "";        // Mã mẫu thông điệp
+    public string MessageTplName { get; set; } = "";        // Tên mẫu thông điệp
+    public TctMessageTypeCode MessageTypeCode { get; set; } = TctMessageTypeCode.Register100;   // Loại thông điệp (MLTDiep)
+    public string? MessageTplBody { get; set; }             // Thân mẫu (XML/HTML)
+    public string? MessageTplFileName { get; set; }         // Tên file mẫu
+    public string? MessageTplFilePath { get; set; }         // Đường dẫn file mẫu
+    public bool FlagActive { get; set; } = true;            // Mẫu đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+
+    public List<TctMessageTemplateDtl> Details { get; set; } = new();
+}
+
+// Trường động của mẫu thông điệp (theo bảng Mst_MessageTemplateDtl của TVAN gốc):
+// mỗi dòng khai báo một trường (FieldName) và kiểu dữ liệu (FieldType) dùng trong thân mẫu.
+// Khóa nghiệp vụ: (OrgId, MessageTemplateId, FieldName).
+public class TctMessageTemplateDtl : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int MessageTemplateId { get; set; }
+    public TctMessageTemplate? Template { get; set; }
+    public string FieldName { get; set; } = "";             // Tên trường
+    public string? FieldType { get; set; }                  // Kiểu dữ liệu (TEXT/NUMBER/DATE)
+    public string? FieldDesc { get; set; }                  // Mô tả trường
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}

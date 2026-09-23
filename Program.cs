@@ -1843,6 +1843,28 @@ app.MapPost("/api/order-commissions/approve", async (ApproveCommissionsDto dto, 
     return ok ? Results.Ok(new { approvedCount = count, msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Mẫu thông điệp trao đổi với cơ quan thuế (theo Mst_MessageTemplate của TVAN gốc): danh sách (lọc theo loại thông điệp + từ khóa).
+app.MapGet("/api/tct-message-templates", async (TctMessageTypeCode? type, string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.TctMessageTemplatesAsync(type, keyword);
+    return Results.Ok(ls.Select(m => new { m.Id, m.MessageTplCode, m.MessageTplName, type = (int)m.MessageTypeCode, typeText = Ui.TctMsgType(m.MessageTypeCode), m.MessageTplFileName, m.MessageTplFilePath, m.FlagActive, fields = m.Details.Count, m.UpdatedAt, m.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) mẫu thông điệp theo mã (theo Mst_MessageTemplate_Create/Update của TVAN gốc).
+app.MapPost("/api/tct-message-templates", async (TctMessageTemplateDto dto, ITvanService svc) =>
+{
+    var fields = (dto.Fields ?? new()).Select(f => new TctMessageTemplateField(f.FieldName ?? "", f.FieldType, f.FieldDesc)).ToList();
+    var (ok, msg, id) = await svc.SaveTctMessageTemplateAsync(dto.Id, dto.Code ?? "", dto.Name ?? "", dto.Type, dto.Body, dto.FileName, dto.FilePath, dto.Active, fields, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa mẫu thông điệp theo id (theo Mst_MessageTemplate_Delete của TVAN gốc).
+app.MapDelete("/api/tct-message-templates/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteTctMessageTemplateAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -1955,3 +1977,5 @@ record LicOrderDto(int? Id, string? OrderNo, string? OrgCode, string? OrgName, s
 record OrderByDto(string? By);
 record LicOrderCommissionDto(int? Id, string? OrderNo, string? Mst, string? DlCode, string? Presenter1, string? Presenter2, string? Telesale, string? Consultants, string? Implementer, decimal CommissionPresenter1, decimal CommissionPresenter2, decimal CommissionTelesale, decimal CommissionConsultants, decimal CommissionImplementer, string? Remark, string? By);
 record ApproveCommissionsDto(List<int>? Ids, string? By);
+record TctMessageTemplateFieldDto(string? FieldName, string? FieldType, string? FieldDesc);
+record TctMessageTemplateDto(int? Id, string? Code, string? Name, TctMessageTypeCode Type, string? Body, string? FileName, string? FilePath, bool Active, List<TctMessageTemplateFieldDto>? Fields, string? By);

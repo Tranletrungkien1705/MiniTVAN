@@ -2365,3 +2365,38 @@ public class OrderController(ITvanService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+// Mẫu thông điệp trao đổi với cơ quan thuế (theo Mst_MessageTemplate của TVAN gốc):
+// mỗi mẫu gắn với một loại thông điệp (MLTDiep) và định nghĩa thân thông điệp + danh sách trường động.
+public class TctMessageTemplateController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(TctMessageTypeCode? type, string? keyword)
+    {
+        ViewBag.Type = type;
+        ViewBag.Keyword = keyword;
+        return View(await svc.TctMessageTemplatesAsync(type, keyword));
+    }
+
+    // Lưu (tạo mới/cập nhật) mẫu thông điệp theo mã (theo Mst_MessageTemplate_Create/Update của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string name, TctMessageTypeCode type, string? body, string? fileName, string? filePath, bool active, string? fieldNames, string? fieldTypes, string? by)
+    {
+        var fields = new List<TctMessageTemplateField>();
+        var names = (fieldNames ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var types = (fieldTypes ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        for (int i = 0; i < names.Length; i++)
+            fields.Add(new TctMessageTemplateField(names[i], i < types.Length ? types[i] : null, null));
+
+        var (ok, msg, _) = await svc.SaveTctMessageTemplateAsync(id, code, name, type, body, fileName, filePath, active, fields, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Xóa mẫu thông điệp theo id (theo Mst_MessageTemplate_Delete của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteTctMessageTemplateAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}

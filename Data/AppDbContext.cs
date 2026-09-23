@@ -97,6 +97,8 @@ public class AppDbContext : DbContext
     public DbSet<LicOrder> LicOrders => Set<LicOrder>();
     public DbSet<LicOrderDetail> LicOrderDetails => Set<LicOrderDetail>();
     public DbSet<LicOrderCommission> LicOrderCommissions => Set<LicOrderCommission>();
+    public DbSet<TctMessageTemplate> TctMessageTemplates => Set<TctMessageTemplate>();
+    public DbSet<TctMessageTemplateDtl> TctMessageTemplateDtls => Set<TctMessageTemplateDtl>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -621,6 +623,17 @@ public class AppDbContext : DbContext
             e.Property(x => x.CommissionConsultants).HasPrecision(18, 2);
             e.Property(x => x.CommissionImplementer).HasPrecision(18, 2);
             e.HasIndex(x => new { x.OrgId, x.OrderNo }).IsUnique();   // mỗi đơn hàng một bản ghi hoa hồng
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<TctMessageTemplate>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.MessageTplCode }).IsUnique();   // mỗi tổ chức một mã mẫu thông điệp
+            e.HasMany(x => x.Details).WithOne(d => d.Template).HasForeignKey(d => d.MessageTemplateId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<TctMessageTemplateDtl>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.MessageTemplateId });
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

@@ -421,6 +421,22 @@ public static class Ui
         _ => (s.ToString(), "secondary")
     };
 
+    // Loại thông điệp trao đổi với cơ quan thuế (theo TConst.MLTDiep của TVAN gốc — Nghị định 70/2025/NĐ-CP).
+    public static string TctMsgType(TctMessageTypeCode t) => t switch
+    {
+        TctMessageTypeCode.Register100   => "100 — Đăng ký/thay đổi thông tin sử dụng HĐĐT",
+        TctMessageTypeCode.Receive102    => "102 — CQT tiếp nhận tờ khai",
+        TctMessageTypeCode.Accept103     => "103 — CQT chấp nhận/từ chối tờ khai",
+        TctMessageTypeCode.Explain107    => "107 — Thông báo giải trình",
+        TctMessageTypeCode.Stop108       => "108 — Thông báo ngừng sử dụng HĐĐT",
+        TctMessageTypeCode.Invoice200    => "200 — Dữ liệu hóa đơn",
+        TctMessageTypeCode.Issued202     => "202 — CQT phát hành HĐ thành công",
+        TctMessageTypeCode.Reject204     => "204 — CQT từ chối hóa đơn",
+        TctMessageTypeCode.Error300      => "300 — HĐĐT đã lập có sai sót",
+        TctMessageTypeCode.ErrorReply301 => "301 — Tiếp nhận & xử lý HĐĐT sai sót",
+        _ => ((int)t).ToString()
+    };
+
     // Kết quả một lần đổi mật khẩu người dùng (theo Sys_User_ChangePassword của TVAN gốc).
     public static (string text, string css) PasswordChange(Models.PasswordChangeResult r) => r switch
     {

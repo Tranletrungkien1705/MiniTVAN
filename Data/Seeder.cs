@@ -1281,6 +1281,40 @@ public static class Seeder
             });
             await db.SaveChangesAsync();
         }
+
+        // Mẫu thông điệp trao đổi với cơ quan thuế (theo Mst_MessageTemplate của TVAN gốc — Nghị định 70/2025/NĐ-CP):
+        // 2 mẫu demo (tờ khai đăng ký 100 + thông báo sai sót 300) kèm trường động.
+        if (!await db.TctMessageTemplates.AnyAsync())
+        {
+            db.TctMessageTemplates.AddRange(
+                new TctMessageTemplate
+                {
+                    MessageTplCode = "MSG100", MessageTplName = "Tờ khai đăng ký sử dụng HĐĐT",
+                    MessageTypeCode = TctMessageTypeCode.Register100,
+                    MessageTplBody = "<TKhai><DLTKhai><TTChung><MST>{MST}</MST><TNNT>{TNNT}</TNNT></TTChung></DLTKhai></TKhai>",
+                    MessageTplFileName = "01DKHDDT.xml", MessageTplFilePath = "Templates/01DKHDDT.xml", FlagActive = true,
+                    UpdatedAt = DateTime.UtcNow, UpdatedBy = "kế toán",
+                    Details = new List<TctMessageTemplateDtl>
+                    {
+                        new() { FieldName = "MST", FieldType = "TEXT", FieldDesc = "Mã số thuế người nộp thuế" },
+                        new() { FieldName = "TNNT", FieldType = "TEXT", FieldDesc = "Tên người nộp thuế" }
+                    }
+                },
+                new TctMessageTemplate
+                {
+                    MessageTplCode = "MSG300", MessageTplName = "Thông báo hóa đơn điện tử có sai sót",
+                    MessageTypeCode = TctMessageTypeCode.Error300,
+                    MessageTplBody = "<TDiep><TTChung><MLTDiep>300</MLTDiep><MST>{MST}</MST></TTChung></TDiep>",
+                    MessageTplFileName = "01TB-HDSS.xml", MessageTplFilePath = "Templates/01TB-HDSS.xml", FlagActive = true,
+                    UpdatedAt = DateTime.UtcNow, UpdatedBy = "kế toán",
+                    Details = new List<TctMessageTemplateDtl>
+                    {
+                        new() { FieldName = "MST", FieldType = "TEXT", FieldDesc = "Mã số thuế người nộp thuế" },
+                        new() { FieldName = "MCCQT", FieldType = "TEXT", FieldDesc = "Mã của CQT cấp cho hóa đơn" }
+                    }
+                });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

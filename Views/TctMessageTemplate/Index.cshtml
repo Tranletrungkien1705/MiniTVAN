@@ -1,0 +1,130 @@
+@model List<TctMessageTemplate>
+@{
+    ViewData["Title"] = "Mẫu thông điệp CQT";
+    var type = ViewBag.Type as TctMessageTypeCode?;
+    var keyword = ViewBag.Keyword as string;
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-chat-left-text me-1"></i>Mẫu thông điệp trao đổi với cơ quan thuế</h6>
+            </div>
+            <form method="get" action="/TctMessageTemplate" class="row g-2 mb-3">
+                <div class="col-md-4">
+                    <select name="type" class="form-select form-select-sm">
+                        <option value="">— Tất cả loại thông điệp —</option>
+                        @foreach (var t in Enum.GetValues<TctMessageTypeCode>())
+                        {
+                            <option value="@((int)t)" selected="@(type == t)">@Ui.TctMsgType(t)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-4"><input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Mã / tên mẫu" /></div>
+                <div class="col-md-2"><button class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-search"></i> Lọc</button></div>
+            </form>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã mẫu</th><th>Tên mẫu</th><th>Loại thông điệp</th><th>Trường động</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var m in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@m.MessageTplCode</td>
+                        <td>
+                            @m.MessageTplName
+                            @if (!string.IsNullOrWhiteSpace(m.MessageTplFileName)) { <div class="small text-muted">@m.MessageTplFileName</div> }
+                        </td>
+                        <td class="small">@Ui.TctMsgType(m.MessageTypeCode)</td>
+                        <td class="small">
+                            @if (m.Details.Count == 0) { <span class="text-muted">—</span> }
+                            else
+                            {
+                                @foreach (var d in m.Details)
+                                {
+                                    <span class="badge bg-light text-dark border me-1">@d.FieldName@(string.IsNullOrWhiteSpace(d.FieldType) ? "" : $" ({d.FieldType})")</span>
+                                }
+                            }
+                        </td>
+                        <td>
+                            @if (m.FlagActive) { <span class="badge bg-success">Đang dùng</span> }
+                            else { <span class="badge bg-secondary">Ngừng dùng</span> }
+                        </td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#edit-@m.Id"><i class="bi bi-pencil"></i> Sửa</button>
+                            <form method="post" action="/TctMessageTemplate/Delete" class="d-inline" onsubmit="return confirm('Xóa mẫu thông điệp @m.MessageTplCode?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@m.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                            <div class="modal fade" id="edit-@m.Id" tabindex="-1">
+                                <div class="modal-dialog modal-lg"><div class="modal-content">
+                                    <form method="post" action="/TctMessageTemplate/Save">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@m.Id" />
+                                        <div class="modal-header"><h6 class="modal-title">Sửa mẫu thông điệp — @m.MessageTplCode</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                                        <div class="modal-body text-start row g-2">
+                                            <div class="col-md-4"><label class="form-label small mb-1">Mã mẫu</label><input name="code" value="@m.MessageTplCode" class="form-control form-control-sm" required /></div>
+                                            <div class="col-md-4"><label class="form-label small mb-1">Tên mẫu</label><input name="name" value="@m.MessageTplName" class="form-control form-control-sm" required /></div>
+                                            <div class="col-md-4">
+                                                <label class="form-label small mb-1">Loại thông điệp</label>
+                                                <select name="type" class="form-select form-select-sm">
+                                                    @foreach (var t in Enum.GetValues<TctMessageTypeCode>())
+                                                    {
+                                                        <option value="@((int)t)" selected="@(m.MessageTypeCode == t)">@Ui.TctMsgType(t)</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6"><label class="form-label small mb-1">Tên file mẫu</label><input name="fileName" value="@m.MessageTplFileName" class="form-control form-control-sm" /></div>
+                                            <div class="col-md-6"><label class="form-label small mb-1">Đường dẫn file mẫu</label><input name="filePath" value="@m.MessageTplFilePath" class="form-control form-control-sm" /></div>
+                                            <div class="col-12"><label class="form-label small mb-1">Thân mẫu (XML/HTML)</label><textarea name="body" class="form-control form-control-sm" rows="3">@m.MessageTplBody</textarea></div>
+                                            <div class="col-md-6"><label class="form-label small mb-1">Trường động (mỗi dòng 1 tên)</label><textarea name="fieldNames" class="form-control form-control-sm" rows="3">@string.Join("\n", m.Details.Select(d => d.FieldName))</textarea></div>
+                                            <div class="col-md-6"><label class="form-label small mb-1">Kiểu dữ liệu (mỗi dòng 1 kiểu)</label><textarea name="fieldTypes" class="form-control form-control-sm" rows="3">@string.Join("\n", m.Details.Select(d => d.FieldType ?? ""))</textarea></div>
+                                            <div class="col-12">
+                                                <div class="form-check"><input class="form-check-input" type="checkbox" name="active" value="true" id="act-@m.Id" checked="@m.FlagActive" /><label class="form-check-label small" for="act-@m.Id">Đang dùng</label></div>
+                                            </div>
+                                            <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                                        </div>
+                                        <div class="modal-footer"><button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Hủy</button><button class="btn btn-sm btn-primary">Lưu</button></div>
+                                    </form>
+                                </div></div>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có mẫu thông điệp nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm mẫu thông điệp</h6>
+            <form method="post" action="/TctMessageTemplate/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã mẫu</label><input name="code" class="form-control form-control-sm" placeholder="VD: MSG100" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Tên mẫu</label><input name="name" class="form-control form-control-sm" placeholder="VD: Tờ khai đăng ký HĐĐT" required /></div>
+                <div class="col-12">
+                    <label class="form-label small mb-1">Loại thông điệp</label>
+                    <select name="type" class="form-select form-select-sm">
+                        @foreach (var t in Enum.GetValues<TctMessageTypeCode>())
+                        {
+                            <option value="@((int)t)">@Ui.TctMsgType(t)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Tên file mẫu</label><input name="fileName" class="form-control form-control-sm" placeholder="(tùy chọn)" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Đường dẫn file mẫu</label><input name="filePath" class="form-control form-control-sm" placeholder="(tùy chọn)" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Thân mẫu (XML/HTML)</label><textarea name="body" class="form-control form-control-sm" rows="2" placeholder="(tùy chọn)"></textarea></div>
+                <div class="col-6"><label class="form-label small mb-1">Trường động (mỗi dòng 1 tên)</label><textarea name="fieldNames" class="form-control form-control-sm" rows="2" placeholder="MST&#10;TNNT"></textarea></div>
+                <div class="col-6"><label class="form-label small mb-1">Kiểu dữ liệu (mỗi dòng 1 kiểu)</label><textarea name="fieldTypes" class="form-control form-control-sm" rows="2" placeholder="TEXT&#10;TEXT"></textarea></div>
+                <div class="col-12">
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="active" value="true" id="act-new" checked /><label class="form-check-label small" for="act-new">Đang dùng</label></div>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu mẫu thông điệp</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Mẫu thông điệp định nghĩa thân thông điệp (XML/HTML) gửi cơ quan thuế theo từng loại thông điệp (100/102/103/200/300/301...).</p>
+        </div></div>
+    </div>
+</div>

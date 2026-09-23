@@ -6349,4 +6349,94 @@ public class DocTienTests
             Assert.Null(await svc.GetGovIdTypeAsync(id));
         }
     }
+
+    // ===== Mẫu thông điệp trao đổi với cơ quan thuế (theo Mst_MessageTemplate của TVAN gốc) =====
+
+    [Fact]
+    public async Task TctMessageTemplate_Save_CreatesWithFields()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var fields = new List<TctMessageTemplateField>
+            {
+                new("MST", "TEXT", "Mã số thuế"),
+                new("TNNT", "TEXT", "Tên NNT")
+            };
+            var (ok, msg, id) = await svc.SaveTctMessageTemplateAsync(null, "MSG100", "Tờ khai đăng ký HĐĐT", TctMessageTypeCode.Register100, "<TKhai/>", "01DKHDDT.xml", "Templates/01DKHDDT.xml", true, fields, "kế toán");
+            Assert.True(ok);
+            Assert.Contains("tạo", msg);
+            var e = await svc.GetTctMessageTemplateAsync(id);
+            Assert.NotNull(e);
+            Assert.Equal(TctMessageTypeCode.Register100, e!.MessageTypeCode);
+            Assert.Equal(2, e.Details.Count);
+        }
+    }
+
+    [Fact]
+    public async Task TctMessageTemplate_Save_Update_ReplacesFields()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveTctMessageTemplateAsync(null, "MSG300", "Thông báo sai sót", TctMessageTypeCode.Error300, null, null, null, true,
+                new List<TctMessageTemplateField> { new("MST", "TEXT", null) }, "kế toán");
+            var (ok, msg, _) = await svc.SaveTctMessageTemplateAsync(id, "MSG300", "Thông báo HĐĐT sai sót", TctMessageTypeCode.Error300, "<TDiep/>", null, null, true,
+                new List<TctMessageTemplateField> { new("MST", "TEXT", null), new("MCCQT", "TEXT", null) }, "kế toán");
+            Assert.True(ok);
+            Assert.Contains("cập nhật", msg);
+            var e = await svc.GetTctMessageTemplateAsync(id);
+            Assert.Equal("Thông báo HĐĐT sai sót", e!.MessageTplName);
+            Assert.Equal(2, e.Details.Count);
+        }
+    }
+
+    [Fact]
+    public async Task TctMessageTemplate_Save_DuplicateCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveTctMessageTemplateAsync(null, "MSG100", "A", TctMessageTypeCode.Register100, null, null, null, true, new(), "kế toán");
+            var (ok, msg, _) = await svc.SaveTctMessageTemplateAsync(null, "MSG100", "B", TctMessageTypeCode.Register100, null, null, null, true, new(), "kế toán");
+            Assert.False(ok);
+            Assert.Contains("đã tồn tại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task TctMessageTemplate_Save_MissingCodeOrName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok1, msg1, _) = await svc.SaveTctMessageTemplateAsync(null, "  ", "A", TctMessageTypeCode.Register100, null, null, null, true, new(), "kế toán");
+            Assert.False(ok1);
+            Assert.Contains("mã mẫu", msg1);
+            var (ok2, msg2, _) = await svc.SaveTctMessageTemplateAsync(null, "MSG100", "  ", TctMessageTypeCode.Register100, null, null, null, true, new(), "kế toán");
+            Assert.False(ok2);
+            Assert.Contains("tên mẫu", msg2);
+        }
+    }
+
+    [Fact]
+    public async Task TctMessageTemplate_List_FilteredByTypeAndKeyword()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveTctMessageTemplateAsync(null, "MSG100", "Tờ khai đăng ký", TctMessageTypeCode.Register100, null, null, null, true, new(), "kế toán");
+            await svc.SaveTctMessageTemplateAsync(null, "MSG300", "Thông báo sai sót", TctMessageTypeCode.Error300, null, null, null, true, new(), "kế toán");
+            Assert.Equal(2, (await svc.TctMessageTemplatesAsync(null, null)).Count);
+            Assert.Single(await svc.TctMessageTemplatesAsync(TctMessageTypeCode.Error300, null));
+            Assert.Single(await svc.TctMessageTemplatesAsync(null, "MSG100"));
+        }
+    }
+
+    [Fact]
+    public async Task TctMessageTemplate_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveTctMessageTemplateAsync(null, "MSG100", "A", TctMessageTypeCode.Register100, null, null, null, true, new(), "kế toán");
+            var (ok, _) = await svc.DeleteTctMessageTemplateAsync(id);
+            Assert.True(ok);
+            Assert.Null(await svc.GetTctMessageTemplateAsync(id));
+        }
+    }
 }
