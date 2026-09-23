@@ -155,6 +155,12 @@ public interface ITvanService
     Task<(bool ok, string msg)> UpdateNotifyRecipientAsync(int id, string? userName, string? by);
     Task<(bool ok, string msg)> DeleteNotifyRecipientAsync(int id);
     Task<(bool ok, string msg)> SaveNotifyRecipientTypesAsync(int id, List<(string notifyType, bool flagNotify)> types, string? by);
+
+    // Cấu hình định dạng cột hiển thị theo bảng (theo Mst_ColumnConfig của TVAN gốc)
+    Task<List<ColumnConfig>> ColumnConfigsAsync(string? tableName, string? keyword);
+    Task<ColumnConfig?> GetColumnConfigAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveColumnConfigAsync(int? id, string tableName, string columnName, string? columnFormat, string? columnDesc, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteColumnConfigAsync(int id);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -3026,6 +3032,59 @@ public class TvanService(AppDbContext db) : ITvanService
         e.UpdatedBy = by;
         await db.SaveChangesAsync();
         return (true, $"Đã lưu đăng ký nhận thông báo cho {e.UserCode}.");
+    }
+
+    // Cấu hình định dạng cột hiển thị theo bảng (theo Mst_ColumnConfig của TVAN gốc):
+    // danh sách cấu hình (lọc theo bảng + từ khóa tên bảng/cột/mô tả).
+    public Task<List<ColumnConfig>> ColumnConfigsAsync(string? tableName, string? keyword)
+    {
+        var q = db.ColumnConfigs.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(tableName)) q = q.Where(c => c.TableName == tableName.Trim());
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(c => c.TableName.Contains(k) || c.ColumnName.Contains(k) || (c.ColumnDesc != null && c.ColumnDesc.Contains(k)));
+        }
+        return q.OrderBy(c => c.TableName).ThenBy(c => c.ColumnName).ToListAsync();
+    }
+
+    public Task<ColumnConfig?> GetColumnConfigAsync(int id) => db.ColumnConfigs.FirstOrDefaultAsync(c => c.Id == id);
+
+    // Lưu (tạo mới/cập nhật) cấu hình cột theo khóa nghiệp vụ (TableName, ColumnName)
+    // (theo Mst_ColumnConfig_Create / Mst_ColumnConfig_Update của TVAN gốc).
+    public async Task<(bool ok, string msg, int id)> SaveColumnConfigAsync(int? id, string tableName, string columnName, string? columnFormat, string? columnDesc, bool active, string? by)
+    {
+        tableName = (tableName ?? "").Trim();
+        columnName = (columnName ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(tableName)) return (false, "Cần tên bảng.", 0);
+        if (string.IsNullOrWhiteSpace(columnName)) return (false, "Cần tên cột.", 0);
+
+        ColumnConfig? e = null;
+        if (id.HasValue) e = await db.ColumnConfigs.FirstOrDefaultAsync(c => c.Id == id.Value);
+        e ??= await db.ColumnConfigs.FirstOrDefaultAsync(c => c.TableName == tableName && c.ColumnName == columnName);
+
+        if (e == null)
+        {
+            e = new ColumnConfig { TableName = tableName, ColumnName = columnName };
+            db.ColumnConfigs.Add(e);
+        }
+        e.ColumnFormat = columnFormat;
+        e.ColumnDesc = columnDesc;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu cấu hình cột {tableName}.{columnName}.", e.Id);
+    }
+
+    // Xóa cấu hình cột theo id (theo Mst_ColumnConfig_Delete của TVAN gốc).
+    public async Task<(bool ok, string msg)> DeleteColumnConfigAsync(int id)
+    {
+        var e = await db.ColumnConfigs.FirstOrDefaultAsync(c => c.Id == id);
+        if (e == null) return (false, "Không tìm thấy cấu hình cột.");
+        db.ColumnConfigs.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa cấu hình cột {e.TableName}.{e.ColumnName}.");
     }
 
     private static (DateTime from, DateTime to) PeriodRange(PeriodType t, string kdlieu)

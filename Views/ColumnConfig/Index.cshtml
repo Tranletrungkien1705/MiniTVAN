@@ -1,0 +1,71 @@
+@model List<ColumnConfig>
+@{
+    ViewData["Title"] = "Cấu hình cột hiển thị";
+    var tableName = ViewBag.TableName as string;
+    var keyword = ViewBag.Keyword as string;
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-input-cursor-text me-1"></i>Cấu hình định dạng cột theo bảng</h6>
+                <form method="get" action="/ColumnConfig" class="d-flex gap-2">
+                    <input name="tableName" value="@tableName" class="form-control form-control-sm" placeholder="Tên bảng" />
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm bảng / cột / mô tả" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Bảng</th><th>Cột</th><th>Định dạng</th><th>Mô tả</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var c in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@c.TableName</td>
+                        <td>@c.ColumnName</td>
+                        <td><code>@(string.IsNullOrWhiteSpace(c.ColumnFormat) ? "—" : c.ColumnFormat)</code></td>
+                        <td>@(string.IsNullOrWhiteSpace(c.ColumnDesc) ? "—" : c.ColumnDesc)</td>
+                        <td>
+                            @if (c.FlagActive) { <span class="badge bg-success">Đang dùng</span> }
+                            else { <span class="badge bg-secondary">Ngừng dùng</span> }
+                        </td>
+                        <td class="small text-muted">
+                            @if (c.UpdatedAt.HasValue) { <div>@c.UpdatedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div> }
+                            @if (!string.IsNullOrWhiteSpace(c.UpdatedBy)) { <div>@c.UpdatedBy</div> }
+                            @if (!c.UpdatedAt.HasValue && string.IsNullOrWhiteSpace(c.UpdatedBy)) { <span>—</span> }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/ColumnConfig/Delete" class="d-inline" onsubmit="return confirm('Xóa cấu hình cột @c.TableName.@c.ColumnName?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@c.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có cấu hình cột nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm / cập nhật cấu hình cột</h6>
+            <form method="post" action="/ColumnConfig/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Tên bảng</label><input name="tableName" class="form-control form-control-sm" placeholder="Invoice_Invoice" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Tên cột</label><input name="columnName" class="form-control form-control-sm" placeholder="InvoiceNo" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Định dạng hiển thị</label><input name="columnFormat" class="form-control form-control-sm" placeholder="dd/MM/yyyy hoặc N0" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Mô tả cột</label><input name="columnDesc" class="form-control form-control-sm" placeholder="Số hóa đơn" /></div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="active" value="true" id="ccActive" checked />
+                    <label class="form-check-label small" for="ccActive">Đang dùng</label>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu cấu hình cột</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Lưu cùng (tên bảng + tên cột) = cập nhật cấu hình đã có (theo khóa nghiệp vụ OrgId + TableName + ColumnName).</p>
+        </div></div>
+    </div>
+</div>

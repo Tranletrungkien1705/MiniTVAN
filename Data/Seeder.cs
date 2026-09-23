@@ -621,6 +621,17 @@ public static class Seeder
             }
             await db.SaveChangesAsync();
         }
+
+        // Cấu hình định dạng cột hiển thị theo bảng (theo Mst_ColumnConfig của TVAN gốc):
+        // tổ chức demo khai báo định dạng hiển thị cho một số cột của bảng hóa đơn.
+        if (!await db.ColumnConfigs.AnyAsync())
+        {
+            db.ColumnConfigs.AddRange(
+                new ColumnConfig { TableName = "Invoice_Invoice", ColumnName = "InvoiceDateUTC", ColumnFormat = "dd/MM/yyyy", ColumnDesc = "Ngày hóa đơn", FlagActive = true, UpdatedBy = "kế toán" },
+                new ColumnConfig { TableName = "Invoice_Invoice", ColumnName = "TotalValPmt", ColumnFormat = "N0", ColumnDesc = "Tổng tiền thanh toán", FlagActive = true, UpdatedBy = "kế toán" },
+                new ColumnConfig { TableName = "Invoice_Invoice", ColumnName = "InvoiceNo", ColumnFormat = "00000000", ColumnDesc = "Số hóa đơn", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

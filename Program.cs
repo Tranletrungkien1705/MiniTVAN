@@ -913,6 +913,27 @@ app.MapPost("/api/notify-recipients/{id:int}/types", async (int id, SaveNotifyRe
     return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
 });
 
+// Cấu hình định dạng cột hiển thị theo bảng (theo Mst_ColumnConfig của TVAN gốc): danh sách (lọc theo bảng + từ khóa).
+app.MapGet("/api/column-configs", async (string? tableName, string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.ColumnConfigsAsync(tableName, keyword);
+    return Results.Ok(ls.Select(c => new { c.Id, c.TableName, c.ColumnName, c.ColumnFormat, c.ColumnDesc, c.FlagActive, c.UpdatedAt, c.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) cấu hình cột theo khóa (TableName, ColumnName) (theo Mst_ColumnConfig_Create/Update của TVAN gốc).
+app.MapPost("/api/column-configs", async (ColumnConfigDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveColumnConfigAsync(dto.Id, dto.TableName ?? "", dto.ColumnName ?? "", dto.ColumnFormat, dto.ColumnDesc, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa cấu hình cột theo id (theo Mst_ColumnConfig_Delete của TVAN gốc).
+app.MapDelete("/api/column-configs/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteColumnConfigAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -974,3 +995,4 @@ record CreateNotifyRecipientDto(string? UserCode, string? UserName, string? By);
 record UpdateNotifyRecipientDto(string? UserName, string? By);
 record NotifyRecipientTypeDto(string? NotifyType, bool FlagNotify);
 record SaveNotifyRecipientTypesDto(List<NotifyRecipientTypeDto>? Types, string? By);
+record ColumnConfigDto(int? Id, string? TableName, string? ColumnName, string? ColumnFormat, string? ColumnDesc, bool Active, string? By);

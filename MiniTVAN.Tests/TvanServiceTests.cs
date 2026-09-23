@@ -3160,4 +3160,76 @@ public class TvanServiceTests
             Assert.Empty(await db.NotifyRecipientTypes.ToListAsync());
         }
     }
+
+    [Fact]
+    public async Task ColumnConfig_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveColumnConfigAsync(null, "Invoice_Invoice", "InvoiceNo", "00000000", "Số hóa đơn", true, "kế toán");
+            Assert.True(ok);
+            var e = await svc.GetColumnConfigAsync(id);
+            Assert.NotNull(e);
+            Assert.Equal("Invoice_Invoice", e!.TableName);
+            Assert.Equal("InvoiceNo", e.ColumnName);
+            Assert.Equal("00000000", e.ColumnFormat);
+            Assert.True(e.FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task ColumnConfig_Save_SameKey_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveColumnConfigAsync(null, "Invoice_Invoice", "InvoiceNo", "00000000", "Số hóa đơn", true, "kế toán");
+            // Lưu lại cùng (bảng, cột) = cập nhật, không tạo mới.
+            var (ok, _, id2) = await svc.SaveColumnConfigAsync(null, "Invoice_Invoice", "InvoiceNo", "N0", "Số HĐ", false, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            var all = await svc.ColumnConfigsAsync(null, null);
+            Assert.Single(all);
+            Assert.Equal("N0", all[0].ColumnFormat);
+            Assert.False(all[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task ColumnConfig_Save_MissingTableOrColumn_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok1, msg1, _) = await svc.SaveColumnConfigAsync(null, "  ", "InvoiceNo", null, null, true, null);
+            Assert.False(ok1);
+            Assert.Contains("tên bảng", msg1);
+            var (ok2, msg2, _) = await svc.SaveColumnConfigAsync(null, "Invoice_Invoice", "  ", null, null, true, null);
+            Assert.False(ok2);
+            Assert.Contains("tên cột", msg2);
+        }
+    }
+
+    [Fact]
+    public async Task ColumnConfig_Filter_ByTableAndKeyword()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveColumnConfigAsync(null, "Invoice_Invoice", "InvoiceNo", null, "Số hóa đơn", true, null);
+            await svc.SaveColumnConfigAsync(null, "Invoice_Invoice", "InvoiceDateUTC", null, "Ngày hóa đơn", true, null);
+            await svc.SaveColumnConfigAsync(null, "Mst_NNT", "MST", null, "Mã số thuế", true, null);
+            Assert.Equal(2, (await svc.ColumnConfigsAsync("Invoice_Invoice", null)).Count);
+            Assert.Single(await svc.ColumnConfigsAsync(null, "Ngày"));
+        }
+    }
+
+    [Fact]
+    public async Task ColumnConfig_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveColumnConfigAsync(null, "Invoice_Invoice", "InvoiceNo", null, null, true, null);
+            var (ok, _) = await svc.DeleteColumnConfigAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.ColumnConfigsAsync(null, null));
+        }
+    }
 }

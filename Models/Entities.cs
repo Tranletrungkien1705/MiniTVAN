@@ -1083,3 +1083,21 @@ public class NotifyRecipientType : IOrgOwned
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
+
+// Cấu hình định dạng cột hiển thị theo bảng (theo bảng Mst_ColumnConfig của TVAN gốc):
+// mỗi tổ chức tự khai báo định dạng hiển thị (ColumnFormat) + mô tả (ColumnDesc) cho một cột
+// (ColumnName) của một bảng (TableName) — dùng để tùy biến cách hiển thị dữ liệu trên lưới.
+// Khóa nghiệp vụ: (OrgId, TableName, ColumnName). FlagActive = cấu hình đang dùng hay không.
+public class ColumnConfig : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string TableName { get; set; } = "";      // Tên bảng (VD Invoice_Invoice)
+    public string ColumnName { get; set; } = "";     // Tên cột (VD InvoiceNo)
+    public string? ColumnFormat { get; set; }         // Định dạng hiển thị (VD dd/MM/yyyy, N0)
+    public string? ColumnDesc { get; set; }           // Mô tả cột
+    public bool FlagActive { get; set; } = true;      // Cấu hình đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}

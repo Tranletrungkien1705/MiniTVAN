@@ -1067,6 +1067,34 @@ public class NotifyRecipientController(ITvanService svc) : Controller
     }
 }
 
+// Cấu hình định dạng cột hiển thị theo bảng (theo Mst_ColumnConfig của TVAN gốc):
+// mỗi tổ chức khai báo định dạng hiển thị + mô tả cho một cột của một bảng.
+public class ColumnConfigController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? tableName, string? keyword)
+    {
+        ViewBag.TableName = tableName;
+        ViewBag.Keyword = keyword;
+        return View(await svc.ColumnConfigsAsync(tableName, keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string tableName, string columnName, string? columnFormat, string? columnDesc, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveColumnConfigAsync(id, tableName, columnName, columnFormat, columnDesc, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteColumnConfigAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

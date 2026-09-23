@@ -53,6 +53,7 @@ public class AppDbContext : DbContext
     public DbSet<NotifyDtl> NotifyDtls => Set<NotifyDtl>();
     public DbSet<NotifyRecipient> NotifyRecipients => Set<NotifyRecipient>();
     public DbSet<NotifyRecipientType> NotifyRecipientTypes => Set<NotifyRecipientType>();
+    public DbSet<ColumnConfig> ColumnConfigs => Set<ColumnConfig>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -316,6 +317,11 @@ public class AppDbContext : DbContext
         b.Entity<NotifyRecipientType>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.UserCode, x.NotifyType }).IsUnique();   // mỗi người nhận một loại thông báo
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ColumnConfig>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.TableName, x.ColumnName }).IsUnique();   // mỗi tổ chức một cấu hình cho (bảng, cột)
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }
