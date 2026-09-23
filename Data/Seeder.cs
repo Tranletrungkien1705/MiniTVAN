@@ -565,6 +565,17 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Danh mục phương thức thanh toán (theo Mst_PaymentMethods của TVAN gốc):
+        // các phương thức thanh toán demo dùng khi lập hóa đơn.
+        if (!await db.PaymentMethods.AnyAsync())
+        {
+            db.PaymentMethods.AddRange(
+                new PaymentMethodMaster { PaymentMethodCode = "TM", PaymentMethodName = "Tiền mặt", Remark = "Thanh toán bằng tiền mặt", FlagActive = true, UpdatedBy = "kế toán" },
+                new PaymentMethodMaster { PaymentMethodCode = "CK", PaymentMethodName = "Chuyển khoản", Remark = "Thanh toán bằng chuyển khoản", FlagActive = true, UpdatedBy = "kế toán" },
+                new PaymentMethodMaster { PaymentMethodCode = "TM/CK", PaymentMethodName = "Tiền mặt/Chuyển khoản", Remark = "Tiền mặt hoặc chuyển khoản", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+
         // Danh mục thuế suất VAT (theo Mst_VATRate của TVAN gốc):
         // các mức thuế suất demo dùng khi lập hóa đơn (mã theo Client_Mst_VATRate của TVAN gốc).
         if (!await db.VatRates.AnyAsync())

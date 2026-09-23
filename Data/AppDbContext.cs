@@ -89,6 +89,7 @@ public class AppDbContext : DbContext
     public DbSet<ProductId> ProductIds => Set<ProductId>();
     public DbSet<PrdIdCustomField> PrdIdCustomFields => Set<PrdIdCustomField>();
     public DbSet<HistRegisterService> HistRegisterServices => Set<HistRegisterService>();
+    public DbSet<PaymentMethodMaster> PaymentMethods => Set<PaymentMethodMaster>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -560,6 +561,11 @@ public class AppDbContext : DbContext
         b.Entity<HistRegisterService>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.MTDiep }).IsUnique();   // mỗi tổ chức một mã thông điệp đăng ký
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PaymentMethodMaster>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.PaymentMethodCode }).IsUnique();   // mỗi tổ chức một mã phương thức
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

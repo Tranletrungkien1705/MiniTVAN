@@ -2171,3 +2171,24 @@ public class HistRegisterServiceController(ITvanService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+// Danh mục phương thức thanh toán (theo Mst_PaymentMethods của TVAN gốc):
+// danh mục hệ thống liệt kê các phương thức thanh toán dùng khi lập hóa đơn (TM, CK, TM/CK...).
+// Nguồn chỉ có Get + CheckDB (danh mục đọc) nên màn này chỉ hiển thị + kiểm tra hợp lệ.
+public class PaymentMethodController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.PaymentMethodsAsync(keyword));
+    }
+
+    // Kiểm tra một mã phương thức thanh toán có tồn tại / đang dùng hay không
+    // (theo Mst_PaymentMethods_CheckDB của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Check(string code, bool mustExist, bool mustActive)
+    {
+        var (ok, msg) = await svc.CheckPaymentMethodAsync(code, mustExist, mustActive);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}

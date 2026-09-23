@@ -2051,3 +2051,19 @@ public class HistRegisterService : IOrgOwned
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
+// Danh mục phương thức thanh toán (theo bảng Mst_PaymentMethods của TVAN gốc): danh mục hệ thống
+// liệt kê các phương thức thanh toán dùng khi lập hóa đơn (VD TM = tiền mặt, CK = chuyển khoản,
+// TM/CK = tiền mặt/chuyển khoản). Nguồn chỉ có Get + CheckDB (danh mục đọc, không CRUD).
+// Khóa nghiệp vụ: (OrgId, PaymentMethodCode). FlagActive = phương thức đang dùng hay không.
+public class PaymentMethodMaster : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string PaymentMethodCode { get; set; } = "";   // Mã phương thức thanh toán
+    public string PaymentMethodName { get; set; } = "";   // Tên phương thức thanh toán
+    public string? Remark { get; set; }                    // Ghi chú
+    public bool FlagActive { get; set; } = true;           // Phương thức đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}

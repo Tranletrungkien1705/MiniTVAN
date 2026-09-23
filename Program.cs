@@ -806,6 +806,21 @@ app.MapDelete("/api/nnt-types/{id:int}", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Danh mục phương thức thanh toán (theo Mst_PaymentMethods của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
+app.MapGet("/api/payment-methods", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.PaymentMethodsAsync(keyword);
+    return Results.Ok(ls.Select(t => new { t.Id, t.PaymentMethodCode, t.PaymentMethodName, t.Remark, t.FlagActive, t.UpdatedAt, t.UpdatedBy }));
+});
+
+// Kiểm tra một mã phương thức thanh toán có tồn tại / đang dùng hay không
+// (theo Mst_PaymentMethods_CheckDB của TVAN gốc).
+app.MapGet("/api/payment-methods/check/{code}", async (string code, bool? mustExist, bool? mustActive, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.CheckPaymentMethodAsync(code, mustExist ?? true, mustActive ?? true);
+    return ok ? Results.Ok(new { code, ok, msg }) : Results.BadRequest(new { code, ok, error = msg });
+});
+
 // Danh mục thuế suất VAT (theo Mst_VATRate của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
 app.MapGet("/api/vat-rates", async (string? keyword, ITvanService svc) =>
 {

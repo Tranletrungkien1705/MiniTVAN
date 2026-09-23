@@ -312,6 +312,11 @@ public interface ITvanService
     Task<HistRegisterService?> GetHistRegisterServiceAsync(int id);
     Task<(bool ok, string msg, int id)> CreateHistRegisterServiceAsync(string mst, DateTime ngui, string? htdk, string? lhDon, string? hThuc, bool cMa, bool cMTTien, bool kCMa, RegSendMethod ptghDon, string? mlTDiep, string? mccqt, string? xmlBase64, string? by);
     Task<(bool ok, string msg)> ReceiveHistRegisterServiceResultAsync(int id, string mltDiep, bool chapNhan, string? mccqt, string? message, string? by);
+
+    // Danh mục phương thức thanh toán (theo Mst_PaymentMethods của TVAN gốc)
+    Task<List<PaymentMethodMaster>> PaymentMethodsAsync(string? keyword);
+    Task<PaymentMethodMaster?> GetPaymentMethodAsync(int id);
+    Task<(bool ok, string msg)> CheckPaymentMethodAsync(string code, bool mustExist, bool mustActive);
 }
 
 // Hồ sơ NNT đầy đủ dùng khi lưu (theo Mst_NNT_Create/Update của TVAN gốc).
@@ -6019,5 +6024,37 @@ public class TvanService(AppDbContext db) : ITvanService
 
         await db.SaveChangesAsync();
         return (true, chapNhan ? "Đã ghi nhận CQT chấp nhận tờ khai." : "Đã ghi nhận CQT từ chối tờ khai.");
+    }
+
+    // Danh mục phương thức thanh toán (theo Mst_PaymentMethods của TVAN gốc):
+    // danh sách phương thức thanh toán (lọc theo từ khóa mã/tên nếu có).
+    public Task<List<PaymentMethodMaster>> PaymentMethodsAsync(string? keyword)
+    {
+        var q = db.PaymentMethods.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.PaymentMethodCode.Contains(k) || t.PaymentMethodName.Contains(k));
+        }
+        return q.OrderBy(t => t.PaymentMethodCode).ToListAsync();
+    }
+
+    public Task<PaymentMethodMaster?> GetPaymentMethodAsync(int id) =>
+        db.PaymentMethods.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Kiểm tra một mã phương thức thanh toán có tồn tại / đang dùng hay không
+    // (theo Mst_PaymentMethods_CheckDB của TVAN gốc):
+    //  - mustExist = true: mã phải tồn tại (Mst_PaymentMethods_CheckDB_PaymentMethodsNotFound);
+    //  - mustActive = true: phương thức phải đang dùng (Mst_PaymentMethods_CheckDB_FlagActiveNotMatched).
+    public async Task<(bool ok, string msg)> CheckPaymentMethodAsync(string code, bool mustExist, bool mustActive)
+    {
+        code = (code ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã phương thức thanh toán.");
+        var e = await db.PaymentMethods.FirstOrDefaultAsync(t => t.PaymentMethodCode == code);
+        if (mustExist && e == null)
+            return (false, $"Không tìm thấy phương thức thanh toán {code}.");
+        if (mustActive && e != null && !e.FlagActive)
+            return (false, $"Phương thức thanh toán {code} đã ngừng dùng.");
+        return (true, e == null ? $"Phương thức thanh toán {code} chưa có trong danh mục." : $"Phương thức thanh toán {code} hợp lệ.");
     }
 }

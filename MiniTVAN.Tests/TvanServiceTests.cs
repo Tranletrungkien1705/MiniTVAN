@@ -5877,4 +5877,56 @@ public class DocTienTests
             Assert.Equal(inv2, candidates[0].Id);
         }
     }
+
+    // Danh mục phương thức thanh toán (theo Mst_PaymentMethods của TVAN gốc).
+    [Fact]
+    public async Task PaymentMethod_List_FilteredByKeyword()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            db.PaymentMethods.AddRange(
+                new PaymentMethodMaster { PaymentMethodCode = "TM", PaymentMethodName = "Tiền mặt", FlagActive = true },
+                new PaymentMethodMaster { PaymentMethodCode = "CK", PaymentMethodName = "Chuyển khoản", FlagActive = true });
+            await db.SaveChangesAsync();
+            Assert.Equal(2, (await svc.PaymentMethodsAsync(null)).Count);
+            Assert.Single(await svc.PaymentMethodsAsync("Chuyển"));
+        }
+    }
+
+    [Fact]
+    public async Task PaymentMethod_Check_Existing_Active_Ok()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            db.PaymentMethods.Add(new PaymentMethodMaster { PaymentMethodCode = "TM", PaymentMethodName = "Tiền mặt", FlagActive = true });
+            await db.SaveChangesAsync();
+            var (ok, msg) = await svc.CheckPaymentMethodAsync("TM", true, true);
+            Assert.True(ok);
+            Assert.Contains("hợp lệ", msg);
+        }
+    }
+
+    [Fact]
+    public async Task PaymentMethod_Check_Missing_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.CheckPaymentMethodAsync("XX", true, true);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy", msg);
+        }
+    }
+
+    [Fact]
+    public async Task PaymentMethod_Check_Inactive_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            db.PaymentMethods.Add(new PaymentMethodMaster { PaymentMethodCode = "TM", PaymentMethodName = "Tiền mặt", FlagActive = false });
+            await db.SaveChangesAsync();
+            var (ok, msg) = await svc.CheckPaymentMethodAsync("TM", true, true);
+            Assert.False(ok);
+            Assert.Contains("ngừng dùng", msg);
+        }
+    }
 }

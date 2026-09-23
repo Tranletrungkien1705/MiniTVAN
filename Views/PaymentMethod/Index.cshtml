@@ -1,0 +1,56 @@
+@model List<PaymentMethodMaster>
+@{
+    ViewData["Title"] = "Phương thức thanh toán";
+    var keyword = ViewBag.Keyword as string;
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-credit-card me-1"></i>Danh mục phương thức thanh toán</h6>
+                <form method="get" action="/PaymentMethod" class="d-flex gap-2">
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm mã / tên phương thức" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã</th><th>Tên phương thức</th><th>Ghi chú</th><th>Trạng thái</th></tr></thead>
+                <tbody>
+                @foreach (var t in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@t.PaymentMethodCode</td>
+                        <td>@t.PaymentMethodName</td>
+                        <td class="small text-muted">@(string.IsNullOrWhiteSpace(t.Remark) ? "—" : t.Remark)</td>
+                        <td>
+                            @if (t.FlagActive) { <span class="badge bg-success">Đang dùng</span> }
+                            else { <span class="badge bg-secondary">Ngừng dùng</span> }
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-4">Chưa có phương thức thanh toán nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-shield-check me-1"></i>Kiểm tra phương thức thanh toán</h6>
+            <form method="post" action="/PaymentMethod/Check" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã phương thức</label><input name="code" class="form-control form-control-sm" placeholder="TM" required /></div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="mustExist" value="true" id="pmMustExist" checked />
+                    <label class="form-check-label small" for="pmMustExist">Phải tồn tại trong danh mục</label>
+                </div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="mustActive" value="true" id="pmMustActive" checked />
+                    <label class="form-check-label small" for="pmMustActive">Phải đang dùng</label>
+                </div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Kiểm tra</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Theo Mst_PaymentMethods_CheckDB của TVAN gốc: kiểm tra mã phương thức thanh toán có tồn tại và đang dùng trước khi lưu hóa đơn.</p>
+        </div></div>
+    </div>
+</div>
