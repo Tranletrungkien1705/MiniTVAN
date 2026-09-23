@@ -997,6 +997,21 @@ public static class Seeder
             }
         }
 
+        // Phân quyền nhóm người dùng theo đối tượng (theo Sys_Access của TVAN gốc):
+        // nhóm KETOAN được cấp quyền phát hành + hủy hóa đơn; nhóm BANHANG chỉ được phát hành.
+        if (!await db.SysAccesses.AnyAsync())
+        {
+            var gk = await db.SysGroups.FirstOrDefaultAsync(g => g.GroupCode == "KETOAN");
+            var gb = await db.SysGroups.FirstOrDefaultAsync(g => g.GroupCode == "BANHANG");
+            if (gk != null)
+                db.SysAccesses.AddRange(
+                    new SysAccess { SysGroupId = gk.Id, GroupCode = gk.GroupCode, ObjectCode = "INV_ISSUE", UpdatedBy = "quản trị" },
+                    new SysAccess { SysGroupId = gk.Id, GroupCode = gk.GroupCode, ObjectCode = "INV_CANCEL", UpdatedBy = "quản trị" });
+            if (gb != null)
+                db.SysAccesses.Add(new SysAccess { SysGroupId = gb.Id, GroupCode = gb.GroupCode, ObjectCode = "INV_ISSUE", UpdatedBy = "quản trị" });
+            await db.SaveChangesAsync();
+        }
+
         // Tích hợp TVAN (theo Mst_TVANInteg của TVAN gốc):
         // 1 cấu hình demo gắn OrgID (MST NNT) với tổ chức giải pháp TVAN (hóa đơn đầu vào/đầu ra).
         if (!await db.TvanIntegs.AnyAsync())

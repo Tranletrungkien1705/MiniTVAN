@@ -1564,6 +1564,27 @@ app.MapPost("/api/sys-object-in-modules", async (SaveSysObjectInModulesDto dto, 
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Phân quyền nhóm người dùng theo đối tượng (theo Sys_Access của TVAN gốc): danh sách (lọc theo mã nhóm nếu có).
+app.MapGet("/api/sys-accesses", async (string? groupCode, ITvanService svc) =>
+{
+    var ls = await svc.SysAccessesAsync(groupCode);
+    return Results.Ok(ls.Select(a => new { a.Id, a.GroupCode, a.ObjectCode, a.UpdatedAt, a.UpdatedBy }));
+});
+
+// Lưu danh sách đối tượng cấp cho một nhóm người dùng (theo Sys_Access_Save của TVAN gốc): thay thế toàn bộ.
+app.MapPost("/api/sys-accesses", async (SaveSysAccessDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.SaveSysAccessAsync(dto.GroupId, dto.ObjectCodes ?? new(), dto.By);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
+// Kiểm tra một người dùng có quyền truy cập một đối tượng hay không (theo Sys_Access_CheckDeny của TVAN gốc).
+app.MapGet("/api/sys-accesses/check", async (string userCode, string objectCode, ITvanService svc) =>
+{
+    var (allowed, msg) = await svc.SysAccessDenyAsync(userCode, objectCode);
+    return Results.Ok(new { allowed, msg });
+});
+
 // Tích hợp TVAN (theo Mst_TVANInteg của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
 app.MapGet("/api/tvan-integs", async (string? keyword, ITvanService svc) =>
 {
@@ -1676,6 +1697,7 @@ record SysModuleDto(int? Id, string? ModuleCode, string? SolutionCode, string? M
 record SysModuleActiveDto(bool Active, string? By);
 record SysObjectDto(int? Id, string? ObjectCode, string? ObjectName, string? ServiceCode, SysObjectType ObjectType, bool Active, string? By);
 record SaveSysObjectInModulesDto(int ModuleId, List<string>? ObjectCodes, string? By);
+record SaveSysAccessDto(int GroupId, List<string>? ObjectCodes, string? By);
 record TvanIntegDto(int? Id, string? OrgCode, string? MsttctnIn, string? MsttctnOut, string? By);
 record TaxOfficeDto(int? Id, string? Code, string? CodeParent, string? ProvinceCode, string? DistrictCode, string? Name, string? Level, string? Address, string? ContactEmail, string? ContactPhone, bool Active, string? By);
 record TctTransactionLogDto(string? MessageCode, string? MstSeller, TctMessageAction Action, DateTime? MessageDTime, string? TypeCode, TctMessageStatus Status, TctMessageResult Result, string? MessageRefCode, string? Partner, DateTime? MessageDate, string? MstBuyer, int InvoiceQty, string? MessageDesc, string? Tag, string? XmlFilePath, string? By);

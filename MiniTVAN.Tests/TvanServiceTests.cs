@@ -5433,4 +5433,101 @@ public class DocTienTests
             Assert.Equal(0, r.QtyIssued);
         }
     }
+
+    // ===== Phân quyền nhóm người dùng theo đối tượng (theo Sys_Access của TVAN gốc) =====
+
+    private static async Task<(int groupId, string groupCode)> SetupGroup(AppDbContext db, string code = "KETOAN")
+    {
+        var g = new SysGroup { GroupCode = code, GroupName = "Nhóm " + code, FlagActive = true };
+        db.SysGroups.Add(g);
+        await db.SaveChangesAsync();
+        return (g.Id, g.GroupCode);
+    }
+
+    private static async Task SetupObject(AppDbContext db, string code, bool active = true)
+    {
+        db.SysObjects.Add(new SysObject { ObjectCode = code, ObjectName = "Chức năng " + code, ObjectType = SysObjectType.Func, FlagActive = active });
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task SysAccess_Save_ReplacesAllForGroup()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (gid, gcode) = await SetupGroup(db);
+            await SetupObject(db, "INV_ISSUE");
+            await SetupObject(db, "INV_CANCEL");
+
+            var (ok1, _) = await svc.SaveSysAccessAsync(gid, new List<string> { "INV_ISSUE" }, "admin");
+            Assert.True(ok1);
+            Assert.Single(await svc.SysAccessesAsync(gcode));
+
+            // Lưu lại = thay thế toàn bộ danh sách quyền của nhóm.
+            var (ok2, _) = await svc.SaveSysAccessAsync(gid, new List<string> { "INV_ISSUE", "INV_CANCEL" }, "admin");
+            Assert.True(ok2);
+            var list = await svc.SysAccessesAsync(gcode);
+            Assert.Equal(2, list.Count);
+            Assert.Contains(list, a => a.ObjectCode == "INV_CANCEL");
+        }
+    }
+
+    [Fact]
+    public async Task SysAccess_Save_UnknownObject_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (gid, _) = await SetupGroup(db);
+            var (ok, msg) = await svc.SaveSysAccessAsync(gid, new List<string> { "NOPE" }, "admin");
+            Assert.False(ok);
+            Assert.Contains("không tồn tại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SysAccess_Save_InactiveObject_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (gid, _) = await SetupGroup(db);
+            await SetupObject(db, "INV_ISSUE", active: false);
+            var (ok, msg) = await svc.SaveSysAccessAsync(gid, new List<string> { "INV_ISSUE" }, "admin");
+            Assert.False(ok);
+            Assert.Contains("ngừng dùng", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SysAccess_Deny_AllowsViaGroupMembership()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (gid, gcode) = await SetupGroup(db);
+            await SetupObject(db, "INV_ISSUE");
+            db.SysUsers.Add(new SysUser { UserCode = "ketoan01", UserName = "KT", FlagActive = true });
+            db.SysUserInGroups.Add(new SysUserInGroup { SysGroupId = gid, GroupCode = gcode, UserCode = "ketoan01" });
+            await db.SaveChangesAsync();
+            await svc.SaveSysAccessAsync(gid, new List<string> { "INV_ISSUE" }, "admin");
+
+            var (allowed, _) = await svc.SysAccessDenyAsync("ketoan01", "INV_ISSUE");
+            Assert.True(allowed);
+            // Đối tượng không được cấp → từ chối.
+            await SetupObject(db, "INV_CANCEL");
+            var (denied, _) = await svc.SysAccessDenyAsync("ketoan01", "INV_CANCEL");
+            Assert.False(denied);
+        }
+    }
+
+    [Fact]
+    public async Task SysAccess_Deny_SysAdminAlwaysAllowed()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SetupObject(db, "INV_ISSUE");
+            db.SysUsers.Add(new SysUser { UserCode = "admin", UserName = "QT", FlagSysAdmin = true, FlagActive = true });
+            await db.SaveChangesAsync();
+            var (allowed, _) = await svc.SysAccessDenyAsync("admin", "INV_ISSUE");
+            Assert.True(allowed);
+        }
+    }
 }

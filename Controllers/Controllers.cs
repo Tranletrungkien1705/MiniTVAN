@@ -1824,6 +1824,41 @@ public class SysObjectController(ITvanService svc) : Controller
     }
 }
 
+// Phân quyền nhóm người dùng theo đối tượng (theo Sys_Access của TVAN gốc):
+// gán danh sách chức năng/menu/nút (Sys_Object) cho từng nhóm người dùng (Sys_Group) — thay thế toàn bộ.
+public class SysAccessController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? groupCode)
+    {
+        ViewBag.GroupCode = groupCode;
+        ViewBag.Groups = await svc.SysGroupsAsync(null);
+        ViewBag.Objects = await svc.SysObjectsAsync(null);
+        return View(await svc.SysAccessesAsync(groupCode));
+    }
+
+    // Lưu danh sách đối tượng được cấp cho một nhóm (theo Sys_Access_Save của TVAN gốc):
+    // thay thế toàn bộ danh sách quyền của nhóm.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int groupId, string? objectCodes, string? by)
+    {
+        var codes = (objectCodes ?? "")
+            .Split(new[] { ',', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+        var (ok, msg) = await svc.SaveSysAccessAsync(groupId, codes, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Kiểm tra một người dùng có quyền truy cập một đối tượng hay không (theo Sys_Access_CheckDeny của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Check(string userCode, string objectCode)
+    {
+        var (allowed, msg) = await svc.SysAccessDenyAsync(userCode, objectCode);
+        TempData[allowed ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Tích hợp TVAN (theo Mst_TVANInteg của TVAN gốc):
 // mỗi tổ chức khai báo tổ chức giải pháp TVAN tương ứng (hóa đơn đầu vào/đầu ra) để trao đổi hóa đơn.
 public class TvanIntegController(ITvanService svc) : Controller

@@ -1,0 +1,103 @@
+@model List<SysAccess>
+@{
+    ViewData["Title"] = "Phân quyền nhóm người dùng";
+    var groupCode = ViewBag.GroupCode as string;
+    var groups = ViewBag.Groups as List<SysGroup> ?? new();
+    var objects = ViewBag.Objects as List<SysObject> ?? new();
+    var accessByGroup = Model.GroupBy(a => a.GroupCode).ToDictionary(g => g.Key, g => g.Select(x => x.ObjectCode).ToList());
+}
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-shield-check me-1"></i>Quyền theo nhóm người dùng</h6>
+                <form method="get" action="/SysAccess" class="d-flex gap-2">
+                    <select name="groupCode" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">-- Tất cả nhóm --</option>
+                        @foreach (var g in groups)
+                        {
+                            <option value="@g.GroupCode" selected="@(g.GroupCode == groupCode)">@g.GroupCode — @g.GroupName</option>
+                        }
+                    </select>
+                </form>
+            </div>
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Nhóm người dùng</th><th>Đối tượng được cấp</th></tr></thead>
+                <tbody>
+                @foreach (var g in groups.Where(x => groupCode == null || x.GroupCode == groupCode))
+                {
+                    var assigned = accessByGroup.TryGetValue(g.GroupCode, out var list) ? list : new List<string>();
+                    <tr>
+                        <td class="fw-semibold">@g.GroupCode<br /><span class="text-muted small">@g.GroupName</span></td>
+                        <td>
+                            @if (assigned.Count == 0)
+                            {
+                                <span class="text-muted small">Chưa cấp quyền</span>
+                            }
+                            else
+                            {
+                                @foreach (var oc in assigned)
+                                {
+                                    <span class="badge bg-light text-dark border me-1 mb-1">@oc</span>
+                                }
+                            }
+                        </td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td class="pt-0">
+                            <form method="post" action="/SysAccess/Save" class="row g-2 align-items-end">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="groupId" value="@g.Id" />
+                                <div class="col-md-8">
+                                    <label class="form-label small mb-1">Đối tượng (mã, cách nhau bởi dấu phẩy)</label>
+                                    <input name="objectCodes" class="form-control form-control-sm" value="@string.Join(", ", assigned)" placeholder="VD INV_ISSUE, INV_CANCEL" />
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small mb-1">Người thực hiện</label>
+                                    <input name="by" class="form-control form-control-sm" placeholder="quản trị" />
+                                </div>
+                                <div class="col-md-2">
+                                    <button class="btn btn-sm btn-outline-primary w-100">Lưu quyền</button>
+                                </div>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (groups.Count == 0) { <tr><td colspan="2" class="text-center text-muted py-4">Chưa có nhóm người dùng nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-diagram-3 me-1"></i>Danh mục đối tượng (chức năng)</h6>
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th></tr></thead>
+                <tbody>
+                @foreach (var o in objects)
+                {
+                    <tr>
+                        <td class="fw-semibold">@o.ObjectCode</td>
+                        <td>@o.ObjectName</td>
+                        <td><span class="badge bg-light text-dark border">@Ui.SysObjectType(o.ObjectType)</span></td>
+                    </tr>
+                }
+                @if (objects.Count == 0) { <tr><td colspan="3" class="text-center text-muted py-4">Chưa có đối tượng nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+
+        <div class="card mt-3"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-person-check me-1"></i>Kiểm tra quyền người dùng</h6>
+            <form method="post" action="/SysAccess/Check" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã người dùng</label><input name="userCode" class="form-control form-control-sm" placeholder="VD ketoan01" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Mã đối tượng</label><input name="objectCode" class="form-control form-control-sm" placeholder="VD INV_ISSUE" required /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Kiểm tra</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Lưu quyền cho nhóm theo kiểu thay thế toàn bộ danh sách (theo Sys_Access_Save). Người dùng có quyền nếu thuộc một nhóm đang dùng được cấp đối tượng, hoặc là quản trị hệ thống (theo Sys_Access_CheckDeny).</p>
+        </div></div>
+    </div>
+</div>

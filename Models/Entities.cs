@@ -1557,6 +1557,24 @@ public class SysObjectInModule : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Phân quyền nhóm người dùng theo đối tượng (theo bảng Sys_Access của TVAN gốc):
+// mỗi dòng gắn một đối tượng/chức năng (ObjectCode) cho một nhóm người dùng (GroupCode) —
+// tức nhóm đó được phép truy cập chức năng/menu/nút tương ứng. Lưu theo kiểu thay thế toàn bộ
+// danh sách đối tượng của nhóm (theo Sys_Access_Save của TVAN gốc: xóa hết rồi chèn lại).
+// Khóa nghiệp vụ: (OrgId, GroupCode, ObjectCode).
+public class SysAccess : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int SysGroupId { get; set; }
+    public SysGroup? Group { get; set; }
+    public string GroupCode { get; set; } = "";        // Mã nhóm người dùng được phân quyền
+    public string ObjectCode { get; set; } = "";       // Mã đối tượng (chức năng/menu/nút) được cấp cho nhóm
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 // Danh mục Thương hiệu (theo bảng Mst_Brand của TVAN gốc): mỗi tổ chức khai báo các thương hiệu
 // (hãng sản xuất) dùng để phân loại sản phẩm/hàng hóa. Model sản phẩm (Mst_Model) tham chiếu tới
 // thương hiệu qua BrandCode. Khóa nghiệp vụ: (OrgId, BrandCode). FlagActive = thương hiệu đang dùng.

@@ -258,6 +258,11 @@ public interface ITvanService
     Task<List<SysObjectInModule>> SysObjectInModulesAsync(string? moduleCode);
     Task<(bool ok, string msg)> SaveSysObjectInModulesAsync(int moduleId, List<string> objectCodes, string? by);
 
+    // Phân quyền nhóm người dùng theo đối tượng (theo Sys_Access của TVAN gốc)
+    Task<List<SysAccess>> SysAccessesAsync(string? groupCode);
+    Task<(bool ok, string msg)> SaveSysAccessAsync(int groupId, List<string> objectCodes, string? by);
+    Task<(bool allowed, string msg)> SysAccessDenyAsync(string userCode, string objectCode);
+
     // Tích hợp TVAN (theo Mst_TVANInteg của TVAN gốc)
     Task<List<TvanInteg>> TvanIntegsAsync(string? keyword);
     Task<TvanInteg?> GetTvanIntegAsync(int id);
@@ -5234,6 +5239,75 @@ public class TvanService(AppDbContext db) : ITvanService
         return (true, $"Đã lưu đối tượng cho gói Module {m.ModuleCode}.");
     }
 
+    // ===== Phân quyền nhóm người dùng theo đối tượng (theo Sys_Access của TVAN gốc) =====
+
+    // Danh sách phân quyền (lọc theo mã nhóm nếu có).
+    public Task<List<SysAccess>> SysAccessesAsync(string? groupCode)
+    {
+        var q = db.SysAccesses.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(groupCode)) q = q.Where(a => a.GroupCode == groupCode.Trim());
+        return q.OrderBy(a => a.GroupCode).ThenBy(a => a.ObjectCode).ToListAsync();
+    }
+
+    // Lưu danh sách đối tượng được cấp cho một nhóm người dùng (theo Sys_Access_Save của TVAN gốc):
+    // thay thế toàn bộ danh sách (xóa hết rồi chèn lại). Chặn khi nhóm không tồn tại;
+    // mỗi đối tượng phải tồn tại và đang dùng (theo Sys_Object_CheckDB của TVAN gốc).
+    public async Task<(bool ok, string msg)> SaveSysAccessAsync(int groupId, List<string> objectCodes, string? by)
+    {
+        var g = await db.SysGroups.FirstOrDefaultAsync(x => x.Id == groupId);
+        if (g == null) return (false, "Không tìm thấy nhóm người dùng.");
+
+        // Kiểm tra toàn bộ đối tượng trước khi ghi (all-or-nothing).
+        var codes = new List<string>();
+        foreach (var raw in objectCodes ?? new())
+        {
+            var oc = (raw ?? "").Trim();
+            if (oc.Length == 0) continue;
+            var obj = await db.SysObjects.FirstOrDefaultAsync(o => o.ObjectCode == oc);
+            if (obj == null) return (false, $"Đối tượng {oc} không tồn tại.");
+            if (!obj.FlagActive) return (false, $"Đối tượng {oc} đã ngừng dùng.");
+            codes.Add(oc);
+        }
+
+        var existing = await db.SysAccesses.Where(x => x.SysGroupId == groupId).ToListAsync();
+        db.SysAccesses.RemoveRange(existing);
+        foreach (var oc in codes)
+            db.SysAccesses.Add(new SysAccess { SysGroupId = groupId, GroupCode = g.GroupCode, ObjectCode = oc, UpdatedBy = by });
+        g.UpdatedAt = DateTime.UtcNow;
+        g.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu {codes.Count} quyền cho nhóm {g.GroupCode}.");
+    }
+
+    // Kiểm tra một người dùng có quyền truy cập một đối tượng hay không (theo Sys_Access_CheckDeny của TVAN gốc):
+    // có quyền nếu (người dùng thuộc một nhóm đang dùng được cấp đối tượng đang dùng) HOẶC (người dùng là quản trị hệ thống).
+    public async Task<(bool allowed, string msg)> SysAccessDenyAsync(string userCode, string objectCode)
+    {
+        userCode = (userCode ?? "").Trim();
+        objectCode = (objectCode ?? "").Trim();
+        if (userCode.Length == 0) return (false, "Cần mã người dùng.");
+        if (objectCode.Length == 0) return (false, "Cần mã đối tượng.");
+
+        var user = await db.SysUsers.FirstOrDefaultAsync(u => u.UserCode == userCode);
+        if (user == null) return (false, $"Người dùng {userCode} không tồn tại.");
+        if (!user.FlagActive) return (false, $"Người dùng {userCode} đã ngừng dùng.");
+
+        var obj = await db.SysObjects.FirstOrDefaultAsync(o => o.ObjectCode == objectCode);
+        if (obj == null) return (false, $"Đối tượng {objectCode} không tồn tại.");
+        if (!obj.FlagActive) return (false, $"Đối tượng {objectCode} đã ngừng dùng.");
+
+        // Quản trị hệ thống luôn có quyền (theo nhánh union FlagSysAdmin của TVAN gốc).
+        if (user.FlagSysAdmin) return (true, $"Người dùng {userCode} là quản trị hệ thống — được phép.");
+
+        // Người dùng thuộc nhóm đang dùng được cấp đối tượng.
+        var groupCodes = await db.SysUserInGroups.Where(m => m.UserCode == userCode).Select(m => m.GroupCode).ToListAsync();
+        var activeGroups = await db.SysGroups.Where(g => groupCodes.Contains(g.GroupCode) && g.FlagActive).Select(g => g.GroupCode).ToListAsync();
+        var allowed = await db.SysAccesses.AnyAsync(a => activeGroups.Contains(a.GroupCode) && a.ObjectCode == objectCode);
+        return allowed
+            ? (true, $"Người dùng {userCode} được phép truy cập {objectCode}.")
+            : (false, $"Người dùng {userCode} KHÔNG được phép truy cập {objectCode}.");
+    }
+
     // ===== Tích hợp TVAN (theo Mst_TVANInteg của TVAN gốc) =====
 
     // Danh sách cấu hình tích hợp TVAN (lọc theo từ khóa mã OrgID / MST đầu vào / MST đầu ra nếu có).
@@ -5719,5 +5793,106 @@ public class TvanService(AppDbContext db) : ITvanService
                 var ms = new DateTime(my, mm, 1);
                 return (ms, ms.AddMonths(1));
         }
+    }
+
+    // ===== Mã sản phẩm / serial (theo Prd_ProductID của TVAN gốc — màn OS_PrdCenter_Prd_ProductID) =====
+
+    // Danh sách serial (lọc theo từ khóa mã serial / mã sản phẩm / người mua, mã sản phẩm, trạng thái nếu có).
+    public Task<List<ProductId>> ProductIdsAsync(string? keyword, string? specCode, ProductIdStatus? status)
+    {
+        var q = db.ProductIds.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(p => p.ProductID.Contains(k) || p.SpecCode.Contains(k) || (p.Buyer != null && p.Buyer.Contains(k)));
+        }
+        if (!string.IsNullOrWhiteSpace(specCode)) q = q.Where(p => p.SpecCode == specCode.Trim());
+        if (status.HasValue) q = q.Where(p => p.ProductIDStatus == status.Value);
+        return q.OrderBy(p => p.SpecCode).ThenBy(p => p.ProductID).ToListAsync();
+    }
+
+    public Task<ProductId?> GetProductIdAsync(int id) =>
+        db.ProductIds.FirstOrDefaultAsync(p => p.Id == id);
+
+    // Lưu (tạo mới/cập nhật) serial theo khóa (ProductID, SpecCode) (theo Prd_ProductID_Create/Update của TVAN gốc):
+    // lưu lần đầu = tạo mới, lưu lại cùng khóa = cập nhật. Chặn thiếu mã serial/mã sản phẩm,
+    // chặn trùng khóa khi tạo, chặn sản phẩm không tồn tại/đã ngừng dùng (theo Mst_Spec_CheckDB).
+    public async Task<(bool ok, string msg, int id)> SaveProductIdAsync(int? id, string productId, string specCode, DateTime? productionDate, string? lotNo, DateTime? buyDate, string? secretNo, DateTime? warrantyStartDate, DateTime? warrantyExpiredDate, int? warrantyDuration, string? refNo1, string? refBiz1, string? refNo2, string? refBiz2, string? refNo3, string? refBiz3, string? buyer, ProductIdStatus status, string? customField1, string? customField2, string? customField3, string? customField4, string? customField5, string? by)
+    {
+        productId = (productId ?? "").Trim();
+        specCode = (specCode ?? "").Trim();
+        if (productId.Length == 0) return (false, "Cần mã sản phẩm / số serial.", 0);
+        if (specCode.Length == 0) return (false, "Cần mã sản phẩm (SpecCode).", 0);
+
+        // Sản phẩm phải tồn tại và đang dùng (theo Mst_Spec_CheckDB của TVAN gốc).
+        var spec = await db.Specs.FirstOrDefaultAsync(s => s.SpecCode == specCode);
+        if (spec == null) return (false, $"Sản phẩm {specCode} không tồn tại.", 0);
+        if (!spec.FlagActive) return (false, $"Sản phẩm {specCode} đã ngừng dùng.", 0);
+
+        ProductId? e;
+        if (id is > 0)
+        {
+            e = await db.ProductIds.FirstOrDefaultAsync(p => p.Id == id);
+            if (e == null) return (false, "Không tìm thấy serial.", 0);
+            if (await db.ProductIds.AnyAsync(p => p.ProductID == productId && p.SpecCode == specCode && p.Id != e.Id))
+                return (false, $"Serial {productId} của sản phẩm {specCode} đã tồn tại.", 0);
+        }
+        else
+        {
+            if (await db.ProductIds.AnyAsync(p => p.ProductID == productId && p.SpecCode == specCode))
+                return (false, $"Serial {productId} của sản phẩm {specCode} đã tồn tại.", 0);
+            e = new ProductId { ProductID = productId, SpecCode = specCode };
+            db.ProductIds.Add(e);
+        }
+
+        e.ProductID = productId;
+        e.SpecCode = specCode;
+        e.ProductionDate = productionDate;
+        e.LOTNo = lotNo;
+        e.BuyDate = buyDate;
+        e.SecretNo = secretNo;
+        e.WarrantyStartDate = warrantyStartDate;
+        e.WarrantyExpiredDate = warrantyExpiredDate;
+        e.WarrantyDuration = warrantyDuration;
+        e.RefNo1 = refNo1;
+        e.RefBiz1 = refBiz1;
+        e.RefNo2 = refNo2;
+        e.RefBiz2 = refBiz2;
+        e.RefNo3 = refNo3;
+        e.RefBiz3 = refBiz3;
+        e.Buyer = buyer;
+        e.ProductIDStatus = status;
+        e.CustomField1 = customField1;
+        e.CustomField2 = customField2;
+        e.CustomField3 = customField3;
+        e.CustomField4 = customField4;
+        e.CustomField5 = customField5;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, id is > 0 ? $"Đã cập nhật serial {productId}." : $"Đã tạo serial {productId}.", e.Id);
+    }
+
+    // Xóa serial theo id (theo Prd_ProductID_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteProductIdAsync(int id)
+    {
+        var e = await db.ProductIds.FirstOrDefaultAsync(p => p.Id == id);
+        if (e == null) return (false, "Không tìm thấy serial.");
+        var code = e.ProductID;
+        db.ProductIds.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa serial {code}.");
+    }
+
+    // Danh sách trường tùy chỉnh của serial (theo Prd_PrdIDCustomField của TVAN gốc), lọc theo từ khóa nếu có.
+    public Task<List<PrdIdCustomField>> PrdIdCustomFieldsAsync(string? keyword)
+    {
+        var q = db.PrdIdCustomFields.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(f => f.PrdCustomFieldCode.Contains(k) || f.PrdCustomFieldName.Contains(k));
+        }
+        return q.OrderBy(f => f.PrdCustomFieldCode).ToListAsync();
     }
 }

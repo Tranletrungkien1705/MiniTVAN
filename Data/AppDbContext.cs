@@ -72,6 +72,7 @@ public class AppDbContext : DbContext
     public DbSet<SysSolution> SysSolutions => Set<SysSolution>();
     public DbSet<SysObject> SysObjects => Set<SysObject>();
     public DbSet<SysObjectInModule> SysObjectInModules => Set<SysObjectInModule>();
+    public DbSet<SysAccess> SysAccesses => Set<SysAccess>();
     public DbSet<Brand> Brands => Set<Brand>();
     public DbSet<ProductModel> ProductModels => Set<ProductModel>();
     public DbSet<SpecType1> SpecType1s => Set<SpecType1>();
@@ -452,6 +453,11 @@ public class AppDbContext : DbContext
         b.Entity<SysObjectInModule>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.ModuleCode, x.ObjectCode }).IsUnique();   // mỗi gói một đối tượng
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SysAccess>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.GroupCode, x.ObjectCode }).IsUnique();   // mỗi nhóm một đối tượng
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<Brand>(e =>
