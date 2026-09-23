@@ -769,6 +769,21 @@ public static class Seeder
                 new SysUserInGroup { SysGroupId = g2.Id, GroupCode = g2.GroupCode, UserCode = "ketoan01", UpdatedBy = "quản trị" });
             await db.SaveChangesAsync();
         }
+
+        // Gói Module (theo Sys_Modules / Sys_Solution của TVAN gốc):
+        // 1 giải pháp demo + 2 gói Module thuộc giải pháp đó.
+        if (!await db.SysSolutions.AnyAsync())
+        {
+            db.SysSolutions.Add(new SysSolution { SolutionCode = "TVAN", SolutionName = "Giải pháp hóa đơn điện tử TVAN", FlagActive = true, UpdatedBy = "quản trị" });
+            await db.SaveChangesAsync();
+        }
+        if (!await db.SysModules.AnyAsync())
+        {
+            db.SysModules.AddRange(
+                new SysModule { ModuleCode = "TVAN_BASIC", SolutionCode = "TVAN", ModuleName = "Gói cơ bản", Description = "Gói dùng thử", QtyInvoice = 1000, ValCapacity = 5000, FlagActive = true, UpdatedBy = "quản trị" },
+                new SysModule { ModuleCode = "TVAN_PRO", SolutionCode = "TVAN", ModuleName = "Gói chuyên nghiệp", Description = "Gói đầy đủ tính năng", QtyInvoice = 100000, ValCapacity = 500000, FlagActive = true, UpdatedBy = "quản trị" });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

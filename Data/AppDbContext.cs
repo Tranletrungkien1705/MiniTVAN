@@ -63,6 +63,8 @@ public class AppDbContext : DbContext
     public DbSet<DocTienLog> DocTienLogs => Set<DocTienLog>();
     public DbSet<SysGroup> SysGroups => Set<SysGroup>();
     public DbSet<SysUserInGroup> SysUserInGroups => Set<SysUserInGroup>();
+    public DbSet<SysModule> SysModules => Set<SysModule>();
+    public DbSet<SysSolution> SysSolutions => Set<SysSolution>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -382,6 +384,16 @@ public class AppDbContext : DbContext
         b.Entity<SysUserInGroup>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.GroupCode, x.UserCode }).IsUnique();   // mỗi nhóm một người dùng
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SysModule>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ModuleCode }).IsUnique();   // mỗi tổ chức một mã gói Module
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SysSolution>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.SolutionCode }).IsUnique();   // mỗi tổ chức một mã giải pháp
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

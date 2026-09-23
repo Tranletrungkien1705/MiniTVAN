@@ -3288,6 +3288,92 @@ public class TvanServiceTests
     }
 
     [Fact]
+    public async Task SysModule_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            db.SysSolutions.Add(new SysSolution { SolutionCode = "TVAN", SolutionName = "TVAN", FlagActive = true });
+            await db.SaveChangesAsync();
+            var (ok, _, id) = await svc.SaveSysModuleAsync(null, "TVAN_BASIC", "TVAN", "Gói cơ bản", "dùng thử", 1000, 5000, true, "quản trị");
+            Assert.True(ok);
+            var m = await svc.GetSysModuleAsync(id);
+            Assert.NotNull(m);
+            Assert.Equal("TVAN_BASIC", m!.ModuleCode);
+            Assert.Equal("TVAN", m.SolutionCode);
+            Assert.Equal(1000, m.QtyInvoice);
+            Assert.True(m.FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task SysModule_Save_DuplicateCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            db.SysSolutions.Add(new SysSolution { SolutionCode = "TVAN", SolutionName = "TVAN", FlagActive = true });
+            await db.SaveChangesAsync();
+            await svc.SaveSysModuleAsync(null, "TVAN_BASIC", "TVAN", "A", null, 0, 0, true, null);
+            var (ok, msg, _) = await svc.SaveSysModuleAsync(null, "TVAN_BASIC", "TVAN", "B", null, 0, 0, true, null);
+            Assert.False(ok);
+            Assert.Contains("đã tồn tại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SysModule_Save_MissingName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            db.SysSolutions.Add(new SysSolution { SolutionCode = "TVAN", SolutionName = "TVAN", FlagActive = true });
+            await db.SaveChangesAsync();
+            var (ok, msg, _) = await svc.SaveSysModuleAsync(null, "TVAN_BASIC", "TVAN", "  ", null, 0, 0, true, null);
+            Assert.False(ok);
+            Assert.Contains("Cần tên gói", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SysModule_Save_UnknownSolution_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveSysModuleAsync(null, "TVAN_BASIC", "KHONGCO", "Gói cơ bản", null, 0, 0, true, null);
+            Assert.False(ok);
+            Assert.Contains("không tồn tại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SysModule_SetActive_Toggles()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            db.SysSolutions.Add(new SysSolution { SolutionCode = "TVAN", SolutionName = "TVAN", FlagActive = true });
+            await db.SaveChangesAsync();
+            var (_, _, id) = await svc.SaveSysModuleAsync(null, "TVAN_BASIC", "TVAN", "Gói cơ bản", null, 0, 0, true, null);
+            var (ok, _) = await svc.SetSysModuleActiveAsync(id, false, "quản trị");
+            Assert.True(ok);
+            Assert.False((await svc.GetSysModuleAsync(id))!.FlagActive);
+            await svc.SetSysModuleActiveAsync(id, true, "quản trị");
+            Assert.True((await svc.GetSysModuleAsync(id))!.FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task SysModule_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            db.SysSolutions.Add(new SysSolution { SolutionCode = "TVAN", SolutionName = "TVAN", FlagActive = true });
+            await db.SaveChangesAsync();
+            var (_, _, id) = await svc.SaveSysModuleAsync(null, "TVAN_BASIC", "TVAN", "Gói cơ bản", null, 0, 0, true, null);
+            var (ok, _) = await svc.DeleteSysModuleAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.SysModulesAsync(null));
+        }
+    }
+
+    [Fact]
     public async Task ColumnConfig_Save_Creates()
     {
         var (db, svc, conn) = NewSvc(); using (conn)

@@ -186,6 +186,14 @@ public interface ITvanService
     Task<(bool ok, string msg)> DeleteSysGroupAsync(int id);
     Task<(bool ok, string msg)> SaveSysGroupMembersAsync(int id, List<string> userCodes, string? by);
 
+    // Gói Module (theo Sys_Modules / Sys_Solution của TVAN gốc)
+    Task<List<SysModule>> SysModulesAsync(string? keyword);
+    Task<SysModule?> GetSysModuleAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveSysModuleAsync(int? id, string moduleCode, string solutionCode, string moduleName, string? description, double qtyInvoice, double valCapacity, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteSysModuleAsync(int id);
+    Task<(bool ok, string msg)> SetSysModuleActiveAsync(int id, bool active, string? by);
+    Task<List<SysSolution>> SysSolutionsAsync(string? keyword);
+
     // Cấu hình định dạng cột hiển thị theo bảng (theo Mst_ColumnConfig của TVAN gốc)
     Task<List<ColumnConfig>> ColumnConfigsAsync(string? tableName, string? keyword);
     Task<ColumnConfig?> GetColumnConfigAsync(int id);
@@ -3774,6 +3782,103 @@ public class TvanService(AppDbContext db) : ITvanService
         e.UpdatedBy = by;
         await db.SaveChangesAsync();
         return (true, $"Đã lưu thành viên cho nhóm {e.GroupCode}.");
+    }
+
+    // ===== Gói Module (theo Sys_Modules / Sys_Solution của TVAN gốc) =====
+
+    // Danh sách gói Module (lọc theo từ khóa mã/tên/mô tả nếu có).
+    public Task<List<SysModule>> SysModulesAsync(string? keyword)
+    {
+        var q = db.SysModules.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(m => m.ModuleCode.Contains(k) || m.ModuleName.Contains(k) || (m.Description != null && m.Description.Contains(k)));
+        }
+        return q.OrderBy(m => m.ModuleCode).ToListAsync();
+    }
+
+    public Task<SysModule?> GetSysModuleAsync(int id) =>
+        db.SysModules.FirstOrDefaultAsync(m => m.Id == id);
+
+    // Lưu (tạo mới/cập nhật) gói Module theo mã (theo Sys_Modules_Create/Update của TVAN gốc):
+    // lưu lần đầu = tạo gói mới (FlagActive = đang dùng), lưu lại cùng mã = cập nhật.
+    // Chặn thiếu mã gói, chặn thiếu tên gói, chặn trùng mã gói khi tạo, chặn giải pháp không tồn tại/đã ngừng.
+    public async Task<(bool ok, string msg, int id)> SaveSysModuleAsync(int? id, string moduleCode, string solutionCode, string moduleName, string? description, double qtyInvoice, double valCapacity, bool active, string? by)
+    {
+        moduleCode = (moduleCode ?? "").Trim();
+        solutionCode = (solutionCode ?? "").Trim();
+        moduleName = (moduleName ?? "").Trim();
+        if (moduleCode.Length == 0) return (false, "Cần mã gói Module.", 0);
+        if (moduleName.Length == 0) return (false, "Cần tên gói Module.", 0);
+
+        // Giải pháp phải tồn tại và đang dùng (theo Sys_Solution_CheckDB của TVAN gốc).
+        var sol = await db.SysSolutions.FirstOrDefaultAsync(s => s.SolutionCode == solutionCode);
+        if (sol == null) return (false, $"Giải pháp {solutionCode} không tồn tại.", 0);
+        if (!sol.FlagActive) return (false, $"Giải pháp {solutionCode} đã ngừng dùng.", 0);
+
+        SysModule? e;
+        if (id is > 0)
+        {
+            e = await db.SysModules.FirstOrDefaultAsync(m => m.Id == id);
+            if (e == null) return (false, "Không tìm thấy gói Module.", 0);
+            if (await db.SysModules.AnyAsync(m => m.ModuleCode == moduleCode && m.Id != e.Id))
+                return (false, $"Mã gói Module {moduleCode} đã tồn tại.", 0);
+            e.ModuleCode = moduleCode;
+            e.SolutionCode = solutionCode;
+            e.ModuleName = moduleName;
+            e.Description = description;
+            e.QtyInvoice = qtyInvoice;
+            e.ValCapacity = valCapacity;
+            e.FlagActive = active;
+            e.UpdatedAt = DateTime.UtcNow;
+            e.UpdatedBy = by;
+            await db.SaveChangesAsync();
+            return (true, $"Đã cập nhật gói Module {moduleCode}.", e.Id);
+        }
+
+        if (await db.SysModules.AnyAsync(m => m.ModuleCode == moduleCode))
+            return (false, $"Mã gói Module {moduleCode} đã tồn tại.", 0);
+        e = new SysModule { ModuleCode = moduleCode, SolutionCode = solutionCode, ModuleName = moduleName, Description = description, QtyInvoice = qtyInvoice, ValCapacity = valCapacity, FlagActive = active, UpdatedBy = by };
+        db.SysModules.Add(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã tạo gói Module {moduleCode}.", e.Id);
+    }
+
+    // Xóa gói Module theo id (theo Sys_Modules_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteSysModuleAsync(int id)
+    {
+        var e = await db.SysModules.FirstOrDefaultAsync(m => m.Id == id);
+        if (e == null) return (false, "Không tìm thấy gói Module.");
+        var code = e.ModuleCode;
+        db.SysModules.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa gói Module {code}.");
+    }
+
+    // Bật/ngừng gói Module (theo Sys_ModulesController.ActiveModule/InactiveModule của TVAN gốc):
+    // chỉ cập nhật cờ FlagActive. Chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> SetSysModuleActiveAsync(int id, bool active, string? by)
+    {
+        var e = await db.SysModules.FirstOrDefaultAsync(m => m.Id == id);
+        if (e == null) return (false, "Không tìm thấy gói Module.");
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, active ? $"Đã bật gói Module {e.ModuleCode}." : $"Đã ngừng gói Module {e.ModuleCode}.");
+    }
+
+    // Danh sách giải pháp (lọc theo từ khóa mã/tên nếu có).
+    public Task<List<SysSolution>> SysSolutionsAsync(string? keyword)
+    {
+        var q = db.SysSolutions.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(s => s.SolutionCode.Contains(k) || s.SolutionName.Contains(k));
+        }
+        return q.OrderBy(s => s.SolutionCode).ToListAsync();
     }
 
     // Cấu hình định dạng cột hiển thị theo bảng (theo Mst_ColumnConfig của TVAN gốc):

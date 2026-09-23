@@ -1294,6 +1294,52 @@ public class SysGroupController(ITvanService svc) : Controller
     }
 }
 
+// Gói Module (theo Sys_Modules / Sys_Solution của TVAN gốc):
+// mỗi gói Module thuộc một giải pháp, quy định hạn mức số hóa đơn + dung lượng, có vòng đời bật/ngừng.
+public class SysModuleController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        ViewBag.Solutions = await svc.SysSolutionsAsync(null);
+        return View(await svc.SysModulesAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string moduleCode, string solutionCode, string moduleName, string? description, double qtyInvoice, double valCapacity, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveSysModuleAsync(id, moduleCode, solutionCode, moduleName, description, qtyInvoice, valCapacity, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteSysModuleAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Bật gói Module (theo Sys_ModulesController.ActiveModule của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Active(int id, string? by)
+    {
+        var (ok, msg) = await svc.SetSysModuleActiveAsync(id, true, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Ngừng gói Module (theo Sys_ModulesController.InactiveModule của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Inactive(int id, string? by)
+    {
+        var (ok, msg) = await svc.SetSysModuleActiveAsync(id, false, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Cấu hình định dạng cột hiển thị theo bảng (theo Mst_ColumnConfig của TVAN gốc):
 // mỗi tổ chức khai báo định dạng hiển thị + mô tả cho một cột của một bảng.
 public class ColumnConfigController(ITvanService svc) : Controller

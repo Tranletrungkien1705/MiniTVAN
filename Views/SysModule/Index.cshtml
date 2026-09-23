@@ -1,0 +1,97 @@
+@model List<SysModule>
+@{
+    ViewData["Title"] = "Gói Module";
+    var keyword = ViewBag.Keyword as string;
+    var solutions = ViewBag.Solutions as List<SysSolution> ?? new();
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-box-seam me-1"></i>Danh sách gói Module</h6>
+                <form method="get" action="/SysModule" class="d-flex gap-2">
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm mã / tên gói" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã gói</th><th>Tên gói</th><th>Giải pháp</th><th class="text-end">Hạn mức HĐ</th><th class="text-end">Dung lượng</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var m in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@m.ModuleCode</td>
+                        <td>
+                            @m.ModuleName
+                            @if (!string.IsNullOrWhiteSpace(m.Description)) { <div class="text-muted small">@m.Description</div> }
+                        </td>
+                        <td><span class="badge bg-light text-dark border">@m.SolutionCode</span></td>
+                        <td class="text-end">@m.QtyInvoice.ToString("N0")</td>
+                        <td class="text-end">@m.ValCapacity.ToString("N0")</td>
+                        <td>
+                            <span class="badge @(m.FlagActive ? "bg-success" : "bg-secondary")">@(m.FlagActive ? "Đang dùng" : "Ngừng")</span>
+                        </td>
+                        <td class="text-end text-nowrap">
+                            @if (m.FlagActive)
+                            {
+                                <form method="post" action="/SysModule/Inactive" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@m.Id" />
+                                    <button class="btn btn-sm btn-outline-secondary" title="Ngừng gói Module"><i class="bi bi-pause-circle"></i></button>
+                                </form>
+                            }
+                            else
+                            {
+                                <form method="post" action="/SysModule/Active" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@m.Id" />
+                                    <button class="btn btn-sm btn-outline-success" title="Bật gói Module"><i class="bi bi-play-circle"></i></button>
+                                </form>
+                            }
+                            <form method="post" action="/SysModule/Delete" class="d-inline" onsubmit="return confirm('Xóa gói Module @m.ModuleCode?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@m.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có gói Module nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm gói Module</h6>
+            <form method="post" action="/SysModule/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã gói Module</label><input name="moduleCode" class="form-control form-control-sm" placeholder="VD TVAN_BASIC" required /></div>
+                <div class="col-12">
+                    <label class="form-label small mb-1">Giải pháp</label>
+                    <select name="solutionCode" class="form-select form-select-sm" required>
+                        <option value="">-- Chọn giải pháp --</option>
+                        @foreach (var s in solutions)
+                        {
+                            <option value="@s.SolutionCode">@s.SolutionCode — @s.SolutionName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Tên gói Module</label><input name="moduleName" class="form-control form-control-sm" placeholder="VD Gói cơ bản" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Mô tả</label><input name="description" class="form-control form-control-sm" placeholder="Mô tả ngắn" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Hạn mức số HĐ</label><input name="qtyInvoice" type="number" step="1" value="0" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Dung lượng</label><input name="valCapacity" type="number" step="1" value="0" class="form-control form-control-sm" /></div>
+                <div class="col-12">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="active" value="true" id="activeNew" checked />
+                        <label class="form-check-label small" for="activeNew">Đang dùng</label>
+                    </div>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="quản trị" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Thêm gói Module</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Lưu lại cùng mã gói = cập nhật (theo Sys_Modules_Create/Update). Gói phải thuộc một giải pháp đang dùng (theo Sys_Solution_CheckDB). Bật/ngừng theo ActiveModule/InactiveModule.</p>
+        </div></div>
+    </div>
+</div>

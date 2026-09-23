@@ -1352,3 +1352,38 @@ public class SysUserInGroup : IOrgOwned
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
+
+// Gói Module (theo bảng Sys_Modules của TVAN gốc): mỗi gói Module thuộc một giải pháp (Sys_Solution)
+// và quy định hạn mức sử dụng: số hóa đơn (QtyInvoice) và dung lượng (ValCapacity). Gói Module có
+// vòng đời bật (Active) / ngừng (Inactive) — theo Sys_ModulesController.ActiveModule/InactiveModule.
+// Khóa nghiệp vụ: (OrgId, ModuleCode). FlagActive = gói Module đang dùng hay không.
+public class SysModule : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ModuleCode { get; set; } = "";       // Mã gói Module (VD TVAN_BASIC)
+    public string SolutionCode { get; set; } = "";     // Mã giải pháp mà gói thuộc về (Sys_Solution)
+    public string ModuleName { get; set; } = "";       // Tên gói Module
+    public string? Description { get; set; }            // Mô tả
+    public double QtyInvoice { get; set; }              // Hạn mức số hóa đơn
+    public double ValCapacity { get; set; }             // Hạn mức dung lượng
+    public bool FlagActive { get; set; } = true;        // Gói Module đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
+// Giải pháp (theo bảng Sys_Solution của TVAN gốc): gói Module phải thuộc một giải pháp đang dùng
+// (theo Sys_Solution_CheckDB trong Sys_Modules_Create/Update của TVAN gốc).
+// Khóa nghiệp vụ: (OrgId, SolutionCode). FlagActive = giải pháp đang dùng hay không.
+public class SysSolution : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string SolutionCode { get; set; } = "";     // Mã giải pháp (VD TVAN)
+    public string SolutionName { get; set; } = "";     // Tên giải pháp
+    public bool FlagActive { get; set; } = true;        // Giải pháp đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}

@@ -1117,6 +1117,41 @@ app.MapPost("/api/sys-groups/{id:int}/members", async (int id, SaveSysGroupMembe
     return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
 });
 
+// Gói Module (theo Sys_Modules của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
+app.MapGet("/api/sys-modules", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.SysModulesAsync(keyword);
+    return Results.Ok(ls.Select(m => new { m.Id, m.ModuleCode, m.SolutionCode, m.ModuleName, m.Description, m.QtyInvoice, m.ValCapacity, m.FlagActive, m.UpdatedAt, m.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) gói Module theo mã (theo Sys_Modules_Create/Update của TVAN gốc).
+app.MapPost("/api/sys-modules", async (SysModuleDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveSysModuleAsync(dto.Id, dto.ModuleCode ?? "", dto.SolutionCode ?? "", dto.ModuleName ?? "", dto.Description, dto.QtyInvoice, dto.ValCapacity, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa gói Module theo id (theo Sys_Modules_Delete của TVAN gốc).
+app.MapDelete("/api/sys-modules/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteSysModuleAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
+// Bật/ngừng gói Module (theo Sys_ModulesController.ActiveModule/InactiveModule của TVAN gốc).
+app.MapPost("/api/sys-modules/{id:int}/active", async (int id, SysModuleActiveDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.SetSysModuleActiveAsync(id, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Danh sách giải pháp (theo Sys_Solution của TVAN gốc).
+app.MapGet("/api/sys-solutions", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.SysSolutionsAsync(keyword);
+    return Results.Ok(ls.Select(s => new { s.Id, s.SolutionCode, s.SolutionName, s.FlagActive, s.UpdatedAt, s.UpdatedBy }));
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -1189,4 +1224,6 @@ record CurrencyExDto(int? Id, string? Code, string? Name, string? BaseCode, deci
 record DocTienDto(decimal Amount, string? CurrencyCode, string? By);
 record SysGroupDto(int? Id, string? Code, string? Name, bool Active, string? By);
 record SaveSysGroupMembersDto(List<string>? UserCodes, string? By);
+record SysModuleDto(int? Id, string? ModuleCode, string? SolutionCode, string? ModuleName, string? Description, double QtyInvoice, double ValCapacity, bool Active, string? By);
+record SysModuleActiveDto(bool Active, string? By);
 record TaxOfficeDto(int? Id, string? Code, string? CodeParent, string? ProvinceCode, string? DistrictCode, string? Name, string? Level, string? Address, string? ContactEmail, string? ContactPhone, bool Active, string? By);
