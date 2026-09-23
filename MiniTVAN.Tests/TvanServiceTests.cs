@@ -3356,6 +3356,70 @@ public class TvanServiceTests
     }
 
     [Fact]
+    public async Task TvanInteg_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveTvanIntegAsync(null, "0101243150", "0101243150", "0101243150", "quản trị");
+            Assert.True(ok);
+            var t = await svc.GetTvanIntegAsync(id);
+            Assert.NotNull(t);
+            Assert.Equal("0101243150", t!.OrgCode);
+            Assert.Equal("0101243150", t.MsttctnIn);
+            Assert.True(t.FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task TvanInteg_Save_DuplicateOrg_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveTvanIntegAsync(null, "0101243150", "0101243150", null, null);
+            var (ok, msg, _) = await svc.SaveTvanIntegAsync(null, "0101243150", "0101243150", null, null);
+            Assert.False(ok);
+            Assert.Contains("đã có cấu hình", msg);
+        }
+    }
+
+    [Fact]
+    public async Task TvanInteg_Save_MissingIn_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveTvanIntegAsync(null, "0101243150", "  ", null, null);
+            Assert.False(ok);
+            Assert.Contains("hóa đơn đầu vào", msg);
+        }
+    }
+
+    [Fact]
+    public async Task TvanInteg_Save_UpdatesSameOrg()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveTvanIntegAsync(null, "0101243150", "0101243150", null, null);
+            var (ok, _, _) = await svc.SaveTvanIntegAsync(id, "0101243150", "0200000000", "0300000000", "quản trị");
+            Assert.True(ok);
+            var t = await svc.GetTvanIntegAsync(id);
+            Assert.Equal("0200000000", t!.MsttctnIn);
+            Assert.Equal("0300000000", t.MsttctnOut);
+        }
+    }
+
+    [Fact]
+    public async Task TvanInteg_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveTvanIntegAsync(null, "0101243150", "0101243150", null, null);
+            var (ok, _) = await svc.DeleteTvanIntegAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.TvanIntegsAsync(null));
+        }
+    }
+
+    [Fact]
     public async Task SysModule_Save_Creates()
     {
         var (db, svc, conn) = NewSvc(); using (conn)

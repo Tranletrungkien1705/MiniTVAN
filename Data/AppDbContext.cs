@@ -70,6 +70,7 @@ public class AppDbContext : DbContext
     public DbSet<SysObjectInModule> SysObjectInModules => Set<SysObjectInModule>();
     public DbSet<Brand> Brands => Set<Brand>();
     public DbSet<ProductModel> ProductModels => Set<ProductModel>();
+    public DbSet<TvanInteg> TvanIntegs => Set<TvanInteg>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -424,6 +425,11 @@ public class AppDbContext : DbContext
         b.Entity<ProductModel>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.ModelCode }).IsUnique();   // mỗi tổ chức một mã model
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<TvanInteg>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.OrgCode }).IsUnique();   // mỗi tổ chức một mã OrgID
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

@@ -838,6 +838,18 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
         }
+
+        // Tích hợp TVAN (theo Mst_TVANInteg của TVAN gốc):
+        // 1 cấu hình demo gắn OrgID (MST NNT) với tổ chức giải pháp TVAN (hóa đơn đầu vào/đầu ra).
+        if (!await db.TvanIntegs.AnyAsync())
+        {
+            db.TvanIntegs.Add(new TvanInteg
+            {
+                OrgCode = "0101243150", MsttctnIn = "0101243150", MsttctnOut = "0101243150",
+                FlagActive = true, UpdatedBy = "quản trị"
+            });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

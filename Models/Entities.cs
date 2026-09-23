@@ -1479,3 +1479,20 @@ public class ProductModel : IOrgOwned
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
+
+// Tích hợp TVAN (theo bảng Mst_TVANInteg của TVAN gốc): mỗi tổ chức (OrgID) khai báo tổ chức
+// giải pháp TVAN tương ứng để trao đổi hóa đơn — MSTTCTN_In (hóa đơn đầu vào) và MSTTCTN_Out
+// (hóa đơn đầu ra). Lưu theo kiểu upsert theo OrgID (theo Mst_TVANInteg_Save của TVAN gốc:
+// luôn set FlagActive = Active). Khóa nghiệp vụ: (OrgId, OrgCode).
+public class TvanInteg : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string OrgCode { get; set; } = "";          // Mã tổ chức (OrgID) — khóa nghiệp vụ
+    public string? MsttctnIn { get; set; }              // MST tổ chức giải pháp TVAN — hóa đơn đầu vào
+    public string? MsttctnOut { get; set; }             // MST tổ chức giải pháp TVAN — hóa đơn đầu ra
+    public bool FlagActive { get; set; } = true;         // Đang dùng (TVAN gốc hardcode = Active)
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}

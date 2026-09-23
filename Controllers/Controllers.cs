@@ -1455,6 +1455,34 @@ public class SysObjectController(ITvanService svc) : Controller
     }
 }
 
+// Tích hợp TVAN (theo Mst_TVANInteg của TVAN gốc):
+// mỗi tổ chức khai báo tổ chức giải pháp TVAN tương ứng (hóa đơn đầu vào/đầu ra) để trao đổi hóa đơn.
+public class TvanIntegController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        ViewBag.Nnts = await svc.NntsAsync();
+        return View(await svc.TvanIntegsAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string orgCode, string? msttctnIn, string? msttctnOut, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveTvanIntegAsync(id, orgCode, msttctnIn, msttctnOut, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteTvanIntegAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Cấu hình định dạng cột hiển thị theo bảng (theo Mst_ColumnConfig của TVAN gốc):
 // mỗi tổ chức khai báo định dạng hiển thị + mô tả cho một cột của một bảng.
 public class ColumnConfigController(ITvanService svc) : Controller

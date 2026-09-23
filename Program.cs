@@ -1244,6 +1244,27 @@ app.MapPost("/api/sys-object-in-modules", async (SaveSysObjectInModulesDto dto, 
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Tích hợp TVAN (theo Mst_TVANInteg của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
+app.MapGet("/api/tvan-integs", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.TvanIntegsAsync(keyword);
+    return Results.Ok(ls.Select(t => new { t.Id, t.OrgCode, t.MsttctnIn, t.MsttctnOut, t.FlagActive, t.UpdatedAt, t.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) cấu hình tích hợp TVAN theo OrgID (theo Mst_TVANInteg_Save của TVAN gốc).
+app.MapPost("/api/tvan-integs", async (TvanIntegDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveTvanIntegAsync(dto.Id, dto.OrgCode ?? "", dto.MsttctnIn, dto.MsttctnOut, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa cấu hình tích hợp TVAN theo id (theo Mst_TVANInteg_Save với FlagIsDelete của TVAN gốc).
+app.MapDelete("/api/tvan-integs/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteTvanIntegAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -1323,4 +1344,5 @@ record SysModuleDto(int? Id, string? ModuleCode, string? SolutionCode, string? M
 record SysModuleActiveDto(bool Active, string? By);
 record SysObjectDto(int? Id, string? ObjectCode, string? ObjectName, string? ServiceCode, SysObjectType ObjectType, bool Active, string? By);
 record SaveSysObjectInModulesDto(int ModuleId, List<string>? ObjectCodes, string? By);
+record TvanIntegDto(int? Id, string? OrgCode, string? MsttctnIn, string? MsttctnOut, string? By);
 record TaxOfficeDto(int? Id, string? Code, string? CodeParent, string? ProvinceCode, string? DistrictCode, string? Name, string? Level, string? Address, string? ContactEmail, string? ContactPhone, bool Active, string? By);

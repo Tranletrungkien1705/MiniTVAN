@@ -211,6 +211,12 @@ public interface ITvanService
     Task<List<SysObjectInModule>> SysObjectInModulesAsync(string? moduleCode);
     Task<(bool ok, string msg)> SaveSysObjectInModulesAsync(int moduleId, List<string> objectCodes, string? by);
 
+    // Tích hợp TVAN (theo Mst_TVANInteg của TVAN gốc)
+    Task<List<TvanInteg>> TvanIntegsAsync(string? keyword);
+    Task<TvanInteg?> GetTvanIntegAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveTvanIntegAsync(int? id, string orgCode, string? msttctnIn, string? msttctnOut, string? by);
+    Task<(bool ok, string msg)> DeleteTvanIntegAsync(int id);
+
     // Cấu hình định dạng cột hiển thị theo bảng (theo Mst_ColumnConfig của TVAN gốc)
     Task<List<ColumnConfig>> ColumnConfigsAsync(string? tableName, string? keyword);
     Task<ColumnConfig?> GetColumnConfigAsync(int id);
@@ -4186,6 +4192,72 @@ public class TvanService(AppDbContext db) : ITvanService
         m.UpdatedBy = by;
         await db.SaveChangesAsync();
         return (true, $"Đã lưu đối tượng cho gói Module {m.ModuleCode}.");
+    }
+
+    // ===== Tích hợp TVAN (theo Mst_TVANInteg của TVAN gốc) =====
+
+    // Danh sách cấu hình tích hợp TVAN (lọc theo từ khóa mã OrgID / MST đầu vào / MST đầu ra nếu có).
+    public Task<List<TvanInteg>> TvanIntegsAsync(string? keyword)
+    {
+        var q = db.TvanIntegs.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.OrgCode.Contains(k)
+                || (t.MsttctnIn != null && t.MsttctnIn.Contains(k))
+                || (t.MsttctnOut != null && t.MsttctnOut.Contains(k)));
+        }
+        return q.OrderBy(t => t.OrgCode).ToListAsync();
+    }
+
+    public Task<TvanInteg?> GetTvanIntegAsync(int id) =>
+        db.TvanIntegs.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) cấu hình tích hợp TVAN theo OrgID (theo Mst_TVANInteg_Save của TVAN gốc):
+    // lưu lần đầu = tạo mới, lưu lại cùng OrgID = cập nhật; luôn set FlagActive = đang dùng.
+    // Chặn thiếu OrgID, chặn thiếu MST hóa đơn đầu vào.
+    public async Task<(bool ok, string msg, int id)> SaveTvanIntegAsync(int? id, string orgCode, string? msttctnIn, string? msttctnOut, string? by)
+    {
+        orgCode = (orgCode ?? "").Trim();
+        msttctnIn = (msttctnIn ?? "").Trim();
+        msttctnOut = (msttctnOut ?? "").Trim();
+        if (orgCode.Length == 0) return (false, "Cần chọn OrgID.", 0);
+        if (msttctnIn.Length == 0) return (false, "Cần chọn hóa đơn đầu vào.", 0);
+
+        TvanInteg? e;
+        if (id is > 0)
+        {
+            e = await db.TvanIntegs.FirstOrDefaultAsync(t => t.Id == id);
+            if (e == null) return (false, "Không tìm thấy cấu hình tích hợp TVAN.", 0);
+            if (await db.TvanIntegs.AnyAsync(t => t.OrgCode == orgCode && t.Id != e.Id))
+                return (false, $"OrgID {orgCode} đã có cấu hình tích hợp.", 0);
+            e.OrgCode = orgCode;
+            e.MsttctnIn = msttctnIn;
+            e.MsttctnOut = msttctnOut.Length > 0 ? msttctnOut : null;
+            e.FlagActive = true;
+            e.UpdatedAt = DateTime.UtcNow;
+            e.UpdatedBy = by;
+            await db.SaveChangesAsync();
+            return (true, $"Đã cập nhật tích hợp TVAN cho OrgID {orgCode}.", e.Id);
+        }
+
+        if (await db.TvanIntegs.AnyAsync(t => t.OrgCode == orgCode))
+            return (false, $"OrgID {orgCode} đã có cấu hình tích hợp.", 0);
+        e = new TvanInteg { OrgCode = orgCode, MsttctnIn = msttctnIn, MsttctnOut = msttctnOut.Length > 0 ? msttctnOut : null, FlagActive = true, UpdatedBy = by };
+        db.TvanIntegs.Add(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã tích hợp TVAN cho OrgID {orgCode}.", e.Id);
+    }
+
+    // Xóa cấu hình tích hợp TVAN theo id (theo Mst_TVANInteg_Save với FlagIsDelete của TVAN gốc).
+    public async Task<(bool ok, string msg)> DeleteTvanIntegAsync(int id)
+    {
+        var e = await db.TvanIntegs.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy cấu hình tích hợp TVAN.");
+        var code = e.OrgCode;
+        db.TvanIntegs.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa cấu hình tích hợp TVAN của OrgID {code}.");
     }
 
     // Cấu hình định dạng cột hiển thị theo bảng (theo Mst_ColumnConfig của TVAN gốc):
