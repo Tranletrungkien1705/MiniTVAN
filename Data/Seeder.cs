@@ -927,6 +927,16 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Người dùng hệ thống (theo Sys_User của TVAN gốc):
+        // 2 tài khoản demo — 1 quản trị hệ thống, 1 kế toán thường. Mật khẩu băm (không lưu thô).
+        if (!await db.SysUsers.AnyAsync())
+        {
+            db.SysUsers.AddRange(
+                new SysUser { UserCode = "admin", UserName = "Quản trị hệ thống", UserPasswordHash = HashPwd("admin123"), EMail = "admin@dongdo.vn", MST = "0101243150", Position = "Quản trị", FlagSysAdmin = true, FlagNNTAdmin = true, FlagActive = true, UpdatedBy = "hệ thống" },
+                new SysUser { UserCode = "ketoan01", UserName = "Nguyễn Thị Kế Toán", UserPasswordHash = HashPwd("ketoan123"), EMail = "ketoan01@dongdo.vn", PhoneNo = "0901234567", MST = "0101243150", DepartmentCode = "KT", Position = "Kế toán viên", FlagActive = true, UpdatedBy = "hệ thống" });
+            await db.SaveChangesAsync();
+        }
+
         // Gói Module (theo Sys_Modules / Sys_Solution của TVAN gốc):
         // 1 giải pháp demo + 2 gói Module thuộc giải pháp đó.
         if (!await db.SysSolutions.AnyAsync())
@@ -1053,5 +1063,13 @@ public static class Seeder
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON minitvan.\"Orgs\" (\"ApiKey\")" };
         foreach (var t in tables) sql.Add($"ALTER TABLE minitvan.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
+    }
+
+    // Băm mật khẩu (SHA-256) cho người dùng demo — KHÔNG lưu plaintext như nguồn.
+    private static string HashPwd(string password)
+    {
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var bytes = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }

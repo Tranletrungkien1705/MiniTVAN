@@ -1,0 +1,81 @@
+@model List<SysUser>
+@{
+    ViewData["Title"] = "Người dùng hệ thống";
+    var keyword = ViewBag.Keyword as string;
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-person-badge me-1"></i>Danh sách người dùng</h6>
+                <form method="get" action="/SysUser" class="d-flex gap-2">
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm mã / tên / email" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã</th><th>Tên</th><th>Liên hệ</th><th>Quyền</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var u in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@u.UserCode</td>
+                        <td>
+                            @u.UserName
+                            @if (!string.IsNullOrWhiteSpace(u.Position)) { <div class="small text-muted">@u.Position</div> }
+                        </td>
+                        <td class="small">
+                            @if (!string.IsNullOrWhiteSpace(u.EMail)) { <div><i class="bi bi-envelope me-1"></i>@u.EMail</div> }
+                            @if (!string.IsNullOrWhiteSpace(u.PhoneNo)) { <div><i class="bi bi-telephone me-1"></i>@u.PhoneNo</div> }
+                            @if (!string.IsNullOrWhiteSpace(u.MST)) { <div><i class="bi bi-hash me-1"></i>MST @u.MST</div> }
+                        </td>
+                        <td>
+                            @if (u.FlagSysAdmin) { <span class="badge bg-danger me-1 mb-1">Quản trị hệ thống</span> }
+                            @if (u.FlagNNTAdmin) { <span class="badge bg-primary me-1 mb-1">Quản trị NNT</span> }
+                            @if (u.FlagDLAdmin) { <span class="badge bg-info text-dark me-1 mb-1">Quản trị đại lý</span> }
+                            @if (!u.FlagSysAdmin && !u.FlagNNTAdmin && !u.FlagDLAdmin) { <span class="text-muted small">Người dùng thường</span> }
+                        </td>
+                        <td>
+                            <span class="badge @(u.FlagActive ? "bg-success" : "bg-secondary")">@(u.FlagActive ? "Đang dùng" : "Ngừng")</span>
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/SysUser/Delete" class="d-inline" onsubmit="return confirm('Xóa người dùng @u.UserCode? Phân gán vào nhóm của người dùng cũng bị xóa.');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@u.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có người dùng nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm người dùng</h6>
+            <form method="post" action="/SysUser/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã người dùng</label><input name="userCode" class="form-control form-control-sm" placeholder="VD ketoan01" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Tên người dùng</label><input name="userName" class="form-control form-control-sm" placeholder="VD Nguyễn Văn A" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Mật khẩu</label><input name="password" type="password" class="form-control form-control-sm" placeholder="Bắt buộc khi tạo mới" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Điện thoại</label><input name="phoneNo" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Email</label><input name="email" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">MST</label><input name="mst" class="form-control form-control-sm" placeholder="VD 0101243150" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Phòng ban</label><input name="departmentCode" class="form-control form-control-sm" placeholder="VD KT" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Chức vụ</label><input name="position" class="form-control form-control-sm" placeholder="VD Kế toán trưởng" /></div>
+                <div class="col-12">
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="flagSysAdmin" value="true" id="flagSysAdmin" /><label class="form-check-label small" for="flagSysAdmin">Quản trị hệ thống</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="flagNntAdmin" value="true" id="flagNntAdmin" /><label class="form-check-label small" for="flagNntAdmin">Quản trị NNT</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="flagDlAdmin" value="true" id="flagDlAdmin" /><label class="form-check-label small" for="flagDlAdmin">Quản trị đại lý</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="active" value="true" id="activeNew" checked /><label class="form-check-label small" for="activeNew">Đang dùng</label></div>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="quản trị" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Thêm người dùng</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Lưu lại cùng mã người dùng = cập nhật (mật khẩu để trống = giữ nguyên) — theo Sys_User_Create/Update. Xóa người dùng sẽ xóa kèm phân gán vào nhóm (theo Sys_User_Delete). Mật khẩu được băm, không lưu thô.</p>
+        </div></div>
+    </div>
+</div>

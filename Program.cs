@@ -1416,6 +1416,27 @@ app.MapPost("/api/sys-groups/{id:int}/members", async (int id, SaveSysGroupMembe
     return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
 });
 
+// Người dùng hệ thống (theo Sys_User của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
+app.MapGet("/api/sys-users", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.SysUsersAsync(keyword);
+    return Results.Ok(ls.Select(u => new { u.Id, u.UserCode, u.UserName, u.PhoneNo, u.EMail, u.MST, u.DepartmentCode, u.Position, u.FlagDLAdmin, u.FlagSysAdmin, u.FlagNNTAdmin, u.FlagActive, u.UpdatedAt, u.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) người dùng theo mã (theo Sys_User_Create/Update của TVAN gốc).
+app.MapPost("/api/sys-users", async (SysUserDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveSysUserAsync(dto.Id, dto.UserCode ?? "", dto.UserName ?? "", dto.Password, dto.PhoneNo, dto.EMail, dto.MST, dto.DepartmentCode, dto.Position, dto.FlagDLAdmin, dto.FlagSysAdmin, dto.FlagNNTAdmin, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa người dùng theo id (theo Sys_User_Delete của TVAN gốc): xóa kèm phân gán vào nhóm.
+app.MapDelete("/api/sys-users/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteSysUserAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 // Gói Module (theo Sys_Modules của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
 app.MapGet("/api/sys-modules", async (string? keyword, ITvanService svc) =>
 {
@@ -1591,6 +1612,7 @@ record CurrencyExDto(int? Id, string? Code, string? Name, string? BaseCode, deci
 record DocTienDto(decimal Amount, string? CurrencyCode, string? By);
 record SysGroupDto(int? Id, string? Code, string? Name, bool Active, string? By);
 record SaveSysGroupMembersDto(List<string>? UserCodes, string? By);
+record SysUserDto(int? Id, string? UserCode, string? UserName, string? Password, string? PhoneNo, string? EMail, string? MST, string? DepartmentCode, string? Position, bool FlagDLAdmin, bool FlagSysAdmin, bool FlagNNTAdmin, bool Active, string? By);
 record SysModuleDto(int? Id, string? ModuleCode, string? SolutionCode, string? ModuleName, string? Description, double QtyInvoice, double ValCapacity, bool Active, string? By);
 record SysModuleActiveDto(bool Active, string? By);
 record SysObjectDto(int? Id, string? ObjectCode, string? ObjectName, string? ServiceCode, SysObjectType ObjectType, bool Active, string? By);

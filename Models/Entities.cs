@@ -1413,6 +1413,33 @@ public class SysUserInGroup : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Người dùng hệ thống (theo bảng Sys_User của TVAN gốc): mỗi tổ chức khai báo các tài khoản người dùng
+// (mã đăng nhập UserCode, tên, mật khẩu, điện thoại, email, MST, phòng ban, chức vụ) phục vụ đăng nhập
+// và phân quyền. Cờ quản trị: FlagSysAdmin (quản trị hệ thống), FlagNNTAdmin (quản trị NNT),
+// FlagDLAdmin (quản trị đại lý). Người dùng được gán vào nhóm qua SysUserInGroup (theo UserCode).
+// Khóa nghiệp vụ: (OrgId, UserCode). FlagActive = tài khoản đang dùng hay không.
+// LƯU Ý: mật khẩu lưu dạng băm (UserPasswordHash), KHÔNG lưu plaintext như nguồn.
+public class SysUser : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string UserCode { get; set; } = "";        // Mã đăng nhập (VD ketoan01)
+    public string UserName { get; set; } = "";        // Tên người dùng
+    public string? UserPasswordHash { get; set; }      // Mật khẩu (băm)
+    public string? PhoneNo { get; set; }               // Điện thoại
+    public string? EMail { get; set; }                 // Email
+    public string? MST { get; set; }                   // MST người nộp thuế mà người dùng thuộc về
+    public string? DepartmentCode { get; set; }        // Mã phòng ban (Mst_Department)
+    public string? Position { get; set; }              // Chức vụ
+    public bool FlagDLAdmin { get; set; }              // Quản trị đại lý
+    public bool FlagSysAdmin { get; set; }             // Quản trị hệ thống
+    public bool FlagNNTAdmin { get; set; }             // Quản trị NNT
+    public bool FlagActive { get; set; } = true;       // Tài khoản đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 // Gói Module (theo bảng Sys_Modules của TVAN gốc): mỗi gói Module thuộc một giải pháp (Sys_Solution)
 // và quy định hạn mức sử dụng: số hóa đơn (QtyInvoice) và dung lượng (ValCapacity). Gói Module có
 // vòng đời bật (Active) / ngừng (Inactive) — theo Sys_ModulesController.ActiveModule/InactiveModule.

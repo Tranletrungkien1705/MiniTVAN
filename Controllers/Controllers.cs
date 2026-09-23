@@ -1643,6 +1643,33 @@ public class SysGroupController(ITvanService svc) : Controller
     }
 }
 
+// Người dùng hệ thống (theo Sys_User của TVAN gốc):
+// mỗi tổ chức khai báo các tài khoản người dùng (mã, tên, mật khẩu, liên hệ, MST, phòng ban, chức vụ, cờ quản trị).
+public class SysUserController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.SysUsersAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string userCode, string userName, string? password, string? phoneNo, string? email, string? mst, string? departmentCode, string? position, bool flagDlAdmin, bool flagSysAdmin, bool flagNntAdmin, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveSysUserAsync(id, userCode, userName, password, phoneNo, email, mst, departmentCode, position, flagDlAdmin, flagSysAdmin, flagNntAdmin, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteSysUserAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Gói Module (theo Sys_Modules / Sys_Solution của TVAN gốc):
 // mỗi gói Module thuộc một giải pháp, quy định hạn mức số hóa đơn + dung lượng, có vòng đời bật/ngừng.
 public class SysModuleController(ITvanService svc) : Controller

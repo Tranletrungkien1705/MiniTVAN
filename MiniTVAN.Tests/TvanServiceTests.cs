@@ -3413,6 +3413,89 @@ public class TvanServiceTests
     }
 
     [Fact]
+    public async Task SysUser_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveSysUserAsync(null, "ketoan01", "Nguyễn Văn A", "secret", "0901234567", "a@x.vn", "0101243150", "KT", "Kế toán", false, false, false, true, "quản trị");
+            Assert.True(ok);
+            var u = await svc.GetSysUserAsync(id);
+            Assert.NotNull(u);
+            Assert.Equal("ketoan01", u!.UserCode);
+            Assert.Equal("Nguyễn Văn A", u.UserName);
+            Assert.True(u.FlagActive);
+            // Mật khẩu KHÔNG lưu thô.
+            Assert.NotEqual("secret", u.UserPasswordHash);
+            Assert.False(string.IsNullOrEmpty(u.UserPasswordHash));
+        }
+    }
+
+    [Fact]
+    public async Task SysUser_Save_DuplicateCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveSysUserAsync(null, "ketoan01", "A", "p1", null, null, null, null, null, false, false, false, true, null);
+            var (ok, msg, _) = await svc.SaveSysUserAsync(null, "ketoan01", "B", "p2", null, null, null, null, null, false, false, false, true, null);
+            Assert.False(ok);
+            Assert.Contains("đã tồn tại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SysUser_Save_MissingName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveSysUserAsync(null, "ketoan01", "  ", "p1", null, null, null, null, null, false, false, false, true, null);
+            Assert.False(ok);
+            Assert.Contains("Cần tên người dùng", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SysUser_Save_MissingPasswordOnCreate_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveSysUserAsync(null, "ketoan01", "A", null, null, null, null, null, null, false, false, false, true, null);
+            Assert.False(ok);
+            Assert.Contains("Cần mật khẩu", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SysUser_Save_Update_KeepsPasswordWhenBlank()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveSysUserAsync(null, "ketoan01", "A", "secret", null, null, null, null, null, false, false, false, true, null);
+            var hash1 = (await svc.GetSysUserAsync(id))!.UserPasswordHash;
+            // Cập nhật tên, mật khẩu để trống → giữ nguyên hash.
+            var (ok, _, _) = await svc.SaveSysUserAsync(id, "ketoan01", "B", null, null, null, null, null, null, false, false, false, true, null);
+            Assert.True(ok);
+            var u = await svc.GetSysUserAsync(id);
+            Assert.Equal("B", u!.UserName);
+            Assert.Equal(hash1, u.UserPasswordHash);
+        }
+    }
+
+    [Fact]
+    public async Task SysUser_Delete_RemovesGroupMembership()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, uid) = await svc.SaveSysUserAsync(null, "ketoan01", "A", "p1", null, null, null, null, null, false, false, false, true, null);
+            var (_, _, gid) = await svc.SaveSysGroupAsync(null, "KETOAN", "Nhóm kế toán", true, null);
+            await svc.SaveSysGroupMembersAsync(gid, new() { "ketoan01" }, null);
+            var (ok, _) = await svc.DeleteSysUserAsync(uid);
+            Assert.True(ok);
+            Assert.Empty(await svc.SysUsersAsync(null));
+            Assert.Empty(await db.SysUserInGroups.ToListAsync());
+        }
+    }
+
+    [Fact]
     public async Task TvanInteg_Save_Creates()
     {
         var (db, svc, conn) = NewSvc(); using (conn)

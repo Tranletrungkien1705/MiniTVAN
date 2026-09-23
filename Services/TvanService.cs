@@ -229,6 +229,12 @@ public interface ITvanService
     Task<(bool ok, string msg)> DeleteSysGroupAsync(int id);
     Task<(bool ok, string msg)> SaveSysGroupMembersAsync(int id, List<string> userCodes, string? by);
 
+    // Người dùng hệ thống (theo Sys_User của TVAN gốc)
+    Task<List<SysUser>> SysUsersAsync(string? keyword);
+    Task<SysUser?> GetSysUserAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveSysUserAsync(int? id, string userCode, string userName, string? password, string? phoneNo, string? email, string? mst, string? departmentCode, string? position, bool flagDlAdmin, bool flagSysAdmin, bool flagNntAdmin, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteSysUserAsync(int id);
+
     // Gói Module (theo Sys_Modules / Sys_Solution của TVAN gốc)
     Task<List<SysModule>> SysModulesAsync(string? keyword);
     Task<SysModule?> GetSysModuleAsync(int id);
@@ -4763,6 +4769,96 @@ public class TvanService(AppDbContext db) : ITvanService
         e.UpdatedBy = by;
         await db.SaveChangesAsync();
         return (true, $"Đã lưu thành viên cho nhóm {e.GroupCode}.");
+    }
+
+    // ===== Người dùng hệ thống (theo Sys_User của TVAN gốc) =====
+
+    // Danh sách người dùng (lọc theo từ khóa mã/tên/email/điện thoại nếu có).
+    public Task<List<SysUser>> SysUsersAsync(string? keyword)
+    {
+        var q = db.SysUsers.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(u => u.UserCode.Contains(k) || u.UserName.Contains(k)
+                || (u.EMail != null && u.EMail.Contains(k)) || (u.PhoneNo != null && u.PhoneNo.Contains(k)));
+        }
+        return q.OrderBy(u => u.UserCode).ToListAsync();
+    }
+
+    public Task<SysUser?> GetSysUserAsync(int id) =>
+        db.SysUsers.FirstOrDefaultAsync(u => u.Id == id);
+
+    // Lưu (tạo mới/cập nhật) người dùng theo mã (theo Sys_User_Create/Update của TVAN gốc):
+    // lưu lần đầu = tạo tài khoản mới (bắt buộc có mật khẩu), lưu lại cùng mã = cập nhật
+    // (mật khẩu để trống = giữ nguyên). Chặn thiếu mã/tên, chặn trùng mã khi tạo.
+    public async Task<(bool ok, string msg, int id)> SaveSysUserAsync(int? id, string userCode, string userName, string? password, string? phoneNo, string? email, string? mst, string? departmentCode, string? position, bool flagDlAdmin, bool flagSysAdmin, bool flagNntAdmin, bool active, string? by)
+    {
+        userCode = (userCode ?? "").Trim();
+        userName = (userName ?? "").Trim();
+        if (userCode.Length == 0) return (false, "Cần mã người dùng.", 0);
+        if (userName.Length == 0) return (false, "Cần tên người dùng.", 0);
+
+        SysUser? e;
+        if (id is > 0)
+        {
+            e = await db.SysUsers.FirstOrDefaultAsync(u => u.Id == id);
+            if (e == null) return (false, "Không tìm thấy người dùng.", 0);
+            if (await db.SysUsers.AnyAsync(u => u.UserCode == userCode && u.Id != e.Id))
+                return (false, $"Mã người dùng {userCode} đã tồn tại.", 0);
+            e.UserCode = userCode;
+            e.UserName = userName;
+            if (!string.IsNullOrEmpty(password)) e.UserPasswordHash = HashPassword(password!);
+            e.PhoneNo = phoneNo;
+            e.EMail = email;
+            e.MST = mst;
+            e.DepartmentCode = departmentCode;
+            e.Position = position;
+            e.FlagDLAdmin = flagDlAdmin;
+            e.FlagSysAdmin = flagSysAdmin;
+            e.FlagNNTAdmin = flagNntAdmin;
+            e.FlagActive = active;
+            e.UpdatedAt = DateTime.UtcNow;
+            e.UpdatedBy = by;
+            await db.SaveChangesAsync();
+            return (true, $"Đã cập nhật người dùng {userCode}.", e.Id);
+        }
+
+        if (string.IsNullOrEmpty(password)) return (false, "Cần mật khẩu khi tạo người dùng.", 0);
+        if (await db.SysUsers.AnyAsync(u => u.UserCode == userCode))
+            return (false, $"Mã người dùng {userCode} đã tồn tại.", 0);
+        e = new SysUser
+        {
+            UserCode = userCode, UserName = userName, UserPasswordHash = HashPassword(password!),
+            PhoneNo = phoneNo, EMail = email, MST = mst, DepartmentCode = departmentCode, Position = position,
+            FlagDLAdmin = flagDlAdmin, FlagSysAdmin = flagSysAdmin, FlagNNTAdmin = flagNntAdmin,
+            FlagActive = active, UpdatedBy = by
+        };
+        db.SysUsers.Add(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã tạo người dùng {userCode}.", e.Id);
+    }
+
+    // Xóa người dùng theo id (theo Sys_User_Delete của TVAN gốc): chặn khi không tồn tại;
+    // xóa kèm toàn bộ phân gán người dùng vào nhóm (Sys_UserInGroup_Delete_ByUser).
+    public async Task<(bool ok, string msg)> DeleteSysUserAsync(int id)
+    {
+        var e = await db.SysUsers.FirstOrDefaultAsync(u => u.Id == id);
+        if (e == null) return (false, "Không tìm thấy người dùng.");
+        var code = e.UserCode;
+        var members = await db.SysUserInGroups.Where(m => m.UserCode == code).ToListAsync();
+        db.SysUserInGroups.RemoveRange(members);
+        db.SysUsers.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa người dùng {code}.");
+    }
+
+    // Băm mật khẩu (SHA-256) — KHÔNG lưu plaintext như nguồn (theo C0-bug9).
+    private static string HashPassword(string password)
+    {
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var bytes = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
     // ===== Gói Module (theo Sys_Modules / Sys_Solution của TVAN gốc) =====
