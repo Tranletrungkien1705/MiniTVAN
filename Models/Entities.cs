@@ -1545,3 +1545,45 @@ public class MstTypeCode : IOrgOwned
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
+
+// Hành động của thông điệp trao đổi với cơ quan thuế (theo Log_TCTTransaction.MessageAction của TVAN gốc):
+// Send = gửi tới CQT, Receive = nhận phản hồi từ CQT.
+public enum TctMessageAction { Send = 0, Receive = 1 }
+
+// Trạng thái xử lý của thông điệp trao đổi với cơ quan thuế (theo Log_TCTTransaction.MessageStatus của TVAN gốc):
+// Success = thành công, Error = lỗi, Pending = đang chờ xử lý.
+public enum TctMessageStatus { Success = 0, Error = 1, Pending = 2 }
+
+// Kết quả của thông điệp trao đổi với cơ quan thuế (theo Log_TCTTransaction.MessageResult của TVAN gốc):
+// Accept = CQT chấp nhận, Reject = CQT từ chối, None = chưa có kết quả.
+public enum TctMessageResult { None = 0, Accept = 1, Reject = 2 }
+
+// Nhật ký truyền nhận với cơ quan thuế (theo bảng Log_TCTTransaction của TVAN gốc —
+// màn Log_NKTNController.Index/Detail). Mỗi lần hệ thống gửi/nhận một thông điệp trao đổi
+// với cơ quan thuế (tờ khai đăng ký, hóa đơn, thông báo sai sót...) ghi lại để đối soát:
+// mã thông điệp, hành động (gửi/nhận), loại thông điệp (TypeCode), trạng thái, kết quả,
+// MST bên bán/bên mua, số lượng hóa đơn, mô tả, tag và đường dẫn file XML.
+// Khóa nghiệp vụ: (OrgId, MessageCode).
+public class TctTransactionLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string MessageCode { get; set; } = "";        // Mã thông điệp (VD 100..., 200..., 300...)
+    public string? MstSeller { get; set; }                 // MST bên bán (NNT)
+    public TctMessageAction MessageAction { get; set; } = TctMessageAction.Send;   // Gửi / nhận
+    public DateTime? MessageDTime { get; set; }            // Thời điểm trao đổi thông điệp
+    public string? TypeCode { get; set; }                  // Mã loại thông điệp (Mst_TypeCode)
+    public TctMessageStatus MessageStatus { get; set; } = TctMessageStatus.Success;   // Trạng thái xử lý
+    public TctMessageResult MessageResult { get; set; } = TctMessageResult.None;      // Kết quả (chấp nhận/từ chối)
+    public string? MessageRefCode { get; set; }            // Mã tham chiếu (mã V / mã thông điệp liên quan)
+    public string? Partner { get; set; }                   // Đối tác trao đổi (cơ quan thuế)
+    public DateTime? MessageDate { get; set; }             // Ngày thông điệp
+    public string? MstBuyer { get; set; }                  // MST bên mua
+    public int InvoiceQty { get; set; }                    // Số lượng hóa đơn trong thông điệp
+    public string? MessageDesc { get; set; }               // Mô tả nội dung thông điệp
+    public string? Tag { get; set; }                       // Thẻ phân loại (tìm kiếm)
+    public string? XmlFilePath { get; set; }               // Đường dẫn file XML thông điệp
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}

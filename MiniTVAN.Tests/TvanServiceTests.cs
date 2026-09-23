@@ -4552,4 +4552,61 @@ public class DocTienTests
             Assert.Null(await svc.GetProductModelAsync(id));
         }
     }
+
+    [Fact]
+    public async Task TctTransaction_Create_RequiresMessageCode()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.CreateTctTransactionLogAsync("", "0101243150", TctMessageAction.Send, null, "200", TctMessageStatus.Success, TctMessageResult.Accept, null, null, null, null, 0, null, null, null, "kế toán");
+            Assert.False(ok);
+            Assert.Contains("mã thông điệp", msg);
+        }
+    }
+
+    [Fact]
+    public async Task TctTransaction_Create_DuplicateBlocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok1, _, _) = await svc.CreateTctTransactionLogAsync("200001", "0101243150", TctMessageAction.Send, DateTime.UtcNow, "200", TctMessageStatus.Success, TctMessageResult.Accept, null, null, null, null, 1, "Gửi HĐ", null, null, "kế toán");
+            Assert.True(ok1);
+            var (ok2, msg2, _) = await svc.CreateTctTransactionLogAsync("200001", "0101243150", TctMessageAction.Send, DateTime.UtcNow, "200", TctMessageStatus.Success, TctMessageResult.Accept, null, null, null, null, 1, null, null, null, "kế toán");
+            Assert.False(ok2);
+            Assert.Contains("đã tồn tại", msg2);
+        }
+    }
+
+    [Fact]
+    public async Task TctTransaction_List_FiltersByActionAndStatus()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateTctTransactionLogAsync("200001", "0101243150", TctMessageAction.Send, DateTime.UtcNow.AddDays(-1), "200", TctMessageStatus.Success, TctMessageResult.Accept, null, null, null, null, 1, null, null, null, "kế toán");
+            await svc.CreateTctTransactionLogAsync("202002", "0101243150", TctMessageAction.Receive, DateTime.UtcNow, "202", TctMessageStatus.Success, TctMessageResult.Accept, null, null, null, null, 1, null, null, null, "kế toán");
+            await svc.CreateTctTransactionLogAsync("300003", "0101243150", TctMessageAction.Send, DateTime.UtcNow, "300", TctMessageStatus.Error, TctMessageResult.Reject, null, null, null, null, 1, null, null, null, "kế toán");
+
+            Assert.Equal(3, (await svc.TctTransactionLogsAsync(null, null, null, null, null, null, null, null)).Count);
+            Assert.Equal(2, (await svc.TctTransactionLogsAsync(null, TctMessageAction.Send, null, null, null, null, null, null)).Count);
+            Assert.Single(await svc.TctTransactionLogsAsync(null, null, null, TctMessageStatus.Error, null, null, null, null));
+            Assert.Single(await svc.TctTransactionLogsAsync(null, null, null, null, TctMessageResult.Reject, null, null, null));
+            Assert.Single(await svc.TctTransactionLogsAsync("202", null, null, null, null, null, null, null));
+        }
+    }
+
+    [Fact]
+    public async Task TctTransaction_Get_ReturnsDetail()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateTctTransactionLogAsync("200001", "0101243150", TctMessageAction.Send, DateTime.UtcNow, "200", TctMessageStatus.Success, TctMessageResult.Accept, "V123", "Cục Thuế TP Hà Nội", DateTime.Today, "8012345678", 2, "Gửi 2 HĐ", "HOA_DON", "2026-06-12/msg.xml", "kế toán");
+            var e = await svc.GetTctTransactionLogAsync(id);
+            Assert.NotNull(e);
+            Assert.Equal("200001", e!.MessageCode);
+            Assert.Equal(TctMessageAction.Send, e.MessageAction);
+            Assert.Equal(TctMessageResult.Accept, e.MessageResult);
+            Assert.Equal(2, e.InvoiceQty);
+            Assert.Equal("V123", e.MessageRefCode);
+        }
+    }
 }

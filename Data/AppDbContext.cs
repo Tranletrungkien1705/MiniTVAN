@@ -74,6 +74,7 @@ public class AppDbContext : DbContext
     public DbSet<SpecType1> SpecType1s => Set<SpecType1>();
     public DbSet<TvanInteg> TvanIntegs => Set<TvanInteg>();
     public DbSet<MstTypeCode> TypeCodes => Set<MstTypeCode>();
+    public DbSet<TctTransactionLog> TctTransactionLogs => Set<TctTransactionLog>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -448,6 +449,12 @@ public class AppDbContext : DbContext
         b.Entity<MstTypeCode>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.TypeCodeValue }).IsUnique();   // mỗi tổ chức một mã loại
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<TctTransactionLog>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.MessageCode }).IsUnique();   // mỗi tổ chức một mã thông điệp
+            e.HasIndex(x => new { x.OrgId, x.MessageDTime });
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

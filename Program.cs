@@ -1209,6 +1209,30 @@ app.MapGet("/api/doc-tien-logs", async (ITvanService svc) =>
     return Results.Ok(ls.Select(l => new { l.Id, l.Amount, l.CurrencyCode, l.CurrencyName, l.Text, l.By, l.CreatedAt }));
 });
 
+// Nhật ký truyền nhận với cơ quan thuế (theo Log_TCTTransaction của TVAN gốc):
+// danh sách thông điệp trao đổi với CQT (lọc theo mã thông điệp, hành động, MST bên bán,
+// trạng thái, kết quả, loại thông điệp, khoảng thời gian).
+app.MapGet("/api/tct-transactions", async (string? messageCode, TctMessageAction? action, string? mstSeller, TctMessageStatus? status, TctMessageResult? result, string? typeCode, DateTime? fromDate, DateTime? toDate, ITvanService svc) =>
+{
+    var ls = await svc.TctTransactionLogsAsync(messageCode, action, mstSeller, status, result, typeCode, fromDate, toDate);
+    return Results.Ok(ls.Select(l => new { l.Id, l.MessageCode, l.MstSeller, action = l.MessageAction.ToString(), l.MessageDTime, l.TypeCode, status = l.MessageStatus.ToString(), result = l.MessageResult.ToString(), l.MessageRefCode, l.Partner, l.MessageDate, l.MstBuyer, l.InvoiceQty, l.MessageDesc, l.Tag, l.XmlFilePath, l.UpdatedBy, l.CreatedAt }));
+});
+
+// Chi tiết một thông điệp trao đổi với CQT (theo Log_NKTNController.Detail của TVAN gốc).
+app.MapGet("/api/tct-transactions/{id:int}", async (int id, ITvanService svc) =>
+{
+    var l = await svc.GetTctTransactionLogAsync(id);
+    if (l == null) return Results.NotFound(new { error = "Không tìm thấy thông điệp." });
+    return Results.Ok(new { l.Id, l.MessageCode, l.MstSeller, action = l.MessageAction.ToString(), l.MessageDTime, l.TypeCode, status = l.MessageStatus.ToString(), result = l.MessageResult.ToString(), l.MessageRefCode, l.Partner, l.MessageDate, l.MstBuyer, l.InvoiceQty, l.MessageDesc, l.Tag, l.XmlFilePath, l.UpdatedBy, l.CreatedAt });
+});
+
+// Ghi một dòng nhật ký truyền nhận với CQT (theo Log_TCTTransaction_Create của TVAN gốc).
+app.MapPost("/api/tct-transactions", async (TctTransactionLogDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.CreateTctTransactionLogAsync(dto.MessageCode ?? "", dto.MstSeller, dto.Action, dto.MessageDTime, dto.TypeCode, dto.Status, dto.Result, dto.MessageRefCode, dto.Partner, dto.MessageDate, dto.MstBuyer, dto.InvoiceQty, dto.MessageDesc, dto.Tag, dto.XmlFilePath, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 // Nhóm người dùng (theo Sys_Group của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
 app.MapGet("/api/sys-groups", async (string? keyword, ITvanService svc) =>
 {
@@ -1412,3 +1436,4 @@ record SysObjectDto(int? Id, string? ObjectCode, string? ObjectName, string? Ser
 record SaveSysObjectInModulesDto(int ModuleId, List<string>? ObjectCodes, string? By);
 record TvanIntegDto(int? Id, string? OrgCode, string? MsttctnIn, string? MsttctnOut, string? By);
 record TaxOfficeDto(int? Id, string? Code, string? CodeParent, string? ProvinceCode, string? DistrictCode, string? Name, string? Level, string? Address, string? ContactEmail, string? ContactPhone, bool Active, string? By);
+record TctTransactionLogDto(string? MessageCode, string? MstSeller, TctMessageAction Action, DateTime? MessageDTime, string? TypeCode, TctMessageStatus Status, TctMessageResult Result, string? MessageRefCode, string? Partner, DateTime? MessageDate, string? MstBuyer, int InvoiceQty, string? MessageDesc, string? Tag, string? XmlFilePath, string? By);

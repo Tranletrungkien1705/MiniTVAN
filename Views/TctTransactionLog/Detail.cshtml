@@ -1,0 +1,38 @@
+@model TctTransactionLog
+@{
+    ViewData["Title"] = "Chi tiết thông điệp CQT";
+    var a = Ui.TctAction(Model.MessageAction);
+    var s = Ui.TctStatus(Model.MessageStatus);
+    var r = Ui.TctResult(Model.MessageResult);
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-arrow-left-right me-1"></i>Thông điệp @Model.MessageCode</h6>
+                <a href="/TctTransactionLog" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+            </div>
+            <table class="table table-sm align-middle mb-0">
+                <tbody>
+                    <tr><th style="width:220px">Mã thông điệp</th><td class="fw-semibold">@Model.MessageCode</td></tr>
+                    <tr><th>Hành động</th><td><span class="badge bg-@a.css">@a.text</span></td></tr>
+                    <tr><th>Thời điểm trao đổi</th><td>@(Model.MessageDTime?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "—")</td></tr>
+                    <tr><th>Loại thông điệp</th><td>@(string.IsNullOrWhiteSpace(Model.TypeCode) ? "—" : Model.TypeCode)</td></tr>
+                    <tr><th>Trạng thái</th><td><span class="badge bg-@s.css">@s.text</span></td></tr>
+                    <tr><th>Kết quả</th><td><span class="badge bg-@r.css">@r.text</span></td></tr>
+                    <tr><th>Mã tham chiếu</th><td>@(string.IsNullOrWhiteSpace(Model.MessageRefCode) ? "—" : Model.MessageRefCode)</td></tr>
+                    <tr><th>Đối tác</th><td>@(string.IsNullOrWhiteSpace(Model.Partner) ? "—" : Model.Partner)</td></tr>
+                    <tr><th>Ngày thông điệp</th><td>@(Model.MessageDate?.ToString("dd/MM/yyyy") ?? "—")</td></tr>
+                    <tr><th>MST bên bán</th><td>@(string.IsNullOrWhiteSpace(Model.MstSeller) ? "—" : Model.MstSeller)</td></tr>
+                    <tr><th>MST bên mua</th><td>@(string.IsNullOrWhiteSpace(Model.MstBuyer) ? "—" : Model.MstBuyer)</td></tr>
+                    <tr><th>Số lượng hóa đơn</th><td>@Model.InvoiceQty</td></tr>
+                    <tr><th>Mô tả</th><td>@(string.IsNullOrWhiteSpace(Model.MessageDesc) ? "—" : Model.MessageDesc)</td></tr>
+                    <tr><th>Thẻ</th><td>@(string.IsNullOrWhiteSpace(Model.Tag) ? "—" : Model.Tag)</td></tr>
+                    <tr><th>Đường dẫn file XML</th><td>@(string.IsNullOrWhiteSpace(Model.XmlFilePath) ? "—" : Model.XmlFilePath)</td></tr>
+                    <tr><th>Người thực hiện</th><td>@(string.IsNullOrWhiteSpace(Model.UpdatedBy) ? "—" : Model.UpdatedBy)</td></tr>
+                    <tr><th>Ghi nhận lúc</th><td>@Model.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td></tr>
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+</div>

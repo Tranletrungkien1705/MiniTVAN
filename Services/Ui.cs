@@ -321,4 +321,29 @@ public static class Ui
         Models.SysObjectType.Button => "BUTTON — Nút chức năng",
         _ => t.ToString()
     };
+
+    // Hành động của thông điệp trao đổi với CQT (theo Log_TCTTransaction.MessageAction của TVAN gốc).
+    public static (string text, string css) TctAction(TctMessageAction a) => a switch
+    {
+        TctMessageAction.Send    => ("Gửi CQT", "primary"),
+        TctMessageAction.Receive => ("Nhận từ CQT", "info"),
+        _ => (a.ToString(), "secondary")
+    };
+
+    // Trạng thái xử lý của thông điệp trao đổi với CQT (theo Log_TCTTransaction.MessageStatus của TVAN gốc).
+    public static (string text, string css) TctStatus(TctMessageStatus s) => s switch
+    {
+        TctMessageStatus.Success => ("Thành công", "success"),
+        TctMessageStatus.Error   => ("Lỗi", "danger"),
+        TctMessageStatus.Pending => ("Đang chờ", "warning"),
+        _ => (s.ToString(), "secondary")
+    };
+
+    // Kết quả của thông điệp trao đổi với CQT (theo Log_TCTTransaction.MessageResult của TVAN gốc).
+    public static (string text, string css) TctResult(TctMessageResult r) => r switch
+    {
+        TctMessageResult.Accept => ("Chấp nhận", "success"),
+        TctMessageResult.Reject => ("Từ chối", "danger"),
+        _ => ("Chưa có", "secondary")
+    };
 }

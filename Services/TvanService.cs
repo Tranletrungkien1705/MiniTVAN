@@ -248,6 +248,11 @@ public interface ITvanService
     // Đọc tiền bằng chữ (theo luồng DocTien của TVAN gốc)
     Task<(bool ok, string msg, string text, int id)> DocTienAsync(decimal amount, string? currencyCode, string? by);
     Task<List<DocTienLog>> DocTienLogsAsync();
+
+    // Nhật ký truyền nhận với cơ quan thuế (theo Log_TCTTransaction của TVAN gốc)
+    Task<List<TctTransactionLog>> TctTransactionLogsAsync(string? messageCode, TctMessageAction? action, string? mstSeller, TctMessageStatus? status, TctMessageResult? result, string? typeCode, DateTime? fromDate, DateTime? toDate);
+    Task<TctTransactionLog?> GetTctTransactionLogAsync(int id);
+    Task<(bool ok, string msg, int id)> CreateTctTransactionLogAsync(string messageCode, string? mstSeller, TctMessageAction action, DateTime? messageDTime, string? typeCode, TctMessageStatus status, TctMessageResult result, string? messageRefCode, string? partner, DateTime? messageDate, string? mstBuyer, int invoiceQty, string? messageDesc, string? tag, string? xmlFilePath, string? by);
 }
 
 // Hồ sơ NNT đầy đủ dùng khi lưu (theo Mst_NNT_Create/Update của TVAN gốc).
@@ -4665,6 +4670,73 @@ public class TvanService(AppDbContext db) : ITvanService
     // Nhật ký đọc tiền bằng chữ (theo luồng DocTien của TVAN gốc): mới nhất trước.
     public Task<List<DocTienLog>> DocTienLogsAsync() =>
         db.DocTienLogs.OrderByDescending(l => l.Id).ToListAsync();
+
+    // Nhật ký truyền nhận với cơ quan thuế (theo Log_TCTTransaction của TVAN gốc —
+    // màn Log_NKTNController.Index): danh sách thông điệp trao đổi với CQT, lọc theo
+    // mã thông điệp, hành động (gửi/nhận), MST bên bán, trạng thái, kết quả, loại thông điệp
+    // và khoảng thời gian trao đổi. Mới nhất trước.
+    public Task<List<TctTransactionLog>> TctTransactionLogsAsync(string? messageCode, TctMessageAction? action, string? mstSeller, TctMessageStatus? status, TctMessageResult? result, string? typeCode, DateTime? fromDate, DateTime? toDate)
+    {
+        var q = db.TctTransactionLogs.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(messageCode))
+        {
+            var k = messageCode.Trim();
+            q = q.Where(l => l.MessageCode.Contains(k));
+        }
+        if (action.HasValue) q = q.Where(l => l.MessageAction == action.Value);
+        if (!string.IsNullOrWhiteSpace(mstSeller))
+        {
+            var k = mstSeller.Trim();
+            q = q.Where(l => l.MstSeller != null && l.MstSeller.Contains(k));
+        }
+        if (status.HasValue) q = q.Where(l => l.MessageStatus == status.Value);
+        if (result.HasValue) q = q.Where(l => l.MessageResult == result.Value);
+        if (!string.IsNullOrWhiteSpace(typeCode))
+        {
+            var k = typeCode.Trim();
+            q = q.Where(l => l.TypeCode != null && l.TypeCode.Contains(k));
+        }
+        if (fromDate.HasValue) q = q.Where(l => l.MessageDTime != null && l.MessageDTime >= fromDate.Value.Date);
+        if (toDate.HasValue) q = q.Where(l => l.MessageDTime != null && l.MessageDTime < toDate.Value.Date.AddDays(1));
+        return q.OrderByDescending(l => l.MessageDTime).ThenByDescending(l => l.Id).ToListAsync();
+    }
+
+    public Task<TctTransactionLog?> GetTctTransactionLogAsync(int id) =>
+        db.TctTransactionLogs.FirstOrDefaultAsync(l => l.Id == id);
+
+    // Ghi một dòng nhật ký truyền nhận với CQT (theo Log_TCTTransaction_Create của TVAN gốc).
+    // Ràng buộc: cần mã thông điệp (Log_TCTTransaction_Create_InvalidMessageCode);
+    // khi tạo: mã thông điệp chưa tồn tại trong tổ chức (Log_TCTTransaction_CheckDB_MessageCodeExist).
+    public async Task<(bool ok, string msg, int id)> CreateTctTransactionLogAsync(string messageCode, string? mstSeller, TctMessageAction action, DateTime? messageDTime, string? typeCode, TctMessageStatus status, TctMessageResult result, string? messageRefCode, string? partner, DateTime? messageDate, string? mstBuyer, int invoiceQty, string? messageDesc, string? tag, string? xmlFilePath, string? by)
+    {
+        messageCode = (messageCode ?? "").Trim();
+        if (messageCode.Length == 0) return (false, "Cần mã thông điệp.", 0);
+        if (await db.TctTransactionLogs.AnyAsync(l => l.MessageCode == messageCode))
+            return (false, "Mã thông điệp đã tồn tại.", 0);
+
+        var e = new TctTransactionLog
+        {
+            MessageCode = messageCode,
+            MstSeller = mstSeller,
+            MessageAction = action,
+            MessageDTime = messageDTime ?? DateTime.UtcNow,
+            TypeCode = typeCode,
+            MessageStatus = status,
+            MessageResult = result,
+            MessageRefCode = messageRefCode,
+            Partner = partner,
+            MessageDate = messageDate,
+            MstBuyer = mstBuyer,
+            InvoiceQty = invoiceQty,
+            MessageDesc = messageDesc,
+            Tag = tag,
+            XmlFilePath = xmlFilePath,
+            UpdatedBy = by
+        };
+        db.TctTransactionLogs.Add(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã ghi nhật ký thông điệp {messageCode}.", e.Id);
+    }
 
     private static (DateTime from, DateTime to) PeriodRange(PeriodType t, string kdlieu)
     {

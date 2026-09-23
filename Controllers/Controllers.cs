@@ -1004,6 +1004,41 @@ public class TypeCodeController(ITvanService svc) : Controller
     }
 }
 
+// Nhật ký truyền nhận với cơ quan thuế (theo Log_TCTTransaction của TVAN gốc —
+// màn Log_NKTNController.Index/Detail): danh sách thông điệp trao đổi với CQT
+// (lọc theo mã thông điệp, hành động, MST bên bán, trạng thái, kết quả, loại thông điệp,
+// khoảng thời gian) + xem chi tiết + ghi thêm một dòng nhật ký.
+public class TctTransactionLogController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? messageCode, TctMessageAction? action, string? mstSeller, TctMessageStatus? status, TctMessageResult? result, string? typeCode, DateTime? fromDate, DateTime? toDate)
+    {
+        ViewBag.MessageCode = messageCode;
+        ViewBag.Action = action;
+        ViewBag.MstSeller = mstSeller;
+        ViewBag.Status = status;
+        ViewBag.Result = result;
+        ViewBag.TypeCode = typeCode;
+        ViewBag.FromDate = fromDate;
+        ViewBag.ToDate = toDate;
+        return View(await svc.TctTransactionLogsAsync(messageCode, action, mstSeller, status, result, typeCode, fromDate, toDate));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var l = await svc.GetTctTransactionLogAsync(id);
+        if (l == null) { TempData["Error"] = "Không tìm thấy thông điệp."; return RedirectToAction(nameof(Index)); }
+        return View(l);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string messageCode, string? mstSeller, TctMessageAction action, DateTime? messageDTime, string? typeCode, TctMessageStatus status, TctMessageResult result, string? messageRefCode, string? partner, DateTime? messageDate, string? mstBuyer, int invoiceQty, string? messageDesc, string? tag, string? xmlFilePath, string? by)
+    {
+        var (ok, msg, _) = await svc.CreateTctTransactionLogAsync(messageCode, mstSeller, action, messageDTime, typeCode, status, result, messageRefCode, partner, messageDate, mstBuyer, invoiceQty, messageDesc, tag, xmlFilePath, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Danh mục Thương hiệu (theo Mst_Brand của TVAN gốc):
 // các thương hiệu (hãng sản xuất) dùng để phân loại sản phẩm/hàng hóa.
 public class BrandController(ITvanService svc) : Controller

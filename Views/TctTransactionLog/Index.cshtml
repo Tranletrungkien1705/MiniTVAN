@@ -1,0 +1,124 @@
+@model List<TctTransactionLog>
+@{
+    ViewData["Title"] = "Nhật ký truyền nhận CQT";
+    string? messageCode = ViewBag.MessageCode as string;
+    TctMessageAction? action = ViewBag.Action as TctMessageAction?;
+    string? mstSeller = ViewBag.MstSeller as string;
+    TctMessageStatus? status = ViewBag.Status as TctMessageStatus?;
+    TctMessageResult? result = ViewBag.Result as TctMessageResult?;
+    string? typeCode = ViewBag.TypeCode as string;
+    DateTime? fromDate = ViewBag.FromDate as DateTime?;
+    DateTime? toDate = ViewBag.ToDate as DateTime?;
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-arrow-left-right me-1"></i>Nhật ký truyền nhận với cơ quan thuế</h6>
+                <span class="badge bg-light text-dark">@Model.Count thông điệp</span>
+            </div>
+
+            <form method="get" action="/TctTransactionLog" class="row g-2 mb-3">
+                <div class="col-md-3"><input name="messageCode" value="@messageCode" class="form-control form-control-sm" placeholder="Mã thông điệp" /></div>
+                <div class="col-md-2">
+                    <select name="action" class="form-select form-select-sm">
+                        <option value="">— Hành động —</option>
+                        <option value="Send" selected="@(action == TctMessageAction.Send)">Gửi CQT</option>
+                        <option value="Receive" selected="@(action == TctMessageAction.Receive)">Nhận từ CQT</option>
+                    </select>
+                </div>
+                <div class="col-md-2"><input name="mstSeller" value="@mstSeller" class="form-control form-control-sm" placeholder="MST bên bán" /></div>
+                <div class="col-md-2">
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="">— Trạng thái —</option>
+                        <option value="Success" selected="@(status == TctMessageStatus.Success)">Thành công</option>
+                        <option value="Error" selected="@(status == TctMessageStatus.Error)">Lỗi</option>
+                        <option value="Pending" selected="@(status == TctMessageStatus.Pending)">Đang chờ</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="result" class="form-select form-select-sm">
+                        <option value="">— Kết quả —</option>
+                        <option value="Accept" selected="@(result == TctMessageResult.Accept)">Chấp nhận</option>
+                        <option value="Reject" selected="@(result == TctMessageResult.Reject)">Từ chối</option>
+                        <option value="None" selected="@(result == TctMessageResult.None)">Chưa có</option>
+                    </select>
+                </div>
+                <div class="col-md-2"><input name="typeCode" value="@typeCode" class="form-control form-control-sm" placeholder="Loại thông điệp" /></div>
+                <div class="col-md-3"><input type="date" name="fromDate" value="@(fromDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" /></div>
+                <div class="col-md-3"><input type="date" name="toDate" value="@(toDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" /></div>
+                <div class="col-md-2"><button class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-search me-1"></i>Tìm</button></div>
+                <div class="col-md-2"><a href="/TctTransactionLog" class="btn btn-sm btn-outline-secondary w-100">Xóa lọc</a></div>
+            </form>
+
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã thông điệp</th><th>Hành động</th><th>Thời điểm</th><th>Loại</th><th>Trạng thái</th><th>Kết quả</th><th>MST bán</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var l in Model)
+                {
+                    var a = Ui.TctAction(l.MessageAction);
+                    var s = Ui.TctStatus(l.MessageStatus);
+                    var r = Ui.TctResult(l.MessageResult);
+                    <tr>
+                        <td class="fw-semibold">@l.MessageCode</td>
+                        <td><span class="badge bg-@a.css">@a.text</span></td>
+                        <td class="small text-muted">@(l.MessageDTime?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "—")</td>
+                        <td class="small text-muted">@(string.IsNullOrWhiteSpace(l.TypeCode) ? "—" : l.TypeCode)</td>
+                        <td><span class="badge bg-@s.css">@s.text</span></td>
+                        <td><span class="badge bg-@r.css">@r.text</span></td>
+                        <td class="small text-muted">@(string.IsNullOrWhiteSpace(l.MstSeller) ? "—" : l.MstSeller)</td>
+                        <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/TctTransactionLog/Detail/@l.Id"><i class="bi bi-eye"></i></a></td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="8" class="text-center text-muted py-4">Chưa có thông điệp nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Ghi nhật ký thông điệp</h6>
+            <form method="post" action="/TctTransactionLog/Create" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã thông điệp</label><input name="messageCode" class="form-control form-control-sm" placeholder="VD 200..." required /></div>
+                <div class="col-6"><label class="form-label small mb-1">MST bên bán</label><input name="mstSeller" class="form-control form-control-sm" placeholder="0101243150" /></div>
+                <div class="col-6"><label class="form-label small mb-1">MST bên mua</label><input name="mstBuyer" class="form-control form-control-sm" placeholder="8012345678" /></div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">Hành động</label>
+                    <select name="action" class="form-select form-select-sm">
+                        <option value="Send">Gửi CQT</option>
+                        <option value="Receive">Nhận từ CQT</option>
+                    </select>
+                </div>
+                <div class="col-6"><label class="form-label small mb-1">Thời điểm</label><input type="datetime-local" name="messageDTime" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Loại thông điệp</label><input name="typeCode" class="form-control form-control-sm" placeholder="200" /></div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">Trạng thái</label>
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="Success">Thành công</option>
+                        <option value="Error">Lỗi</option>
+                        <option value="Pending">Đang chờ</option>
+                    </select>
+                </div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">Kết quả</label>
+                    <select name="result" class="form-select form-select-sm">
+                        <option value="None">Chưa có</option>
+                        <option value="Accept">Chấp nhận</option>
+                        <option value="Reject">Từ chối</option>
+                    </select>
+                </div>
+                <div class="col-6"><label class="form-label small mb-1">Số lượng HĐ</label><input type="number" name="invoiceQty" value="0" class="form-control form-control-sm" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Mã tham chiếu</label><input name="messageRefCode" class="form-control form-control-sm" placeholder="Mã V / mã thông điệp liên quan" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Đối tác</label><input name="partner" class="form-control form-control-sm" placeholder="Cơ quan thuế" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Mô tả</label><textarea name="messageDesc" class="form-control form-control-sm" rows="2" placeholder="Nội dung thông điệp"></textarea></div>
+                <div class="col-12"><label class="form-label small mb-1">Thẻ</label><input name="tag" class="form-control form-control-sm" placeholder="Thẻ phân loại" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Đường dẫn file XML</label><input name="xmlFilePath" class="form-control form-control-sm" placeholder="2026-06-12/msg.xml" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Ghi nhật ký</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Mã thông điệp là duy nhất trong phạm vi tổ chức (theo khóa nghiệp vụ OrgId + mã thông điệp).</p>
+        </div></div>
+    </div>
+</div>

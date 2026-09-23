@@ -883,6 +883,44 @@ public static class Seeder
             });
             await db.SaveChangesAsync();
         }
+
+        // Nhật ký truyền nhận với cơ quan thuế (theo Log_TCTTransaction của TVAN gốc):
+        // minh họa 3 thông điệp trao đổi với CQT: gửi hóa đơn (thành công, CQT chấp nhận),
+        // nhận kết quả CQT (chấp nhận) và gửi thông báo sai sót (lỗi).
+        if (!await db.TctTransactionLogs.AnyAsync())
+        {
+            var seller = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == "0101243150");
+            var sellerMst = seller?.Mst ?? "0101243150";
+            db.TctTransactionLogs.AddRange(
+                new TctTransactionLog
+                {
+                    MessageCode = $"200{DateTime.UtcNow.AddDays(-5):yyyyMMddHHmmss}01", MstSeller = sellerMst,
+                    MessageAction = TctMessageAction.Send, MessageDTime = DateTime.UtcNow.AddDays(-5),
+                    TypeCode = "200", MessageStatus = TctMessageStatus.Success, MessageResult = TctMessageResult.Accept,
+                    MessageRefCode = "0026082512345678", Partner = "Cục Thuế TP Hà Nội", MessageDate = DateTime.Today.AddDays(-5),
+                    MstBuyer = "8012345678", InvoiceQty = 1, MessageDesc = "Gửi hóa đơn 1C26TAA-00000001 tới CQT",
+                    Tag = "HOA_DON", XmlFilePath = $"{DateTime.Today.AddDays(-5):yyyy-MM-dd}/HD00000001.xml", UpdatedBy = "kế toán"
+                },
+                new TctTransactionLog
+                {
+                    MessageCode = $"202{DateTime.UtcNow.AddDays(-5):yyyyMMddHHmmss}02", MstSeller = sellerMst,
+                    MessageAction = TctMessageAction.Receive, MessageDTime = DateTime.UtcNow.AddDays(-5).AddMinutes(2),
+                    TypeCode = "202", MessageStatus = TctMessageStatus.Success, MessageResult = TctMessageResult.Accept,
+                    MessageRefCode = "0026082512345678", Partner = "Cục Thuế TP Hà Nội", MessageDate = DateTime.Today.AddDays(-5),
+                    MstBuyer = "8012345678", InvoiceQty = 1, MessageDesc = "CQT chấp nhận phát hành, cấp mã tra cứu 0026082512345678",
+                    Tag = "KET_QUA_CQT", UpdatedBy = "kế toán"
+                },
+                new TctTransactionLog
+                {
+                    MessageCode = $"300{DateTime.UtcNow.AddDays(-4):yyyyMMddHHmmss}03", MstSeller = sellerMst,
+                    MessageAction = TctMessageAction.Send, MessageDTime = DateTime.UtcNow.AddDays(-4),
+                    TypeCode = "300", MessageStatus = TctMessageStatus.Error, MessageResult = TctMessageResult.Reject,
+                    MessageRefCode = "V" + DateTime.UtcNow.AddDays(-4).ToString("yyMMddHHmmss"), Partner = "Cục Thuế TP Hà Nội",
+                    MessageDate = DateTime.Today.AddDays(-4), MstBuyer = "8012345678", InvoiceQty = 1,
+                    MessageDesc = "Gửi thông báo hóa đơn sai sót (300) — CQT trả lỗi", Tag = "SAI_SOT", UpdatedBy = "kế toán"
+                });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
