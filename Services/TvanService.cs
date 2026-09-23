@@ -131,6 +131,12 @@ public interface ITvanService
     Task<OrgCks?> GetOrgCksAsync(int id);
     Task<(bool ok, string msg, int id)> SaveOrgCksAsync(int? id, string caNumber, string? caOrg, string? subject, DateTime? effStart, DateTime? effEnd, string? ctsPath, string? ctsPwd, bool active, string? by);
     Task<(bool ok, string msg)> DeleteOrgCksAsync(int id);
+
+    // Loại thông báo (theo Mst_NotifyType của TVAN gốc)
+    Task<List<NotifyType>> NotifyTypesAsync(string? keyword);
+    Task<NotifyType?> GetNotifyTypeAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveNotifyTypeAsync(int? id, string code, string? desc, bool defaultActive, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteNotifyTypeAsync(int id);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -2717,6 +2723,72 @@ public class TvanService(AppDbContext db) : ITvanService
         db.OrgCkses.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa chứng thư số {ca}.");
+    }
+
+    // Loại thông báo (theo Mst_NotifyType của TVAN gốc):
+    // danh sách loại thông báo (lọc theo từ khóa mã/mô tả nếu có).
+    public Task<List<NotifyType>> NotifyTypesAsync(string? keyword)
+    {
+        var q = db.NotifyTypes.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.NotifyTypeCode.Contains(k) || t.NotifyDesc.Contains(k));
+        }
+        return q.OrderBy(t => t.NotifyTypeCode).ToListAsync();
+    }
+
+    public Task<NotifyType?> GetNotifyTypeAsync(int id) =>
+        db.NotifyTypes.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) loại thông báo theo khóa nghiệp vụ (OrgId, NotifyTypeCode)
+    // (theo Mst_NotifyType_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã loại thông báo (Mst_NotifyType_Create_InvalidNotifyType);
+    //  - khi tạo: mã loại chưa tồn tại trong tổ chức (Mst_NotifyType_CheckDB_NotifyTypeExist);
+    //  - khi sửa/xóa: loại thông báo phải tồn tại (Mst_NotifyType_CheckDB_NotifyTypeFound).
+    public async Task<(bool ok, string msg, int id)> SaveNotifyTypeAsync(int? id, string code, string? desc, bool defaultActive, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã loại thông báo.", 0);
+
+        NotifyType? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.NotifyTypes.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.NotifyTypes.FirstOrDefaultAsync(t => t.NotifyTypeCode == code);
+
+        if (e == null)
+        {
+            if (await db.NotifyTypes.AnyAsync(t => t.NotifyTypeCode == code))
+                return (false, "Mã loại thông báo đã tồn tại.", 0);
+            e = new NotifyType { NotifyTypeCode = code };
+            db.NotifyTypes.Add(e);
+        }
+        else
+        {
+            // Đổi mã loại: chặn trùng với loại khác.
+            if (!string.Equals(e.NotifyTypeCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.NotifyTypes.AnyAsync(t => t.NotifyTypeCode == code && t.Id != e.Id))
+                return (false, "Mã loại thông báo đã tồn tại.", 0);
+            e.NotifyTypeCode = code;
+        }
+
+        e.NotifyDesc = desc ?? "";
+        e.DefaultActive = defaultActive;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu loại thông báo {code}.", e.Id);
+    }
+
+    // Xóa loại thông báo theo id (theo Mst_NotifyType_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteNotifyTypeAsync(int id)
+    {
+        var e = await db.NotifyTypes.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy loại thông báo.");
+        var code = e.NotifyTypeCode;
+        db.NotifyTypes.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa loại thông báo {code}.");
     }
 
     private static (DateTime from, DateTime to) PeriodRange(PeriodType t, string kdlieu)

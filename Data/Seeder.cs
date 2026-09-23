@@ -557,6 +557,17 @@ public static class Seeder
             });
             await db.SaveChangesAsync();
         }
+
+        // Loại thông báo (theo Mst_NotifyType của TVAN gốc):
+        // 3 loại thông báo demo dùng để phân loại thông báo gửi người dùng.
+        if (!await db.NotifyTypes.AnyAsync())
+        {
+            db.NotifyTypes.AddRange(
+                new NotifyType { NotifyTypeCode = "NOTIFY_ISSUED", NotifyDesc = "Thông báo phát hành hóa đơn", DefaultActive = true, FlagActive = true, UpdatedBy = "quản trị" },
+                new NotifyType { NotifyTypeCode = "NOTIFY_ERROR", NotifyDesc = "Thông báo hóa đơn sai sót", DefaultActive = true, FlagActive = true, UpdatedBy = "quản trị" },
+                new NotifyType { NotifyTypeCode = "NOTIFY_TCT", NotifyDesc = "Thông báo kết quả từ cơ quan thuế", DefaultActive = false, FlagActive = true, UpdatedBy = "quản trị" });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

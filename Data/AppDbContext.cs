@@ -48,6 +48,7 @@ public class AppDbContext : DbContext
     public DbSet<InvoiceTempGroupField> InvoiceTempGroupFields => Set<InvoiceTempGroupField>();
     public DbSet<MessageTemplate> MessageTemplates => Set<MessageTemplate>();
     public DbSet<OrgCks> OrgCkses => Set<OrgCks>();
+    public DbSet<NotifyType> NotifyTypes => Set<NotifyType>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -284,6 +285,11 @@ public class AppDbContext : DbContext
         b.Entity<OrgCks>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.CANumber }).IsUnique();   // mỗi tổ chức một số chứng thư
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<NotifyType>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.NotifyTypeCode }).IsUnique();   // mỗi tổ chức một mã loại thông báo
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

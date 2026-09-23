@@ -959,6 +959,23 @@ public class MessageTemplate : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Loại thông báo (theo bảng Mst_NotifyType của TVAN gốc): danh mục phân loại thông báo
+// (VD: thông báo phát hành hóa đơn, thông báo sai sót, thông báo CQT...) dùng để gán loại
+// cho thông báo gửi tới người dùng. Khóa nghiệp vụ: (OrgId, NotifyType).
+// DefaultActive = loại thông báo mặc định bật khi người dùng chưa cấu hình.
+public class NotifyType : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string NotifyTypeCode { get; set; } = "";      // Mã loại thông báo
+    public string NotifyDesc { get; set; } = "";          // Mô tả loại thông báo
+    public bool DefaultActive { get; set; } = true;        // Bật mặc định
+    public bool FlagActive { get; set; } = true;           // Loại thông báo đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 // Chứng thư số (CKS) của tổ chức (theo bảng Mst_OrgCKS của TVAN gốc):
 // mỗi tổ chức khai báo các chứng thư số dùng để ký hóa đơn điện tử, gồm số chứng thư (CANumber),
 // tổ chức cấp (CAOrg), chủ thể (Subject), hiệu lực (CAEffDTimeUTCStart..CAEffDTimeUTCEnd)

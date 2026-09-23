@@ -932,6 +932,33 @@ public class OrgCksController(ITvanService svc) : Controller
     }
 }
 
+// Danh mục loại thông báo (theo Mst_NotifyType của TVAN gốc):
+// phân loại thông báo (phát hành HĐ, sai sót, CQT...) dùng khi gán loại cho thông báo gửi người dùng.
+public class NotifyTypeController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.NotifyTypesAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string? desc, bool defaultActive, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveNotifyTypeAsync(id, code, desc, defaultActive, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteNotifyTypeAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

@@ -807,6 +807,27 @@ app.MapDelete("/api/org-cks/{id:int}", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Danh mục loại thông báo (theo Mst_NotifyType của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
+app.MapGet("/api/notify-types", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.NotifyTypesAsync(keyword);
+    return Results.Ok(ls.Select(t => new { t.Id, t.NotifyTypeCode, t.NotifyDesc, t.DefaultActive, t.FlagActive, t.UpdatedAt, t.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) loại thông báo theo mã (theo Mst_NotifyType_Create/Update của TVAN gốc).
+app.MapPost("/api/notify-types", async (NotifyTypeDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveNotifyTypeAsync(dto.Id, dto.Code ?? "", dto.Desc, dto.DefaultActive, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa loại thông báo theo id (theo Mst_NotifyType_Delete của TVAN gốc).
+app.MapDelete("/api/notify-types/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteNotifyTypeAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -858,3 +879,4 @@ record CountryDto(int? Id, string? Code, string? Name, bool Active, string? By);
 record DealerDto(int? Id, string? Code, string? Name, string? ProvinceCode, string? Address, string? PresentBy, string? GovIdNumber, string? Email, string? Phone, bool Active, string? By);
 record DepartmentDto(int? Id, string? Code, string? CodeParent, string? Mst, string? Name, bool Active, string? By);
 record OrgCksDto(int? Id, string? CaNumber, string? CaOrg, string? Subject, DateTime? EffStart, DateTime? EffEnd, string? CtsPath, string? CtsPwd, bool Active, string? By);
+record NotifyTypeDto(int? Id, string? Code, string? Desc, bool DefaultActive, bool Active, string? By);

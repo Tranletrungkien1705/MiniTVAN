@@ -2904,4 +2904,60 @@ public class TvanServiceTests
             Assert.Empty(await svc.OrgCksesAsync(null));
         }
     }
+
+    [Fact]
+    public async Task NotifyType_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveNotifyTypeAsync(null, "NOTIFY_ISSUED", "Thông báo phát hành hóa đơn", true, true, "quản trị");
+            Assert.True(ok);
+            var list = await svc.NotifyTypesAsync(null);
+            Assert.Single(list);
+            Assert.Equal("NOTIFY_ISSUED", list[0].NotifyTypeCode);
+            Assert.Equal(id, list[0].Id);
+            Assert.True(list[0].DefaultActive);
+        }
+    }
+
+    [Fact]
+    public async Task NotifyType_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveNotifyTypeAsync(null, "NOTIFY_ISSUED", "Mô tả cũ", true, true, null);
+            // Lưu lại cùng mã loại = cập nhật (không tạo mới).
+            var (ok, _, id2) = await svc.SaveNotifyTypeAsync(null, "NOTIFY_ISSUED", "Mô tả mới", false, false, null);
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            var list = await svc.NotifyTypesAsync(null);
+            Assert.Single(list);
+            Assert.Equal("Mô tả mới", list[0].NotifyDesc);
+            Assert.False(list[0].DefaultActive);
+            Assert.False(list[0].FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task NotifyType_Save_MissingCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveNotifyTypeAsync(null, "  ", "Mô tả", true, true, null);
+            Assert.False(ok);
+            Assert.Contains("loại thông báo", msg);
+        }
+    }
+
+    [Fact]
+    public async Task NotifyType_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveNotifyTypeAsync(null, "NOTIFY_TCT", "Thông báo CQT", true, true, null);
+            var (ok, _) = await svc.DeleteNotifyTypeAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.NotifyTypesAsync(null));
+        }
+    }
 }
