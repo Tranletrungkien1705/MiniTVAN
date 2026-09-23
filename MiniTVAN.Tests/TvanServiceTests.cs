@@ -2960,4 +2960,85 @@ public class TvanServiceTests
             Assert.Empty(await svc.NotifyTypesAsync(null));
         }
     }
+
+    [Fact]
+    public async Task Notify_Create_Valid()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.CreateNotifyAsync("TB2026-001", "Bảo trì hệ thống", DateTime.Today, DateTime.Today.AddDays(7), true, "quản trị");
+            Assert.True(ok);
+            var list = await svc.NotifiesAsync(null);
+            Assert.Single(list);
+            Assert.Equal("TB2026-001", list[0].NotifyNo);
+            Assert.Equal(id, list[0].Id);
+            Assert.True(list[0].FlagSendEmail);
+        }
+    }
+
+    [Fact]
+    public async Task Notify_Create_DuplicateNo_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateNotifyAsync("TB2026-001", "A", DateTime.Today, DateTime.Today.AddDays(1), false, null);
+            var (ok, msg, _) = await svc.CreateNotifyAsync("TB2026-001", "B", DateTime.Today, DateTime.Today.AddDays(1), false, null);
+            Assert.False(ok);
+            Assert.Contains("đã tồn tại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task Notify_Create_StartAfterEnd_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.CreateNotifyAsync("TB2026-002", "X", DateTime.Today.AddDays(5), DateTime.Today.AddDays(1), false, null);
+            Assert.False(ok);
+            Assert.Contains("sau hiệu lực kết thúc", msg);
+        }
+    }
+
+    [Fact]
+    public async Task Notify_Create_StartBeforeToday_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.CreateNotifyAsync("TB2026-003", "X", DateTime.Today.AddDays(-1), DateTime.Today.AddDays(1), false, null);
+            Assert.False(ok);
+            Assert.Contains("trước ngày hiện tại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task Notify_AddRecipient_And_MarkRead()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateNotifyAsync("TB2026-004", "Bảo trì", DateTime.Today, DateTime.Today.AddDays(3), false, null);
+            var (ok, _, _) = await svc.AddNotifyDtlAsync(id, "ketoan01", false, null);
+            Assert.True(ok);
+            // Gửi trùng cho cùng người dùng bị chặn.
+            var (dup, dupMsg, _) = await svc.AddNotifyDtlAsync(id, "ketoan01", false, null);
+            Assert.False(dup);
+            Assert.Contains("đã nhận", dupMsg);
+            // Đánh dấu đã đọc.
+            var (readOk, _) = await svc.MarkNotifyReadAsync(id, "ketoan01");
+            Assert.True(readOk);
+            var n = await svc.GetNotifyAsync(id);
+            Assert.True(n!.Details.Single(d => d.UserCode == "ketoan01").FlagRead);
+        }
+    }
+
+    [Fact]
+    public async Task Notify_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateNotifyAsync("TB2026-005", "X", DateTime.Today, DateTime.Today.AddDays(1), false, null);
+            var (ok, _) = await svc.DeleteNotifyAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.NotifiesAsync(null));
+        }
+    }
 }

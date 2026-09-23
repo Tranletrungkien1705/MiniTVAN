@@ -568,6 +568,23 @@ public static class Seeder
                 new NotifyType { NotifyTypeCode = "NOTIFY_TCT", NotifyDesc = "Thông báo kết quả từ cơ quan thuế", DefaultActive = false, FlagActive = true, UpdatedBy = "quản trị" });
             await db.SaveChangesAsync();
         }
+
+        // Thông báo hệ thống (theo Notify_Notify / Notify_NotifyDtl của TVAN gốc):
+        // 1 thông báo bảo trì đang hiệu lực đã gửi tới 2 người dùng (1 đã đọc, 1 chưa đọc).
+        if (!await db.Notifies.AnyAsync())
+        {
+            var notify = new Notify
+            {
+                NotifyNo = "TB2026-001", NotifyType = NotifyScope.AllUser, NotifyType1 = NotifyKind.Maintenance,
+                NotifyDesc = "Bảo trì hệ thống hóa đơn điện tử định kỳ",
+                EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(7),
+                FlagSendEmail = true, FlagActive = true, UpdatedBy = "quản trị"
+            };
+            notify.Details.Add(new NotifyDtl { UserCode = "ketoan01", FlagRead = true, FlagActive = true });
+            notify.Details.Add(new NotifyDtl { UserCode = "ketoan02", FlagRead = false, FlagActive = true });
+            db.Notifies.Add(notify);
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

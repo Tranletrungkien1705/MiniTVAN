@@ -1,0 +1,117 @@
+@model List<Notify>
+@{
+    ViewData["Title"] = "Thông báo";
+    var keyword = ViewBag.Keyword as string;
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-megaphone me-1"></i>Danh sách thông báo</h6>
+                <form method="get" action="/Notify" class="d-flex gap-2">
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm số / mô tả" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Số TB</th><th>Mô tả</th><th>Hiệu lực</th><th>Người nhận</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var n in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@n.NotifyNo</td>
+                        <td>
+                            @n.NotifyDesc
+                            <div class="small text-muted">@Ui.NotifyScope(n.NotifyType) · @Ui.NotifyKind(n.NotifyType1)</div>
+                        </td>
+                        <td class="small">@n.EffDateStart.ToString("dd/MM/yyyy") → @n.EffDateEnd.ToString("dd/MM/yyyy")</td>
+                        <td>
+                            <span class="badge bg-light text-dark">@n.Details.Count người</span>
+                            <span class="badge bg-success">@n.Details.Count(d => d.FlagRead) đã đọc</span>
+                        </td>
+                        <td>
+                            @if (n.FlagActive) { <span class="badge bg-success">Đang dùng</span> }
+                            else { <span class="badge bg-secondary">Ngừng dùng</span> }
+                            @if (n.FlagSendEmail) { <span class="badge bg-info text-dark">Gửi email</span> }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/Notify/Delete" class="d-inline" onsubmit="return confirm('Xóa thông báo @n.NotifyNo?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@n.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                    @if (n.Details.Count > 0)
+                    {
+                        <tr>
+                            <td></td>
+                            <td colspan="5" class="pt-0">
+                                @foreach (var d in n.Details)
+                                {
+                                    <span class="badge @(d.FlagRead ? "bg-success" : "bg-warning text-dark") me-1 mb-1">
+                                        @d.UserCode @(d.FlagRead ? "· đã đọc" : "· chưa đọc")
+                                    </span>
+                                    @if (!d.FlagRead)
+                                    {
+                                        <form method="post" action="/Notify/MarkRead" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@n.Id" />
+                                            <input type="hidden" name="userCode" value="@d.UserCode" />
+                                            <button class="btn btn-sm btn-link p-0 me-2 align-baseline">đánh dấu đã đọc</button>
+                                        </form>
+                                    }
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+                @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có thông báo nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Tạo thông báo</h6>
+            <form method="post" action="/Notify/Create" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Số thông báo</label><input name="notifyNo" class="form-control form-control-sm" placeholder="VD TB2026-001" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Mô tả</label><input name="desc" class="form-control form-control-sm" placeholder="VD Bảo trì hệ thống" required /></div>
+                <div class="col-6"><label class="form-label small mb-1">Hiệu lực từ</label><input type="date" name="effDateStart" class="form-control form-control-sm" value="@DateTime.Today.ToString("yyyy-MM-dd")" required /></div>
+                <div class="col-6"><label class="form-label small mb-1">Hiệu lực đến</label><input type="date" name="effDateEnd" class="form-control form-control-sm" value="@DateTime.Today.AddDays(7).ToString("yyyy-MM-dd")" required /></div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="sendEmail" value="true" id="notifySendEmail" />
+                    <label class="form-check-label small" for="notifySendEmail">Gửi kèm email</label>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="quản trị" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Tạo thông báo</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Hiệu lực bắt đầu/kết thúc không được trước ngày hiện tại và bắt đầu không được sau kết thúc (theo Notify_Notify_CreateX_New20200131).</p>
+        </div></div>
+
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-send me-1"></i>Gửi thông báo tới người dùng</h6>
+            <form method="post" action="/Notify/AddRecipient" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12">
+                    <label class="form-label small mb-1">Thông báo</label>
+                    <select name="id" class="form-select form-select-sm" required>
+                        @foreach (var n in Model)
+                        {
+                            <option value="@n.Id">@n.NotifyNo — @n.NotifyDesc</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Mã người dùng</label><input name="userCode" class="form-control form-control-sm" placeholder="VD ketoan01" required /></div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="flagRead" value="true" id="notifyFlagRead" />
+                    <label class="form-check-label small" for="notifyFlagRead">Đánh dấu đã đọc ngay</label>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="quản trị" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-outline-primary w-100" @(Model.Count == 0 ? "disabled" : "")>Gửi thông báo</button></div>
+            </form>
+        </div></div>
+    </div>
+</div>

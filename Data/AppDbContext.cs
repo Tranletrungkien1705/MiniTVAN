@@ -49,6 +49,8 @@ public class AppDbContext : DbContext
     public DbSet<MessageTemplate> MessageTemplates => Set<MessageTemplate>();
     public DbSet<OrgCks> OrgCkses => Set<OrgCks>();
     public DbSet<NotifyType> NotifyTypes => Set<NotifyType>();
+    public DbSet<Notify> Notifies => Set<Notify>();
+    public DbSet<NotifyDtl> NotifyDtls => Set<NotifyDtl>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -290,6 +292,17 @@ public class AppDbContext : DbContext
         b.Entity<NotifyType>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.NotifyTypeCode }).IsUnique();   // mỗi tổ chức một mã loại thông báo
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Notify>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.NotifyNo }).IsUnique();   // mỗi tổ chức một số thông báo
+            e.HasMany(x => x.Details).WithOne(d => d.Notify).HasForeignKey(d => d.NotifyId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<NotifyDtl>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.NotifyId });
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

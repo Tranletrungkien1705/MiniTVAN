@@ -828,6 +828,48 @@ app.MapDelete("/api/notify-types/{id:int}", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Thông báo hệ thống (theo Notify_Notify của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
+app.MapGet("/api/notifies", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.NotifiesAsync(keyword);
+    return Results.Ok(ls.Select(n => new { n.Id, n.NotifyNo, n.NotifyDesc, n.EffDateStart, n.EffDateEnd, n.FlagSendEmail, n.FlagActive, recipients = n.Details.Count, read = n.Details.Count(d => d.FlagRead) }));
+});
+
+// Tạo thông báo (theo Notify_Notify_CreateX_New20200131 của TVAN gốc).
+app.MapPost("/api/notifies", async (CreateNotifyDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.CreateNotifyAsync(dto.NotifyNo ?? "", dto.Desc ?? "", dto.EffDateStart, dto.EffDateEnd, dto.SendEmail, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Cập nhật thông báo (theo Notify_Notify_UpdateX của TVAN gốc).
+app.MapPost("/api/notifies/{id:int}/update", async (int id, UpdateNotifyDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.UpdateNotifyAsync(id, dto.Desc, dto.SendEmail, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa thông báo theo id (theo Notify_Notify_Delete của TVAN gốc).
+app.MapDelete("/api/notifies/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteNotifyAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
+// Gửi thông báo tới một người dùng (theo Notify_NotifyDtl_CreateX của TVAN gốc).
+app.MapPost("/api/notifies/{id:int}/recipients", async (int id, AddNotifyDtlDto dto, ITvanService svc) =>
+{
+    var (ok, msg, dtlId) = await svc.AddNotifyDtlAsync(id, dto.UserCode ?? "", dto.FlagRead, dto.By);
+    return ok ? Results.Ok(new { id = dtlId, msg }) : Results.BadRequest(new { id = dtlId, error = msg });
+});
+
+// Đánh dấu đã đọc thông báo của một người dùng (theo Notify_NotifyDtl_UpdateX của TVAN gốc).
+app.MapPost("/api/notifies/{id:int}/read", async (int id, MarkNotifyReadDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.MarkNotifyReadAsync(id, dto.UserCode ?? "");
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -880,3 +922,7 @@ record DealerDto(int? Id, string? Code, string? Name, string? ProvinceCode, stri
 record DepartmentDto(int? Id, string? Code, string? CodeParent, string? Mst, string? Name, bool Active, string? By);
 record OrgCksDto(int? Id, string? CaNumber, string? CaOrg, string? Subject, DateTime? EffStart, DateTime? EffEnd, string? CtsPath, string? CtsPwd, bool Active, string? By);
 record NotifyTypeDto(int? Id, string? Code, string? Desc, bool DefaultActive, bool Active, string? By);
+record CreateNotifyDto(string? NotifyNo, string? Desc, DateTime EffDateStart, DateTime EffDateEnd, bool SendEmail, string? By);
+record UpdateNotifyDto(string? Desc, bool SendEmail, string? By);
+record AddNotifyDtlDto(string? UserCode, bool FlagRead, string? By);
+record MarkNotifyReadDto(string? UserCode);

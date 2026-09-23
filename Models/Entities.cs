@@ -996,3 +996,49 @@ public class OrgCks : IOrgOwned
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
+
+// Loại thông báo theo phạm vi người nhận (theo TConst.NotifyType của TVAN gốc):
+// ALLUSER = thông báo gửi tới tất cả người dùng.
+public enum NotifyScope { AllUser = 0 }
+
+// Loại thông báo theo nội dung (theo TConst.NotifyType1 của TVAN gốc):
+// MAINTENANCE = thông báo bảo trì/hệ thống.
+public enum NotifyKind { Maintenance = 0 }
+
+// Thông báo hệ thống (theo bảng Notify_Notify của TVAN gốc): mỗi thông báo có số (NotifyNo),
+// loại (NotifyType/NotifyType1), mô tả, khoảng hiệu lực (EffDateStart..EffDateEnd) và cờ
+// gửi email (FlagSendEmail). Thông báo được gửi tới người dùng qua bảng chi tiết Notify_NotifyDtl.
+// Khóa nghiệp vụ: (OrgId, NotifyNo).
+public class Notify : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string NotifyNo { get; set; } = "";              // Số thông báo
+    public NotifyScope NotifyType { get; set; } = NotifyScope.AllUser;   // Loại thông báo (phạm vi người nhận)
+    public NotifyKind NotifyType1 { get; set; } = NotifyKind.Maintenance; // Loại thông báo (nội dung)
+    public string NotifyDesc { get; set; } = "";            // Mô tả nội dung thông báo
+    public DateTime EffDateStart { get; set; } = DateTime.Today;   // Hiệu lực từ
+    public DateTime EffDateEnd { get; set; } = DateTime.Today;     // Hiệu lực đến
+    public bool FlagSendEmail { get; set; }                 // Có gửi email kèm thông báo
+    public bool FlagActive { get; set; } = true;            // Thông báo đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+
+    public List<NotifyDtl> Details { get; set; } = new();
+}
+
+// Chi tiết thông báo theo người dùng (theo bảng Notify_NotifyDtl của TVAN gốc):
+// mỗi dòng gắn một thông báo (NotifyNo) với một người dùng (UserCode) và cờ đã đọc (FlagRead).
+// Khóa nghiệp vụ: (OrgId, NotifyNo, UserCode).
+public class NotifyDtl : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int NotifyId { get; set; }
+    public Notify? Notify { get; set; }
+    public string UserCode { get; set; } = "";              // Mã người dùng nhận thông báo
+    public bool FlagRead { get; set; }                      // Đã đọc hay chưa
+    public bool FlagActive { get; set; } = true;            // Dòng đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}

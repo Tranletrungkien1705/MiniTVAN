@@ -137,6 +137,15 @@ public interface ITvanService
     Task<NotifyType?> GetNotifyTypeAsync(int id);
     Task<(bool ok, string msg, int id)> SaveNotifyTypeAsync(int? id, string code, string? desc, bool defaultActive, bool active, string? by);
     Task<(bool ok, string msg)> DeleteNotifyTypeAsync(int id);
+
+    // Thông báo hệ thống (theo Notify_Notify / Notify_NotifyDtl của TVAN gốc)
+    Task<List<Notify>> NotifiesAsync(string? keyword);
+    Task<Notify?> GetNotifyAsync(int id);
+    Task<(bool ok, string msg, int id)> CreateNotifyAsync(string notifyNo, string desc, DateTime effDateStart, DateTime effDateEnd, bool sendEmail, string? by);
+    Task<(bool ok, string msg)> UpdateNotifyAsync(int id, string? desc, bool sendEmail, string? by);
+    Task<(bool ok, string msg)> DeleteNotifyAsync(int id);
+    Task<(bool ok, string msg, int id)> AddNotifyDtlAsync(int notifyId, string userCode, bool flagRead, string? by);
+    Task<(bool ok, string msg)> MarkNotifyReadAsync(int notifyId, string userCode);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -2789,6 +2798,104 @@ public class TvanService(AppDbContext db) : ITvanService
         db.NotifyTypes.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa loại thông báo {code}.");
+    }
+
+    // ===== Thông báo hệ thống (theo Notify_Notify / Notify_NotifyDtl của TVAN gốc) =====
+
+    // Danh sách thông báo (lọc theo từ khóa số thông báo / mô tả nếu có).
+    public Task<List<Notify>> NotifiesAsync(string? keyword)
+    {
+        var q = db.Notifies.Include(n => n.Details).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(n => n.NotifyNo.Contains(k) || n.NotifyDesc.Contains(k));
+        }
+        return q.OrderByDescending(n => n.CreatedAt).ToListAsync();
+    }
+
+    public Task<Notify?> GetNotifyAsync(int id) =>
+        db.Notifies.Include(n => n.Details).FirstOrDefaultAsync(n => n.Id == id);
+
+    // Tạo thông báo (theo Notify_Notify_CreateX_New20200131 của TVAN gốc):
+    // chặn thiếu số thông báo, chặn trùng số thông báo, chặn thiếu mô tả,
+    // chặn hiệu lực bắt đầu/kết thúc rỗng, chặn hiệu lực bắt đầu sau hiệu lực kết thúc,
+    // chặn hiệu lực bắt đầu/kết thúc trước ngày hệ thống.
+    public async Task<(bool ok, string msg, int id)> CreateNotifyAsync(string notifyNo, string desc, DateTime effDateStart, DateTime effDateEnd, bool sendEmail, string? by)
+    {
+        notifyNo = (notifyNo ?? "").Trim();
+        desc = (desc ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(notifyNo)) return (false, "Cần số thông báo.", 0);
+        if (string.IsNullOrWhiteSpace(desc)) return (false, "Cần mô tả thông báo.", 0);
+        if (await db.Notifies.AnyAsync(n => n.NotifyNo == notifyNo)) return (false, $"Số thông báo {notifyNo} đã tồn tại.", 0);
+        var start = effDateStart.Date;
+        var end = effDateEnd.Date;
+        if (start == default) return (false, "Cần hiệu lực bắt đầu.", 0);
+        if (end == default) return (false, "Cần hiệu lực kết thúc.", 0);
+        if (start > end) return (false, "Hiệu lực bắt đầu không được sau hiệu lực kết thúc.", 0);
+        if (start < DateTime.Today) return (false, "Hiệu lực bắt đầu không được trước ngày hiện tại.", 0);
+        if (end < DateTime.Today) return (false, "Hiệu lực kết thúc không được trước ngày hiện tại.", 0);
+
+        var e = new Notify
+        {
+            NotifyNo = notifyNo, NotifyType = NotifyScope.AllUser, NotifyType1 = NotifyKind.Maintenance,
+            NotifyDesc = desc, EffDateStart = start, EffDateEnd = end, FlagSendEmail = sendEmail,
+            FlagActive = true, UpdatedBy = by
+        };
+        db.Notifies.Add(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã tạo thông báo {notifyNo}.", e.Id);
+    }
+
+    // Cập nhật thông báo (theo Notify_Notify_UpdateX của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> UpdateNotifyAsync(int id, string? desc, bool sendEmail, string? by)
+    {
+        var e = await db.Notifies.FirstOrDefaultAsync(n => n.Id == id);
+        if (e == null) return (false, "Không tìm thấy thông báo.");
+        if (!string.IsNullOrWhiteSpace(desc)) e.NotifyDesc = desc.Trim();
+        e.FlagSendEmail = sendEmail;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật thông báo {e.NotifyNo}.");
+    }
+
+    // Xóa thông báo (theo Notify_Notify_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteNotifyAsync(int id)
+    {
+        var e = await db.Notifies.FirstOrDefaultAsync(n => n.Id == id);
+        if (e == null) return (false, "Không tìm thấy thông báo.");
+        var no = e.NotifyNo;
+        db.Notifies.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa thông báo {no}.");
+    }
+
+    // Gửi thông báo tới một người dùng (theo Notify_NotifyDtl_CreateX của TVAN gốc):
+    // chặn thiếu người dùng, chặn thông báo không tồn tại, chặn gửi trùng cho cùng người dùng.
+    public async Task<(bool ok, string msg, int id)> AddNotifyDtlAsync(int notifyId, string userCode, bool flagRead, string? by)
+    {
+        userCode = (userCode ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(userCode)) return (false, "Cần mã người dùng nhận thông báo.", 0);
+        var n = await db.Notifies.FirstOrDefaultAsync(x => x.Id == notifyId);
+        if (n == null) return (false, "Không tìm thấy thông báo.", 0);
+        if (await db.NotifyDtls.AnyAsync(d => d.NotifyId == notifyId && d.UserCode == userCode))
+            return (false, $"Người dùng {userCode} đã nhận thông báo {n.NotifyNo}.", 0);
+        var d = new NotifyDtl { NotifyId = notifyId, UserCode = userCode, FlagRead = flagRead, FlagActive = true };
+        db.NotifyDtls.Add(d);
+        await db.SaveChangesAsync();
+        return (true, $"Đã gửi thông báo {n.NotifyNo} tới {userCode}.", d.Id);
+    }
+
+    // Đánh dấu đã đọc thông báo của một người dùng (theo Notify_NotifyDtl_UpdateX của TVAN gốc).
+    public async Task<(bool ok, string msg)> MarkNotifyReadAsync(int notifyId, string userCode)
+    {
+        userCode = (userCode ?? "").Trim();
+        var d = await db.NotifyDtls.FirstOrDefaultAsync(x => x.NotifyId == notifyId && x.UserCode == userCode);
+        if (d == null) return (false, "Không tìm thấy thông báo của người dùng.");
+        d.FlagRead = true;
+        await db.SaveChangesAsync();
+        return (true, $"Đã đánh dấu đã đọc thông báo cho {userCode}.");
     }
 
     private static (DateTime from, DateTime to) PeriodRange(PeriodType t, string kdlieu)

@@ -959,6 +959,57 @@ public class NotifyTypeController(ITvanService svc) : Controller
     }
 }
 
+// Thông báo hệ thống (theo Notify_Notify / Notify_NotifyDtl của TVAN gốc):
+// tạo thông báo kèm khoảng hiệu lực, gửi tới người dùng và đánh dấu đã đọc.
+public class NotifyController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.NotifiesAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string notifyNo, string desc, DateTime effDateStart, DateTime effDateEnd, bool sendEmail, string? by)
+    {
+        var (ok, msg, _) = await svc.CreateNotifyAsync(notifyNo, desc, effDateStart, effDateEnd, sendEmail, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(int id, string? desc, bool sendEmail, string? by)
+    {
+        var (ok, msg) = await svc.UpdateNotifyAsync(id, desc, sendEmail, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteNotifyAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddRecipient(int id, string userCode, bool flagRead, string? by)
+    {
+        var (ok, msg, _) = await svc.AddNotifyDtlAsync(id, userCode, flagRead, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> MarkRead(int id, string userCode)
+    {
+        var (ok, msg) = await svc.MarkNotifyReadAsync(id, userCode);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

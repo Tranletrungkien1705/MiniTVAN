@@ -253,4 +253,28 @@ public static class Ui
         Models.TThai.ThayThe    => ("Thay thế", "warning"),
         _ => (t.ToString(), "secondary")
     };
+
+    // Mã loại thông điệp trao đổi với CQT (theo Mst_MessageTemplate.MessageTypeCode của TVAN gốc).
+    public static string MessageType(MessageTypeCode t) => t switch
+    {
+        MessageTypeCode.Register100    => "100 — Đăng ký/thay đổi thông tin sử dụng HĐĐT",
+        MessageTypeCode.Check204       => "204 — Kết quả kiểm tra dữ liệu HĐĐT",
+        MessageTypeCode.Error300       => "300 — HĐĐT đã lập có sai sót",
+        MessageTypeCode.ErrorReply301  => "301 — Tiếp nhận & xử lý HĐĐT sai sót",
+        _ => ((int)t).ToString()
+    };
+
+    // Phạm vi người nhận thông báo (theo TConst.NotifyType của TVAN gốc).
+    public static string NotifyScope(NotifyScope t) => t switch
+    {
+        Models.NotifyScope.AllUser => "Tất cả người dùng",
+        _ => t.ToString()
+    };
+
+    // Loại nội dung thông báo (theo TConst.NotifyType1 của TVAN gốc).
+    public static string NotifyKind(NotifyKind t) => t switch
+    {
+        Models.NotifyKind.Maintenance => "Bảo trì / hệ thống",
+        _ => t.ToString()
+    };
 }
