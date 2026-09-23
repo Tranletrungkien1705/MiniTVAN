@@ -732,6 +732,39 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Trường tùy chỉnh của mã sản phẩm / serial (theo Prd_PrdIDCustomField của TVAN gốc):
+        // các trường tùy chỉnh demo gắn với serial (CustomField1..5).
+        if (!await db.PrdIdCustomFields.AnyAsync())
+        {
+            db.PrdIdCustomFields.AddRange(
+                new PrdIdCustomField { PrdCustomFieldCode = "CustomField1", PrdCustomFieldName = "Màu sắc", DBPhysicalType = DBPhysicalType.Text, Remark = "Màu của serial", FlagActive = true, UpdatedBy = "kế toán" },
+                new PrdIdCustomField { PrdCustomFieldCode = "CustomField2", PrdCustomFieldName = "Số khung", DBPhysicalType = DBPhysicalType.Text, FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+
+        // Mã sản phẩm / serial (theo Prd_ProductID của TVAN gốc):
+        // các serial demo gắn với sản phẩm ở trên, kèm lô / ngày sản xuất / bảo hành / người mua.
+        if (!await db.ProductIds.AnyAsync())
+        {
+            db.ProductIds.AddRange(
+                new ProductId
+                {
+                    ProductID = "SN-A54-0001", SpecCode = "SP-A54", ProductionDate = DateTime.Today.AddDays(-60),
+                    LOTNo = "LOT-A54-01", BuyDate = DateTime.Today.AddDays(-30), SecretNo = "SEC-0001",
+                    WarrantyStartDate = DateTime.Today.AddDays(-30), WarrantyExpiredDate = DateTime.Today.AddMonths(12),
+                    WarrantyDuration = 12, Buyer = "Nguyễn Văn A", ProductIDStatus = ProductIdStatus.Sold,
+                    CustomField1 = "Đen", CustomField2 = "KH-A54-0001", UpdatedBy = "kế toán"
+                },
+                new ProductId
+                {
+                    ProductID = "SN-WH1000-0001", SpecCode = "SP-WH1000", ProductionDate = DateTime.Today.AddDays(-20),
+                    LOTNo = "LOT-WH-01", WarrantyStartDate = DateTime.Today.AddDays(-10),
+                    WarrantyExpiredDate = DateTime.Today.AddMonths(24), WarrantyDuration = 24,
+                    ProductIDStatus = ProductIdStatus.New, CustomField1 = "Bạc", UpdatedBy = "kế toán"
+                });
+            await db.SaveChangesAsync();
+        }
+
         // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):
         // các loại khách hàng demo dùng khi khai báo danh mục khách hàng.
         if (!await db.CustomerNntTypes.AnyAsync())

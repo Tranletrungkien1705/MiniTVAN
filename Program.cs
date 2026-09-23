@@ -1606,6 +1606,34 @@ app.MapDelete("/api/tvan-integs/{id:int}", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Mã sản phẩm / serial (theo Prd_ProductID của TVAN gốc): danh sách (lọc theo từ khóa / mã SP / trạng thái).
+app.MapGet("/api/product-ids", async (string? keyword, string? specCode, ProductIdStatus? status, ITvanService svc) =>
+{
+    var ls = await svc.ProductIdsAsync(keyword, specCode, status);
+    return Results.Ok(ls.Select(p => new { p.Id, p.ProductID, p.SpecCode, p.ProductionDate, p.LOTNo, p.BuyDate, p.SecretNo, p.WarrantyStartDate, p.WarrantyExpiredDate, p.WarrantyDuration, p.Buyer, status = p.ProductIDStatus.ToString(), p.CustomField1, p.CustomField2, p.CustomField3, p.CustomField4, p.CustomField5 }));
+});
+
+// Lưu (tạo mới/cập nhật) serial theo khóa (ProductID, SpecCode) (theo Prd_ProductID_Create/Update của TVAN gốc).
+app.MapPost("/api/product-ids", async (ProductIdDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveProductIdAsync(dto.Id, dto.ProductId ?? "", dto.SpecCode ?? "", dto.ProductionDate, dto.LotNo, dto.BuyDate, dto.SecretNo, dto.WarrantyStartDate, dto.WarrantyExpiredDate, dto.WarrantyDuration, dto.RefNo1, dto.RefBiz1, dto.RefNo2, dto.RefBiz2, dto.RefNo3, dto.RefBiz3, dto.Buyer, dto.Status, dto.CustomField1, dto.CustomField2, dto.CustomField3, dto.CustomField4, dto.CustomField5, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa serial theo id (theo Prd_ProductID_Delete của TVAN gốc).
+app.MapDelete("/api/product-ids/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteProductIdAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
+// Trường tùy chỉnh của serial (theo Prd_PrdIDCustomField của TVAN gốc): danh sách.
+app.MapGet("/api/prd-id-custom-fields", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.PrdIdCustomFieldsAsync(keyword);
+    return Results.Ok(ls.Select(f => new { f.PrdCustomFieldCode, f.PrdCustomFieldName, type = f.DBPhysicalType.ToString(), f.FlagActive }));
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -1704,3 +1732,4 @@ record TctTransactionLogDto(string? MessageCode, string? MstSeller, TctMessageAc
 record InvoiceInputLineDto(string? ProductName, string? UnitCode, decimal Quantity, decimal UnitPrice, decimal VatRate, string? Remark);
 record InvoiceInputDto(int? Id, string? Mst, string? InvoiceCode, string? RefNo, string? FormNo, string? Sign, SourceInvoiceCode SourceCode, InvoiceAdjType AdjType, PaymentMethod PaymentMethod, string? InvoiceType2, DateTime InvoiceDate, string? SellerName, string? SellerMst, string? SellerAddress, string? SellerPhone, string? SellerEmail, string? SellerBankName, string? SellerAccNo, string? BuyerName, string? BuyerMst, string? BuyerAddress, string? BuyerPhone, string? BuyerEmail, string? TInvoiceCode, string? InvoiceNo, string? EmailSend, string? InvoiceFileSpec, string? InvoiceFilePath, string? InvoicePDFFilePath, string? InvoiceVerifyCQTCode, string? CurrencyCode, decimal CurrencyRate, string? Remark, List<InvoiceInputLineDto>? Lines, string? By);
 record InvoiceInputDeleteDto(string? Reason, string? By);
+record ProductIdDto(int? Id, string? ProductId, string? SpecCode, DateTime? ProductionDate, string? LotNo, DateTime? BuyDate, string? SecretNo, DateTime? WarrantyStartDate, DateTime? WarrantyExpiredDate, int? WarrantyDuration, string? RefNo1, string? RefBiz1, string? RefNo2, string? RefBiz2, string? RefNo3, string? RefBiz3, string? Buyer, ProductIdStatus Status, string? CustomField1, string? CustomField2, string? CustomField3, string? CustomField4, string? CustomField5, string? By);

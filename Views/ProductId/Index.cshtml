@@ -1,0 +1,126 @@
+@model List<ProductId>
+@{
+    ViewData["Title"] = "Mã sản phẩm / serial";
+    var keyword = ViewBag.Keyword as string;
+    var specCode = ViewBag.SpecCode as string;
+    var status = ViewBag.Status as ProductIdStatus?;
+    var specs = ViewBag.Specs as List<Spec> ?? new List<Spec>();
+    var customFields = ViewBag.CustomFields as List<PrdIdCustomField> ?? new List<PrdIdCustomField>();
+    string Sp(string? c) => specs.FirstOrDefault(x => x.SpecCode == c)?.SpecName ?? c ?? "";
+    string D(DateTime? d) => d.HasValue ? d.Value.ToString("dd/MM/yyyy") : "—";
+    string Cf(string code) => customFields.FirstOrDefault(x => x.PrdCustomFieldCode == code)?.PrdCustomFieldName ?? code;
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-upc-scan me-1"></i>Mã sản phẩm / serial</h6>
+                <form method="get" action="/ProductId" class="d-flex gap-2 flex-wrap">
+                    <select name="specCode" class="form-select form-select-sm" style="width:auto">
+                        <option value="">— Tất cả sản phẩm —</option>
+                        @foreach (var s in specs)
+                        {
+                            <option value="@s.SpecCode" selected="@(s.SpecCode == specCode)">@s.SpecCode — @s.SpecName</option>
+                        }
+                    </select>
+                    <select name="status" class="form-select form-select-sm" style="width:auto">
+                        <option value="">— Tất cả trạng thái —</option>
+                        @foreach (var st in Enum.GetValues<ProductIdStatus>())
+                        {
+                            var (t, _) = Ui.ProductIdStatus(st);
+                            <option value="@((int)st)" selected="@(status == st)">@t</option>
+                        }
+                    </select>
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm serial / mã SP / người mua" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Serial</th><th>Sản phẩm</th><th>Lô / NSX</th><th>Bảo hành</th><th>Người mua</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var t in Model)
+                {
+                    var (stText, stCss) = Ui.ProductIdStatus(t.ProductIDStatus);
+                    <tr>
+                        <td class="fw-semibold">@t.ProductID</td>
+                        <td>
+                            <span class="fw-semibold">@t.SpecCode</span>
+                            <div class="small text-muted">@Sp(t.SpecCode)</div>
+                        </td>
+                        <td class="small">
+                            @(string.IsNullOrWhiteSpace(t.LOTNo) ? "—" : t.LOTNo)
+                            <div class="text-muted">NSX: @D(t.ProductionDate)</div>
+                        </td>
+                        <td class="small">
+                            @D(t.WarrantyStartDate) → @D(t.WarrantyExpiredDate)
+                            @if (t.WarrantyDuration.HasValue) { <div class="text-muted">@t.WarrantyDuration tháng</div> }
+                        </td>
+                        <td class="small">@(string.IsNullOrWhiteSpace(t.Buyer) ? "—" : t.Buyer)</td>
+                        <td><span class="badge bg-@stCss">@stText</span></td>
+                        <td class="text-end">
+                            <form method="post" action="/ProductId/Delete" class="d-inline" onsubmit="return confirm('Xóa serial @t.ProductID?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@t.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có serial nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm / cập nhật serial</h6>
+            <form method="post" action="/ProductId/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Mã sản phẩm / số serial</label><input name="productId" class="form-control form-control-sm" placeholder="SN-0001" required /></div>
+                <div class="col-12">
+                    <label class="form-label small mb-1">Sản phẩm</label>
+                    <select name="specCode" class="form-select form-select-sm" required>
+                        <option value="">— Chọn sản phẩm —</option>
+                        @foreach (var s in specs.Where(x => x.FlagActive))
+                        {
+                            <option value="@s.SpecCode">@s.SpecCode — @s.SpecName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6"><label class="form-label small mb-1">Ngày sản xuất</label><input name="productionDate" type="date" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Số lô</label><input name="lotNo" class="form-control form-control-sm" placeholder="(tùy chọn)" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Ngày mua</label><input name="buyDate" type="date" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Số bí mật</label><input name="secretNo" class="form-control form-control-sm" placeholder="(tùy chọn)" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Bắt đầu BH</label><input name="warrantyStartDate" type="date" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Hết hạn BH</label><input name="warrantyExpiredDate" type="date" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Thời hạn BH (tháng)</label><input name="warrantyDuration" type="number" min="0" class="form-control form-control-sm" /></div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">Trạng thái</label>
+                    <select name="status" class="form-select form-select-sm">
+                        @foreach (var st in Enum.GetValues<ProductIdStatus>())
+                        {
+                            var (t, _) = Ui.ProductIdStatus(st);
+                            <option value="@((int)st)">@t</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người mua</label><input name="buyer" class="form-control form-control-sm" placeholder="(tùy chọn)" /></div>
+                <div class="col-4"><label class="form-label small mb-1">Tham chiếu 1</label><input name="refNo1" class="form-control form-control-sm" /></div>
+                <div class="col-4"><label class="form-label small mb-1">Tham chiếu 2</label><input name="refNo2" class="form-control form-control-sm" /></div>
+                <div class="col-4"><label class="form-label small mb-1">Tham chiếu 3</label><input name="refNo3" class="form-control form-control-sm" /></div>
+                <div class="col-4"><label class="form-label small mb-1">Nghiệp vụ 1</label><input name="refBiz1" class="form-control form-control-sm" /></div>
+                <div class="col-4"><label class="form-label small mb-1">Nghiệp vụ 2</label><input name="refBiz2" class="form-control form-control-sm" /></div>
+                <div class="col-4"><label class="form-label small mb-1">Nghiệp vụ 3</label><input name="refBiz3" class="form-control form-control-sm" /></div>
+                <div class="col-12"><label class="form-label small mb-1">@Cf("CustomField1")</label><input name="customField1" class="form-control form-control-sm" /></div>
+                <div class="col-12"><label class="form-label small mb-1">@Cf("CustomField2")</label><input name="customField2" class="form-control form-control-sm" /></div>
+                <div class="col-12"><label class="form-label small mb-1">@Cf("CustomField3")</label><input name="customField3" class="form-control form-control-sm" /></div>
+                <div class="col-12"><label class="form-label small mb-1">@Cf("CustomField4")</label><input name="customField4" class="form-control form-control-sm" /></div>
+                <div class="col-12"><label class="form-label small mb-1">@Cf("CustomField5")</label><input name="customField5" class="form-control form-control-sm" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu serial</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Sản phẩm phải tồn tại và đang dùng. Lưu cùng cặp (serial, sản phẩm) = cập nhật bản ghi đã có.</p>
+        </div></div>
+    </div>
+</div>

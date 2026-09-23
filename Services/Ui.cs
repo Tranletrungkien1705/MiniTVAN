@@ -355,4 +355,13 @@ public static class Ui
         InputInvoiceStatus.Deleted => ("Đã xóa", "danger"),
         _ => (s.ToString(), "secondary")
     };
+
+    // Trạng thái của một mã sản phẩm / serial (theo Prd_ProductID.ProductIDStatus của TVAN gốc).
+    public static (string text, string css) ProductIdStatus(Models.ProductIdStatus s) => s switch
+    {
+        Models.ProductIdStatus.New    => ("Mới tạo", "secondary"),
+        Models.ProductIdStatus.Sold   => ("Đã bán", "success"),
+        Models.ProductIdStatus.Locked => ("Đã khóa", "danger"),
+        _ => (s.ToString(), "secondary")
+    };
 }

@@ -5356,6 +5356,113 @@ public class DocTienTests
         }
     }
 
+    // ===== Mã sản phẩm / serial (theo Prd_ProductID của TVAN gốc) =====
+
+    [Fact]
+    public async Task ProductId_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            var (ok, _, id) = await svc.SaveProductIdAsync(null, "SN-0001", "SP-A54", DateTime.Today.AddDays(-60), "LOT-01", DateTime.Today.AddDays(-30), "SEC-1",
+                DateTime.Today.AddDays(-30), DateTime.Today.AddMonths(12), 12, null, null, null, null, null, null, "Nguyễn Văn A",
+                ProductIdStatus.Sold, "Đen", null, null, null, null, "kế toán");
+            Assert.True(ok);
+            var e = await svc.GetProductIdAsync(id);
+            Assert.Equal("SN-0001", e!.ProductID);
+            Assert.Equal("SP-A54", e.SpecCode);
+            Assert.Equal("LOT-01", e.LOTNo);
+            Assert.Equal(12, e.WarrantyDuration);
+            Assert.Equal(ProductIdStatus.Sold, e.ProductIDStatus);
+            Assert.Equal("Đen", e.CustomField1);
+        }
+    }
+
+    [Fact]
+    public async Task ProductId_Save_SameKey_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            var (_, _, id) = await svc.SaveProductIdAsync(null, "SN-0001", "SP-A54", null, null, null, null, null, null, null, null, null, null, null, null, null, null, ProductIdStatus.New, null, null, null, null, null, "kế toán");
+            // Lưu lại cùng id = cập nhật (không tạo bản ghi mới).
+            var (ok, _, id2) = await svc.SaveProductIdAsync(id, "SN-0001", "SP-A54", null, null, null, null, null, null, null, null, null, null, null, null, null, "Trần Thị B", ProductIdStatus.Sold, null, null, null, null, null, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            Assert.Single(await svc.ProductIdsAsync(null, null, null));
+            Assert.Equal(ProductIdStatus.Sold, (await svc.GetProductIdAsync(id))!.ProductIDStatus);
+        }
+    }
+
+    [Fact]
+    public async Task ProductId_Save_DuplicateKey_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            await svc.SaveProductIdAsync(null, "SN-0001", "SP-A54", null, null, null, null, null, null, null, null, null, null, null, null, null, null, ProductIdStatus.New, null, null, null, null, null, "kế toán");
+            // Tạo mới trùng cặp (serial, sản phẩm) → chặn.
+            var (ok, msg, _) = await svc.SaveProductIdAsync(null, "SN-0001", "SP-A54", null, null, null, null, null, null, null, null, null, null, null, null, null, null, ProductIdStatus.New, null, null, null, null, null, "kế toán");
+            Assert.False(ok);
+            Assert.Contains("đã tồn tại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task ProductId_Save_MissingKey_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok1, msg1, _) = await svc.SaveProductIdAsync(null, "  ", "SP-A54", null, null, null, null, null, null, null, null, null, null, null, null, null, null, ProductIdStatus.New, null, null, null, null, null, "kế toán");
+            Assert.False(ok1);
+            Assert.Contains("serial", msg1);
+            var (ok2, msg2, _) = await svc.SaveProductIdAsync(null, "SN-0001", "  ", null, null, null, null, null, null, null, null, null, null, null, null, null, null, ProductIdStatus.New, null, null, null, null, null, "kế toán");
+            Assert.False(ok2);
+            Assert.Contains("SpecCode", msg2);
+        }
+    }
+
+    [Fact]
+    public async Task ProductId_Save_UnknownSpec_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            // Sản phẩm chưa tồn tại → chặn.
+            var (ok, msg, _) = await svc.SaveProductIdAsync(null, "SN-0001", "SP-A54", null, null, null, null, null, null, null, null, null, null, null, null, null, null, ProductIdStatus.New, null, null, null, null, null, "kế toán");
+            Assert.False(ok);
+            Assert.Contains("không tồn tại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task ProductId_List_FilteredBySpecAndStatus()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            await svc.SaveSpecAsync(null, "SP-IP15", "iPhone 15", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            await svc.SaveProductIdAsync(null, "SN-0001", "SP-A54", null, null, null, null, null, null, null, null, null, null, null, null, null, null, ProductIdStatus.Sold, null, null, null, null, null, "kế toán");
+            await svc.SaveProductIdAsync(null, "SN-0002", "SP-A54", null, null, null, null, null, null, null, null, null, null, null, null, null, null, ProductIdStatus.New, null, null, null, null, null, "kế toán");
+            await svc.SaveProductIdAsync(null, "SN-0003", "SP-IP15", null, null, null, null, null, null, null, null, null, null, null, null, null, null, ProductIdStatus.New, null, null, null, null, null, "kế toán");
+            Assert.Equal(3, (await svc.ProductIdsAsync(null, null, null)).Count);
+            Assert.Equal(2, (await svc.ProductIdsAsync(null, "SP-A54", null)).Count);
+            Assert.Equal(2, (await svc.ProductIdsAsync(null, null, ProductIdStatus.New)).Count);
+        }
+    }
+
+    [Fact]
+    public async Task ProductId_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            var (_, _, id) = await svc.SaveProductIdAsync(null, "SN-0001", "SP-A54", null, null, null, null, null, null, null, null, null, null, null, null, null, null, ProductIdStatus.New, null, null, null, null, null, "kế toán");
+            var (ok, _) = await svc.DeleteProductIdAsync(id);
+            Assert.True(ok);
+            Assert.Null(await svc.GetProductIdAsync(id));
+        }
+    }
+
     // Báo cáo tình hình sử dụng hóa đơn (BC26/AC) — theo Rpt_InvoiceInvoice_ResultUsed của TVAN gốc.
     private static async Task<int> SetupTemplate(AppDbContext db, ITvanService svc, int startNo, int endNo, DateTime effStart)
     {

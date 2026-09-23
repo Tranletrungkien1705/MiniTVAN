@@ -2078,3 +2078,39 @@ public class InvoiceInputController(ITvanService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+// Mã sản phẩm / serial (theo Prd_ProductID của TVAN gốc — màn OS_PrdCenter_Prd_ProductIDController):
+// mỗi bản ghi là MỘT cá thể hàng hóa (serial) của một sản phẩm (SpecCode), quản lý serial/lô,
+// ngày sản xuất, bảo hành, người mua và các trường tùy chỉnh (CustomField1..5 — theo Prd_PrdIDCustomField).
+public class ProductIdController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword, string? specCode, ProductIdStatus? status)
+    {
+        ViewBag.Keyword = keyword;
+        ViewBag.SpecCode = specCode;
+        ViewBag.Status = status;
+        ViewBag.Specs = await svc.SpecsAsync(null, null, null, null);
+        ViewBag.CustomFields = await svc.PrdIdCustomFieldsAsync(null);
+        return View(await svc.ProductIdsAsync(keyword, specCode, status));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string productId, string specCode, DateTime? productionDate, string? lotNo, DateTime? buyDate,
+        string? secretNo, DateTime? warrantyStartDate, DateTime? warrantyExpiredDate, int? warrantyDuration,
+        string? refNo1, string? refBiz1, string? refNo2, string? refBiz2, string? refNo3, string? refBiz3, string? buyer,
+        ProductIdStatus status, string? customField1, string? customField2, string? customField3, string? customField4, string? customField5, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveProductIdAsync(id, productId, specCode, productionDate, lotNo, buyDate, secretNo,
+            warrantyStartDate, warrantyExpiredDate, warrantyDuration, refNo1, refBiz1, refNo2, refBiz2, refNo3, refBiz3, buyer,
+            status, customField1, customField2, customField3, customField4, customField5, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteProductIdAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
