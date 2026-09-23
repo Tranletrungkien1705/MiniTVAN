@@ -1513,6 +1513,23 @@ public class SpecType1 : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Danh mục Nhóm sản phẩm (theo bảng Mst_SpecType2 của TVAN gốc): mỗi tổ chức khai báo các
+// nhóm sản phẩm (phân loại hàng hóa cấp 2, chi tiết hơn SpecType1) dùng để phân loại
+// sản phẩm/hàng hóa khi lập hóa đơn.
+// Khóa nghiệp vụ: (OrgId, SpecType2). FlagActive = nhóm sản phẩm đang dùng hay không.
+public class SpecType2 : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string SpecType2Code { get; set; } = "";     // Mã nhóm sản phẩm (VD DT01)
+    public string SpecType2Name { get; set; } = "";     // Tên nhóm sản phẩm (VD Điện thoại)
+    public string? Remark { get; set; }                   // Ghi chú
+    public bool FlagActive { get; set; } = true;          // Nhóm sản phẩm đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 // Tích hợp TVAN (theo bảng Mst_TVANInteg của TVAN gốc): mỗi tổ chức (OrgID) khai báo tổ chức
 // giải pháp TVAN tương ứng để trao đổi hóa đơn — MSTTCTN_In (hóa đơn đầu vào) và MSTTCTN_Out
 // (hóa đơn đầu ra). Lưu theo kiểu upsert theo OrgID (theo Mst_TVANInteg_Save của TVAN gốc:

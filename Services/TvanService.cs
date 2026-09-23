@@ -149,6 +149,10 @@ public interface ITvanService
     Task<SpecType1?> GetSpecType1Async(int id);
     Task<(bool ok, string msg, int id)> SaveSpecType1Async(int? id, string code, string name, string? remark, bool active, string? by);
     Task<(bool ok, string msg)> DeleteSpecType1Async(int id);
+    Task<List<SpecType2>> SpecType2sAsync(string? keyword);
+    Task<SpecType2?> GetSpecType2Async(int id);
+    Task<(bool ok, string msg, int id)> SaveSpecType2Async(int? id, string code, string name, string? remark, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteSpecType2Async(int id);
     Task<List<MstTypeCode>> TypeCodesAsync(string? keyword);
     Task<MstTypeCode?> GetTypeCodeAsync(int id);
     Task<(bool ok, string msg, int id)> SaveTypeCodeAsync(int? id, string code, string? desc, string? group, bool active, string? by);
@@ -3244,6 +3248,73 @@ public class TvanService(AppDbContext db) : ITvanService
         db.SpecType1s.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa loại sản phẩm {code}.");
+    }
+
+    // Danh mục Nhóm sản phẩm (theo Mst_SpecType2 của TVAN gốc):
+    // danh sách nhóm sản phẩm (lọc theo từ khóa mã/tên/ghi chú nếu có).
+    public Task<List<SpecType2>> SpecType2sAsync(string? keyword)
+    {
+        var q = db.SpecType2s.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.SpecType2Code.Contains(k) || t.SpecType2Name.Contains(k) || (t.Remark != null && t.Remark.Contains(k)));
+        }
+        return q.OrderBy(t => t.SpecType2Code).ToListAsync();
+    }
+
+    public Task<SpecType2?> GetSpecType2Async(int id) =>
+        db.SpecType2s.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) nhóm sản phẩm theo khóa nghiệp vụ (OrgId, SpecType2)
+    // (theo Mst_SpecType2_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã nhóm sản phẩm + tên nhóm sản phẩm;
+    //  - khi tạo: mã nhóm sản phẩm chưa tồn tại trong tổ chức (Mst_SpecType2_CheckDB_SpecType2Exist).
+    public async Task<(bool ok, string msg, int id)> SaveSpecType2Async(int? id, string code, string name, string? remark, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã nhóm sản phẩm.", 0);
+        if (name.Length == 0) return (false, "Cần tên nhóm sản phẩm.", 0);
+
+        SpecType2? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.SpecType2s.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.SpecType2s.FirstOrDefaultAsync(t => t.SpecType2Code == code);
+
+        if (e == null)
+        {
+            if (await db.SpecType2s.AnyAsync(t => t.SpecType2Code == code))
+                return (false, "Mã nhóm sản phẩm đã tồn tại.", 0);
+            e = new SpecType2 { SpecType2Code = code };
+            db.SpecType2s.Add(e);
+        }
+        else
+        {
+            // Đổi mã nhóm sản phẩm: chặn trùng với nhóm sản phẩm khác.
+            if (!string.Equals(e.SpecType2Code, code, StringComparison.OrdinalIgnoreCase)
+                && await db.SpecType2s.AnyAsync(t => t.SpecType2Code == code && t.Id != e.Id))
+                return (false, "Mã nhóm sản phẩm đã tồn tại.", 0);
+            e.SpecType2Code = code;
+        }
+
+        e.SpecType2Name = name;
+        e.Remark = remark;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu nhóm sản phẩm {code} — {name}.", e.Id);
+    }
+
+    // Xóa nhóm sản phẩm theo id (theo Mst_SpecType2_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteSpecType2Async(int id)
+    {
+        var e = await db.SpecType2s.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy nhóm sản phẩm.");
+        var code = e.SpecType2Code;
+        db.SpecType2s.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa nhóm sản phẩm {code}.");
     }
 
     // Danh mục mã loại (theo Mst_TypeCode của TVAN gốc):

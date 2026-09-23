@@ -617,6 +617,17 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Danh mục Nhóm sản phẩm (theo Mst_SpecType2 của TVAN gốc):
+        // các nhóm sản phẩm demo dùng để phân loại sản phẩm/hàng hóa khi lập hóa đơn.
+        if (!await db.SpecType2s.AnyAsync())
+        {
+            db.SpecType2s.AddRange(
+                new SpecType2 { SpecType2Code = "DT01", SpecType2Name = "Điện thoại", Remark = "Điện thoại di động", FlagActive = true, UpdatedBy = "kế toán" },
+                new SpecType2 { SpecType2Code = "LT01", SpecType2Name = "Laptop", Remark = "Máy tính xách tay", FlagActive = true, UpdatedBy = "kế toán" },
+                new SpecType2 { SpecType2Code = "GD01", SpecType2Name = "Giày thể thao", Remark = "Giày dép thể thao", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+
         // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):
         // các loại khách hàng demo dùng khi khai báo danh mục khách hàng.
         if (!await db.CustomerNntTypes.AnyAsync())

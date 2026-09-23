@@ -887,6 +887,27 @@ app.MapDelete("/api/spec-type1s/{id:int}", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Danh mục nhóm sản phẩm (theo Mst_SpecType2 của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
+app.MapGet("/api/spec-type2s", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.SpecType2sAsync(keyword);
+    return Results.Ok(ls.Select(t => new { t.Id, t.SpecType2Code, t.SpecType2Name, t.Remark, t.FlagActive, t.UpdatedAt, t.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) nhóm sản phẩm theo mã (theo Mst_SpecType2_Create/Update của TVAN gốc).
+app.MapPost("/api/spec-type2s", async (SpecType2Dto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveSpecType2Async(dto.Id, dto.Code ?? "", dto.Name ?? "", dto.Remark, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa nhóm sản phẩm theo id (theo Mst_SpecType2_Delete của TVAN gốc).
+app.MapDelete("/api/spec-type2s/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteSpecType2Async(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
 app.MapGet("/api/customer-nnt-types", async (string? keyword, ITvanService svc) =>
 {
@@ -1408,6 +1429,7 @@ record TypeCodeDto(int? Id, string? Code, string? Desc, string? Group, bool Acti
 record BrandDto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
 record ProductModelDto(int? Id, string? Code, string? Name, string? OrgModelCode, string? BrandCode, string? Remark, bool Active, string? By);
 record SpecType1Dto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
+record SpecType2Dto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
 record CustomerNntTypeDto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
 record ProvinceDto(int? Id, string? Code, string? Name, bool Active, string? By);
 record DistrictDto(int? Id, string? ProvinceCode, string? Code, string? Name, bool Active, string? By);
