@@ -104,7 +104,16 @@ app.MapPost("/api/import/nnts", async (List<ImportNntDto> rows, AppDbContext db,
     return Results.Ok(new { added, skipped, total = added + skipped });
 });
 
-// Import hóa đơn thật từ HTC (dedupe theo NntId+Symbol+No)
+// Tạo NNT kèm phòng ban gốc trong MỘT thao tác (theo Mst_NNT_CreateNNTAndDepartment của TVAN gốc).
+app.MapPost("/api/nnts/create-with-department", async (CreateNntDeptDto dto, ITvanService svc) =>
+{
+    var p = new NntProfile(dto.Mst ?? "", dto.Name ?? "", null, null, null, null, dto.Address, null, null, null, null, null,
+        null, null, null, null, null, null, dto.Email, null, null, null, null, null,
+        null, null, null, null, null, null, true, dto.By);
+    var (ok, msg, nntId, deptId) = await svc.CreateNntAndDepartmentAsync(p, dto.DepartmentCode ?? "", dto.DepartmentName ?? "");
+    return ok ? Results.Ok(new { nntId, deptId, msg }) : Results.BadRequest(new { nntId, deptId, error = msg });
+});
+
 app.MapPost("/api/import/invoices", async (List<ImportInvDto> rows, AppDbContext db, ITenantContext tc) =>
 {
     if (rows == null || rows.Count == 0) return Results.BadRequest(new { error = "Không có dữ liệu." });
@@ -1820,6 +1829,7 @@ record TctCallback(string TctCode, string Code, string Text);
 record ExtInvoiceDto(string? SellerMst, string? SellerName, string? BuyerName, string? BuyerMst, string? BuyerAddress, decimal Amount, decimal VatRate, string? DocRef);
 record RegisterOrgDto(string Name);
 record ImportNntDto(string? Mst, string? Name, string? Address, string? Email);
+record CreateNntDeptDto(string? Mst, string? Name, string? Address, string? Email, string? DepartmentCode, string? DepartmentName, string? By);
 record ImportInvDto(string? SellerMst, string? Symbol, string? No, string? BuyerName, string? BuyerMst, string? BuyerAddress, decimal Amount, decimal VatRate, DateTime? IssuedDate, string? TctCode);
 record AdjustDto(InvoiceAdjType AdjType, decimal Amount, decimal VatRate, string? Reason);
 record ReplaceDto(decimal Amount, decimal VatRate, string? Reason);

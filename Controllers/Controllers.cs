@@ -79,6 +79,19 @@ public class NntController(ITvanService svc) : Controller
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Index));
     }
+
+    // Tạo NNT kèm phòng ban gốc trong MỘT thao tác (theo Mst_NNT_CreateNNTAndDepartment của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateWithDepartment(string mst, string name, string? address, string? email,
+        string departmentCode, string departmentName, string? by)
+    {
+        var p = new NntProfile(mst, name, null, null, null, null, address, null, null, null, null, null,
+            null, null, null, null, null, null, email, null, null, null, null, null,
+            null, null, null, null, null, null, true, by);
+        var (ok, msg, _, _) = await svc.CreateNntAndDepartmentAsync(p, departmentCode, departmentName);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
 }
 
 public class InvoiceController(ITvanService svc) : Controller

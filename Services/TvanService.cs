@@ -18,6 +18,8 @@ public interface ITvanService
     Task<(bool ok, string msg)> DeleteNntAsync(int id);
     // Cập nhật trạng thái đăng ký NNT (theo Mst_NNT_UpdateRegisterStatusX của TVAN gốc).
     Task<(bool ok, string msg)> UpdateNntRegisterStatusAsync(int id, RegStatus status, string? remark, string? by);
+    // Tạo NNT kèm phòng ban gốc trong MỘT thao tác (theo Mst_NNT_CreateNNTAndDepartment của TVAN gốc).
+    Task<(bool ok, string msg, int nntId, int deptId)> CreateNntAndDepartmentAsync(NntProfile p, string departmentCode, string departmentName);
     Task<List<Invoice>> InvoicesAsync(InvoiceStatus? status, int? nntId);
     Task<Invoice?> GetInvoiceAsync(int id);
     Task<(bool ok, string msg, int id)> CreateInvoiceAsync(Invoice inv);
@@ -588,6 +590,43 @@ public class TvanService(AppDbContext db) : ITvanService
         e.UpdatedBy = by;
         await db.SaveChangesAsync();
         return (true, $"Đã cập nhật trạng thái đăng ký NNT {e.Mst}.");
+    }
+
+    // Tạo NNT kèm phòng ban gốc trong MỘT thao tác (theo Mst_NNT_CreateNNTAndDepartment của TVAN gốc):
+    // lưu hồ sơ NNT (theo Mst_NNT_CreateX) rồi tạo phòng ban gốc (DepartmentCodeParent = null) gắn với MST đó.
+    // Ràng buộc: hồ sơ NNT hợp lệ (theo SaveNntAsync) + cần mã/tên phòng ban; chặn trùng mã phòng ban.
+    public async Task<(bool ok, string msg, int nntId, int deptId)> CreateNntAndDepartmentAsync(NntProfile p, string departmentCode, string departmentName)
+    {
+        departmentCode = (departmentCode ?? "").Trim();
+        departmentName = (departmentName ?? "").Trim();
+        if (departmentCode.Length == 0) return (false, "Cần mã phòng ban.", 0, 0);
+        if (departmentName.Length == 0) return (false, "Cần tên phòng ban.", 0, 0);
+
+        // Lưu hồ sơ NNT trước (theo Mst_NNT_CreateX của TVAN gốc).
+        var (ok, msg, nntId) = await SaveNntAsync(null, p);
+        if (!ok) return (false, msg, 0, 0);
+
+        // Chặn trùng mã phòng ban (theo Mst_Department_CheckDB_DepartmentExist của TVAN gốc).
+        if (await db.Departments.AnyAsync(d => d.DepartmentCode == departmentCode))
+            return (false, $"Mã phòng ban {departmentCode} đã tồn tại.", nntId, 0);
+
+        // Tạo phòng ban gốc (không có phòng ban cha) gắn với MST vừa tạo.
+        var dept = new Department
+        {
+            DepartmentCode = departmentCode,
+            DepartmentCodeParent = null,
+            MST = (p.Mst ?? "").Trim(),
+            DepartmentName = departmentName,
+            FlagActive = true,
+            UpdatedAt = DateTime.UtcNow,
+            UpdatedBy = p.By
+        };
+        db.Departments.Add(dept);
+        await db.SaveChangesAsync();
+
+        // Tính lại mã đơn vị nghiệp vụ/mẫu/cấp cho toàn bộ cây phòng ban (theo Mst_Department_UpdBU của TVAN gốc).
+        await RecomputeDepartmentBuAsync();
+        return (true, $"Đã tạo NNT {p.Mst} kèm phòng ban gốc {departmentCode} — {departmentName}.", nntId, dept.Id);
     }
 
     // Tính lại mã đơn vị nghiệp vụ/mẫu/cấp cho cây NNT (theo Mst_NNT_UpdBU của TVAN gốc):

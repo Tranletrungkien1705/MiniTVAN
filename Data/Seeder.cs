@@ -924,7 +924,25 @@ public static class Seeder
             }
         }
 
-        // Chứng thư số của tổ chức (theo Mst_OrgCKS của TVAN gốc):
+        // Tạo NNT kèm phòng ban gốc (theo Mst_NNT_CreateNNTAndDepartment của TVAN gốc):
+        // NNT demo "Công ty TNHH Thương mại Sao Mai" được tạo cùng phòng ban gốc "HO" trong một thao tác.
+        if (!await db.Nnts.AnyAsync(n => n.Mst == "0107654321"))
+        {
+            var sm = new Nnt
+            {
+                Mst = "0107654321", Name = "Công ty TNHH Thương mại Sao Mai", Address = "Số 12 Lý Thái Tổ, Hoàn Kiếm, Hà Nội",
+                Email = "kt@saomai.vn", RegStatus = RegStatus.Pending, FlagActive = true, UpdatedBy = "kế toán"
+            };
+            db.Nnts.Add(sm);
+            await db.SaveChangesAsync();
+            db.Departments.Add(new Department
+            {
+                DepartmentCode = "HO", DepartmentCodeParent = null, MST = sm.Mst,
+                DepartmentName = "Trụ sở chính", FlagActive = true, UpdatedBy = "kế toán"
+            });
+            await db.SaveChangesAsync();
+        }
+
         // 1 chứng thư số demo đang dùng để ký hóa đơn điện tử.
         if (!await db.OrgCkses.AnyAsync())
         {

@@ -3083,6 +3083,69 @@ public class TvanServiceTests
         }
     }
 
+    // Tạo NNT kèm phòng ban gốc (theo Mst_NNT_CreateNNTAndDepartment của TVAN gốc).
+    private static NntProfile NntProf(string mst, string name) => new(
+        mst, name, null, null, null, null, "Hà Nội", null, null, null, "Nguyễn Văn A", null,
+        "Giám đốc", null, null, null, "Nguyễn Văn A", "0901234567", "a@cty.vn", null, null, null,
+        null, null, null, null, null, null, null, null, true, "kế toán");
+
+    [Fact]
+    public async Task Nnt_CreateWithDepartment_CreatesBoth()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, nntId, deptId) = await svc.CreateNntAndDepartmentAsync(NntProf("0107654321", "Cty Sao Mai"), "HO", "Trụ sở chính");
+            Assert.True(ok);
+            Assert.True(nntId > 0);
+            Assert.True(deptId > 0);
+            var nnt = await svc.GetNntAsync(nntId);
+            Assert.Equal("0107654321", nnt!.Mst);
+            var dept = await svc.GetDepartmentAsync(deptId);
+            Assert.Equal("HO", dept!.DepartmentCode);
+            Assert.Null(dept.DepartmentCodeParent);
+            Assert.Equal("0107654321", dept.MST);
+            Assert.Equal("HO", dept.DepartmentBUCode);
+            Assert.Equal(1, dept.DepartmentLevel);
+        }
+    }
+
+    [Fact]
+    public async Task Nnt_CreateWithDepartment_MissingDeptCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _, _) = await svc.CreateNntAndDepartmentAsync(NntProf("0107654321", "Cty Sao Mai"), "  ", "Trụ sở chính");
+            Assert.False(ok);
+            Assert.Contains("mã phòng ban", msg);
+            Assert.Empty(await svc.NntsAsync());
+        }
+    }
+
+    [Fact]
+    public async Task Nnt_CreateWithDepartment_InvalidProfile_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            // Thiếu tên NNT → SaveNntAsync chặn, không tạo phòng ban.
+            var (ok, msg, _, _) = await svc.CreateNntAndDepartmentAsync(NntProf("0107654321", "  "), "HO", "Trụ sở chính");
+            Assert.False(ok);
+            Assert.Contains("tên", msg);
+            Assert.Empty(await svc.DepartmentsAsync(null, null));
+        }
+    }
+
+    [Fact]
+    public async Task Nnt_CreateWithDepartment_DuplicateDeptCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateNntAndDepartmentAsync(NntProf("0107654321", "Cty Sao Mai"), "HO", "Trụ sở chính");
+            var (ok, msg, _, _) = await svc.CreateNntAndDepartmentAsync(NntProf("0107654322", "Cty Sao Mai 2"), "HO", "Trụ sở chính 2");
+            Assert.False(ok);
+            Assert.Contains("đã tồn tại", msg);
+        }
+    }
+
     [Fact]
     public async Task OrgCks_Save_Creates()
     {

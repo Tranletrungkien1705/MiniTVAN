@@ -110,6 +110,21 @@
             </form>
             <p class="small text-muted mt-3 mb-0">NNT phải <b>đăng ký</b> và được TCT chấp nhận trước khi truyền hóa đơn. Dùng nút <i class="bi bi-pencil"></i> để khai báo hồ sơ đầy đủ.</p>
         </div></div>
+
+        <div class="card mt-3"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-diagram-3 me-1"></i>Tạo NNT kèm phòng ban gốc</h6>
+            <form asp-action="CreateWithDepartment" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2"><input name="mst" class="form-control form-control-sm" placeholder="Mã số thuế (10/13 số) *" required /></div>
+                <div class="mb-2"><input name="name" class="form-control form-control-sm" placeholder="Tên đơn vị *" required /></div>
+                <div class="mb-2"><input name="address" class="form-control form-control-sm" placeholder="Địa chỉ *" required /></div>
+                <div class="mb-2"><input name="email" type="email" class="form-control form-control-sm" placeholder="Email liên hệ *" required /></div>
+                <div class="mb-2"><input name="departmentCode" class="form-control form-control-sm" placeholder="Mã phòng ban gốc (VD HO) *" required /></div>
+                <div class="mb-2"><input name="departmentName" class="form-control form-control-sm" placeholder="Tên phòng ban gốc (VD Trụ sở chính) *" required /></div>
+                <div class="mb-3"><input name="by" class="form-control form-control-sm" placeholder="Người thực hiện" /></div>
+                <button class="btn btn-sm btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Tạo NNT + phòng ban</button>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Tạo hồ sơ NNT và phòng ban gốc (không có phòng ban cha) trong một thao tác (theo Mst_NNT_CreateNNTAndDepartment).</p>
+        </div></div>
     </div>
 </div>
 
