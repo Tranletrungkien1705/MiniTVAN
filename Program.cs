@@ -293,6 +293,13 @@ app.MapPost("/api/invoices/{id:int}/send-email", async (int id, SendEmailDto dto
     return ok ? Results.Ok(new { id = logId, msg }) : Results.BadRequest(new { id = logId, error = msg });
 });
 
+// Gửi lại email cho NHIỀU hóa đơn đã phát hành cùng lúc (theo Invoice_InvoiceController.ReSendEmail của TVAN gốc).
+app.MapPost("/api/invoices/bulk-resend-email", async (BulkReSendEmailDto dto, ITvanService svc) =>
+{
+    var (ok, msg, count) = await svc.ReSendEmailsAsync(dto.Ids ?? new(), dto.By);
+    return ok ? Results.Ok(new { sentCount = count, msg }) : Results.BadRequest(new { error = msg });
+});
+
 // Nhật ký gửi email hóa đơn (lọc theo hóa đơn nếu có).
 app.MapGet("/api/email-logs", async (int? invoiceId, ITvanService svc) =>
 {
@@ -1925,6 +1932,7 @@ record DeleteInvoiceDto(string? Remark, string? By);
 record LicenseIncreaseDto(int NntId, int Qty, string? Note);
 record GuiTongHopDto(int NntId, PeriodType LKDLieu, string? KDLieu, int BSLThu, string? Note);
 record SendEmailDto(string? ToEmail, string? SentBy);
+record BulkReSendEmailDto(List<int>? Ids, string? By);
 record MailSentDto(DateTime? MailSentDTimeUTC, string? By);
 record ConversionPrintDto(string? Note, string? By);
 record ReSignDto(string? FileSpec, string? Note, string? By);

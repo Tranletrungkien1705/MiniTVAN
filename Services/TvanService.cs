@@ -54,6 +54,8 @@ public interface ITvanService
     Task<(bool ok, string msg, NntLookupLog? log)> LookupNntByMstAsync(string mst);
     Task<List<InvoiceEmailLog>> EmailLogsAsync(int? invoiceId);
     Task<(bool ok, string msg, int id)> SendInvoiceEmailAsync(int invoiceId, string? toEmail, string? sentBy);
+    // Gửi lại email cho NHIỀU hóa đơn đã phát hành cùng lúc (theo Invoice_InvoiceController.ReSendEmail của TVAN gốc).
+    Task<(bool ok, string msg, int sentCount)> ReSendEmailsAsync(List<int> invoiceIds, string? by);
     Task<(bool ok, string msg)> UpdateMailSentAsync(int invoiceId, DateTime? mailSentDTimeUTC, string? by);
     Task<(bool ok, string msg)> MarkConversionPrintedAsync(int invoiceId, string? note, string? by);
     Task<(bool ok, string msg)> ResetConversionPrintAsync(int invoiceId, string? note, string? by);
@@ -1399,6 +1401,49 @@ public class TvanService(AppDbContext db) : ITvanService
         var q = db.InvoiceEmailLogs.Include(l => l.Invoice).AsQueryable();
         if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
+
+    // Gửi lại email cho NHIỀU hóa đơn đã phát hành cùng lúc (theo Invoice_InvoiceController.ReSendEmail của TVAN gốc):
+    // dùng khi EmailSend đã được sửa đúng, gửi lại hàng loạt cho danh sách HĐ đã chọn.
+    // Mỗi HĐ phải tồn tại, đã được CQT chấp nhận (Accepted) và có email người nhận hợp lệ (EmailSend).
+    // Mỗi HĐ ghi 1 nhật ký gửi email (InvoiceEmailLog) + cập nhật SendEmailDTimeUTC/SendEmailBy.
+    // Nếu có HĐ không hợp lệ thì KHÔNG gửi HĐ nào (all-or-nothing).
+    public async Task<(bool ok, string msg, int sentCount)> ReSendEmailsAsync(List<int> invoiceIds, string? by)
+    {
+        if (invoiceIds == null || invoiceIds.Count == 0) return (false, "Cần chọn ít nhất một hóa đơn để gửi lại email.", 0);
+        var ids = invoiceIds.Distinct().ToList();
+        var invs = await db.Invoices.Include(i => i.Nnt).Where(i => ids.Contains(i.Id)).ToListAsync();
+        if (invs.Count != ids.Count) return (false, "Có hóa đơn không tồn tại.", 0);
+
+        // Kiểm tra toàn bộ trước khi ghi (all-or-nothing).
+        foreach (var inv in invs)
+        {
+            if (inv.Status != InvoiceStatus.Accepted)
+                return (false, $"HĐ {inv.Symbol}-{inv.No} chưa được CQT chấp nhận, không thể gửi lại email.", 0);
+            var to = (inv.EmailSend ?? "").Trim();
+            if (to.Length == 0)
+                return (false, $"HĐ {inv.Symbol}-{inv.No} chưa có email người nhận.", 0);
+            var recipients = to.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (recipients.Length == 0 || recipients.Any(r => !r.Contains('@')))
+                return (false, $"Email người nhận của HĐ {inv.Symbol}-{inv.No} không hợp lệ.", 0);
+        }
+
+        var now = DateTime.UtcNow;
+        foreach (var inv in invs)
+        {
+            var recipients = (inv.EmailSend ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var subject = $"Hóa đơn điện tử {inv.Symbol}-{inv.No} — {inv.Nnt?.Name}";
+            db.InvoiceEmailLogs.Add(new InvoiceEmailLog
+            {
+                InvoiceId = inv.Id, ToEmail = string.Join(";", recipients), Subject = subject,
+                Result = EmailSendResult.Success, SentBy = by,
+                Message = $"Đã gửi lại email hóa đơn tới {string.Join(";", recipients)}.", CreatedAt = now
+            });
+            inv.SendEmailDTimeUTC = now;
+            inv.SendEmailBy = by;
+        }
+        await db.SaveChangesAsync();
+        return (true, $"Đã gửi lại email cho {invs.Count} hóa đơn.", invs.Count);
     }
 
     // Cập nhật thời điểm gửi mail hóa đơn (theo Invoice_Invoice_UpdMailSentDTimeUTC của TVAN gốc):

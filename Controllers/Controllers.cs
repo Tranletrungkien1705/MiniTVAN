@@ -212,6 +212,15 @@ public class InvoiceController(ITvanService svc) : Controller
         return RedirectToAction(nameof(Detail), new { id });
     }
 
+    // Gửi lại email cho NHIỀU hóa đơn đã phát hành cùng lúc (theo Invoice_InvoiceController.ReSendEmail của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReSendEmail(int[]? ids, string? by)
+    {
+        var (ok, msg, _) = await svc.ReSendEmailsAsync((ids ?? Array.Empty<int>()).ToList(), by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
     // Cập nhật thời điểm gửi mail hóa đơn (theo Invoice_Invoice_UpdMailSentDTimeUTC của TVAN gốc).
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateMailSent(int id, DateTime? mailSentDTimeUTC, string? by)

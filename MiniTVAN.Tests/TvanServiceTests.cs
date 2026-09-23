@@ -422,6 +422,76 @@ public class TvanServiceTests
         }
     }
 
+    // ===== Gửi lại email cho NHIỀU hóa đơn cùng lúc (theo Invoice_InvoiceController.ReSendEmail của TVAN gốc) =====
+
+    [Fact]
+    public async Task ReSendEmails_OnAccepted_LogsAllAndStamps()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            await svc.RegisterNntAsync(nntId);
+            var (_, _, inv1) = await svc.CreateInvoiceAsync(new Invoice { NntId = nntId, Symbol = "1C26TAA", BuyerName = "Cty Mua", Amount = 10_000_000 });
+            var (_, _, inv2) = await svc.CreateInvoiceAsync(new Invoice { NntId = nntId, Symbol = "1C26TAA", BuyerName = "Cty Mua", Amount = 20_000_000 });
+            await svc.TransmitAsync(inv1);
+            await svc.TransmitAsync(inv2);
+            await svc.SendInvoiceEmailAsync(inv1, "a@congty.vn", "kế toán");
+            await svc.SendInvoiceEmailAsync(inv2, "b@congty.vn", "kế toán");
+
+            var (ok, msg, count) = await svc.ReSendEmailsAsync(new List<int> { inv1, inv2 }, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(2, count);
+            Assert.Contains("2 hóa đơn", msg);
+            Assert.Equal(2, (await svc.EmailLogsAsync(inv1)).Count);
+            Assert.Equal(2, (await svc.EmailLogsAsync(inv2)).Count);
+            Assert.NotNull((await svc.GetInvoiceAsync(inv1))!.SendEmailDTimeUTC);
+        }
+    }
+
+    [Fact]
+    public async Task ReSendEmails_EmptyList_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.ReSendEmailsAsync(new List<int>(), "x");
+            Assert.False(ok);
+            Assert.Contains("ít nhất một", msg);
+        }
+    }
+
+    [Fact]
+    public async Task ReSendEmails_OnDraft_BlockedAllOrNothing()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            await svc.RegisterNntAsync(nntId);
+            var (_, _, inv1) = await svc.CreateInvoiceAsync(new Invoice { NntId = nntId, Symbol = "1C26TAA", BuyerName = "Cty Mua", Amount = 10_000_000 });
+            var (_, _, inv2) = await svc.CreateInvoiceAsync(new Invoice { NntId = nntId, Symbol = "1C26TAA", BuyerName = "Cty Mua", Amount = 20_000_000 });
+            await svc.TransmitAsync(inv1);
+            await svc.SendInvoiceEmailAsync(inv1, "a@congty.vn", "kế toán");
+            // inv2 vẫn Draft → không gửi HĐ nào.
+            var (ok, msg, count) = await svc.ReSendEmailsAsync(new List<int> { inv1, inv2 }, "x");
+            Assert.False(ok);
+            Assert.Equal(0, count);
+            Assert.Contains("chấp nhận", msg);
+            Assert.Single(await svc.EmailLogsAsync(inv1));   // chỉ log cũ, không thêm
+        }
+    }
+
+    [Fact]
+    public async Task ReSendEmails_NoRecipient_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);   // Accepted nhưng chưa có EmailSend
+            var (ok, msg, _) = await svc.ReSendEmailsAsync(new List<int> { invId }, "x");
+            Assert.False(ok);
+            Assert.Contains("email người nhận", msg);
+        }
+    }
+
     [Fact]
     public async Task ResetToPending_OnAccepted_ClearsTctCodeAndKeepsNo()
     {

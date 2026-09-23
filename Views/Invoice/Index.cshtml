@@ -23,7 +23,7 @@
                     @if (i.Status == InvoiceStatus.Draft && !string.IsNullOrWhiteSpace(i.No))
                     { <input type="checkbox" class="form-check-input bulk-approve-cb" value="@i.Id" /> }
                     else if (i.Status == InvoiceStatus.Accepted && !string.IsNullOrWhiteSpace(i.No))
-                    { <input type="checkbox" class="form-check-input bulk-delete-cb" value="@i.Id" /> }
+                    { <input type="checkbox" class="form-check-input bulk-delete-cb bulk-resend-cb" value="@i.Id" /> }
                 </td>
                 <td class="fw-semibold small">@i.Symbol-@i.No</td><td class="small">@i.Nnt?.Name</td><td class="small">@i.BuyerName</td>
                 <td class="text-end">@Ui.Money(i.Total)</td>
@@ -74,6 +74,27 @@
             var box = document.getElementById('bulkDeleteIds');
             box.innerHTML = '';
             document.querySelectorAll('.bulk-delete-cb:checked').forEach(function (cb) {
+                var h = document.createElement('input'); h.type = 'hidden'; h.name = 'ids'; h.value = cb.value; box.appendChild(h);
+            });
+        });
+    </script>
+
+    @* Gửi lại email cho NHIỀU hóa đơn đã phát hành cùng lúc (theo Invoice_InvoiceController.ReSendEmail của TVAN gốc). *@
+    <form asp-action="ReSendEmail" method="post" class="border rounded p-3 mt-2" onsubmit="return confirm('Gửi lại email cho các hóa đơn đã chọn?')">
+        @Html.AntiForgeryToken()
+        <div class="fw-bold small mb-2"><i class="bi bi-envelope-arrow-up me-1"></i>Gửi lại email nhiều hóa đơn cùng lúc</div>
+        <div id="bulkReSendIds"></div>
+        <div class="row g-2 align-items-end">
+            <div class="col-md-3"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="VD kế toán" /></div>
+            <div class="col-md-3"><button class="btn btn-primary btn-sm w-100"><i class="bi bi-envelope-arrow-up me-1"></i>Gửi lại email HĐ đã chọn</button></div>
+        </div>
+        <div class="small text-muted mt-1">Chỉ gửi lại được HĐ đã phát hành (ISSUED) và đã có email người nhận (EmailSend). Nếu có HĐ không hợp lệ, không HĐ nào được gửi.</div>
+    </form>
+    <script>
+        document.querySelector('form[action$="ReSendEmail"]')?.addEventListener('submit', function () {
+            var box = document.getElementById('bulkReSendIds');
+            box.innerHTML = '';
+            document.querySelectorAll('.bulk-resend-cb:checked').forEach(function (cb) {
                 var h = document.createElement('input'); h.type = 'hidden'; h.name = 'ids'; h.value = cb.value; box.appendChild(h);
             });
         });
