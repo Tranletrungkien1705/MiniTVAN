@@ -19,7 +19,18 @@ public class LegacyController(ITvanService svc) : Controller
 
 public class NntController(ITvanService svc) : Controller
 {
-    public async Task<IActionResult> Index() => View(await svc.NntsAsync());
+    public async Task<IActionResult> Index(string? keyword, string? mst, string? dlCode, RegStatus? regStatus)
+    {
+        ViewBag.Keyword = keyword;
+        ViewBag.Mst = mst;
+        ViewBag.DlCode = dlCode;
+        ViewBag.RegStatus = regStatus;
+        ViewBag.Dealers = await svc.DealersAsync(null, null);
+        ViewBag.Provinces = await svc.ProvincesAsync(null);
+        ViewBag.Districts = await svc.DistrictsAsync(null, null);
+        ViewBag.TaxOffices = await svc.TaxOfficesAsync();
+        return View(await svc.NntsAsync(keyword, mst, dlCode, regStatus));
+    }
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(string mst, string name, string? address, string? email)
@@ -33,6 +44,40 @@ public class NntController(ITvanService svc) : Controller
     {
         var (ok, msg) = await svc.RegisterNntAsync(id);
         TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Index));
+    }
+
+    // Lưu hồ sơ NNT đầy đủ (theo Mst_NNT_Create/Update của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string mst, string name, string? mstParent, string? provinceCode, string? districtCode, string? dlCode,
+        string? address, string? mobile, string? phone, string? fax, string? presentBy, string? businessRegNo, string? nntPosition,
+        string? presentIdNo, string? presentIdType, string? govTaxID, string? contactName, string? contactPhone, string? contactEmail,
+        string? website, string? caNumber, string? caOrg, DateTime? caEffStart, DateTime? caEffEnd, string? accNo, string? accHolder,
+        string? bankName, string? bizType, string? bizFieldCode, string? bizSizeCode, bool active, string? by)
+    {
+        var p = new NntProfile(mst, name, mstParent, provinceCode, districtCode, dlCode, address, mobile, phone, fax, presentBy,
+            businessRegNo, nntPosition, presentIdNo, presentIdType, govTaxID, contactName, contactPhone, contactEmail, website,
+            caNumber, caOrg, caEffStart, caEffEnd, accNo, accHolder, bankName, bizType, bizFieldCode, bizSizeCode, active, by);
+        var (ok, msg, _) = await svc.SaveNntAsync(id, p);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Xóa NNT theo id (theo Mst_NNT_Delete của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteNntAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Cập nhật trạng thái đăng ký NNT (theo Mst_NNT_UpdateRegisterStatusX của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateRegisterStatus(int id, RegStatus status, string? remark, string? by)
+    {
+        var (ok, msg) = await svc.UpdateNntRegisterStatusAsync(id, status, remark, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
     }
 }
 
@@ -1206,6 +1251,53 @@ public class SortColumnInvoiceController(ITvanService svc) : Controller
         var (ok, msg) = await svc.DeleteSortColumnInvoiceAsync(id);
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Index));
+    }
+}
+
+// Danh mục tiền tệ / ngoại tệ (theo Mst_CurrencyEx của TVAN gốc) + đọc tiền bằng chữ
+// (theo luồng DocTien của TVAN gốc — Invoice_InvoiceController.DocTien).
+public class DocTienController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword, decimal? amount, string? currencyCode)
+    {
+        ViewBag.Keyword = keyword;
+        ViewBag.Amount = amount;
+        ViewBag.CurrencyCode = currencyCode;
+        ViewBag.Currencies = await svc.CurrencyExesAsync(null);
+        ViewBag.Logs = await svc.DocTienLogsAsync();
+        if (amount.HasValue)
+        {
+            var (ok, msg, text, _) = await svc.DocTienAsync(amount.Value, currencyCode, "kế toán");
+            ViewBag.Ok = ok; ViewBag.Msg = msg; ViewBag.Text = text;
+        }
+        return View(await svc.CurrencyExesAsync(keyword));
+    }
+
+    // Lưu (tạo mới/cập nhật) tiền tệ theo mã (theo Mst_CurrencyEx của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string name, string? baseCode, decimal buyRate, decimal sellRate, string? remark, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveCurrencyExAsync(id, code, name, baseCode, buyRate, sellRate, remark, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Xóa tiền tệ theo id (theo Mst_CurrencyEx của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteCurrencyExAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Đọc số tiền thành chữ tiếng Việt (theo luồng DocTien của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Doc(decimal amount, string? currencyCode, string? by)
+    {
+        var (ok, msg, _, _) = await svc.DocTienAsync(amount, currencyCode, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index), new { amount, currencyCode });
     }
 }
 

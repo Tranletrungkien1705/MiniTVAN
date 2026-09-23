@@ -144,15 +144,18 @@ public class Org
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
-// Người nộp thuế (bên bán) — phải đăng ký với TCT trước khi phát hành HĐ
+// Người nộp thuế (bên bán) — phải đăng ký với TCT trước khi phát hành HĐ.
+// Hồ sơ đầy đủ theo bảng Mst_NNT của TVAN gốc: thông tin định danh, địa giới hành chính,
+// đại lý giới thiệu, cơ quan thuế quản lý, người đại diện, liên hệ, chứng thư số, ngân hàng,
+// loại hình/lĩnh vực/quy mô tổ chức và cây đơn vị trực thuộc (MSTParent → MSTBUCode/MSTBUPattern/MSTLevel).
 public class Nnt : IOrgOwned
 {
     public int Id { get; set; }
     public Guid OrgId { get; set; }
     public string Mst { get; set; } = "";            // Mã số thuế
-    public string Name { get; set; } = "";
-    public string? Address { get; set; }
-    public string? Email { get; set; }
+    public string Name { get; set; } = "";           // Tên doanh nghiệp (NNTFullName)
+    public string? Address { get; set; }              // Địa chỉ NNT (NNTAddress)
+    public string? Email { get; set; }                // Email liên hệ (ContactEmail)
     public RegStatus RegStatus { get; set; } = RegStatus.None;
     public DateTime? RegisteredAt { get; set; }
 
@@ -160,7 +163,61 @@ public class Nnt : IOrgOwned
     // chuỗi 5 ký tự do CQT cấp, dùng để sinh mã CQT trên hóa đơn khởi tạo từ máy tính tiền (MCCQTMTT).
     public string? MCCQT { get; set; }
 
+    // Đơn vị trực thuộc (theo Mst_NNT.MSTParent của TVAN gốc): MST của NNT cấp trên (rỗng = cấp gốc).
+    public string? MstParent { get; set; }
+    // Mã đơn vị nghiệp vụ / mẫu / cấp — hệ thống tự tính từ cây NNT (theo Mst_NNT_UpdBU của TVAN gốc).
+    public string MstBuCode { get; set; } = "";
+    public string MstBuPattern { get; set; } = "";
+    public int MstLevel { get; set; } = 1;
+
+    // Địa giới hành chính (theo Mst_NNT.ProvinceCode/DistrictCode của TVAN gốc).
+    public string? ProvinceCode { get; set; }
+    public string? DistrictCode { get; set; }
+    // Đại lý giới thiệu (theo Mst_NNT.DLCode của TVAN gốc).
+    public string? DLCode { get; set; }
+
+    // Người đại diện (theo Mst_NNT.PresentBy/NNTPosition/PresentIDNo/PresentIDType/BusinessRegNo của TVAN gốc).
+    public string? PresentBy { get; set; }
+    public string? NntPosition { get; set; }
+    public string? PresentIdNo { get; set; }
+    public string? PresentIdType { get; set; }
+    public string? BusinessRegNo { get; set; }
+
+    // Liên hệ (theo Mst_NNT.NNTMobile/NNTPhone/NNTFax/ContactName/ContactPhone/ContactEmail/Website của TVAN gốc).
+    public string? Mobile { get; set; }
+    public string? Phone { get; set; }
+    public string? Fax { get; set; }
+    public string? ContactName { get; set; }
+    public string? ContactPhone { get; set; }
+    public string? ContactEmail { get; set; }
+    public string? Website { get; set; }
+
+    // Cơ quan thuế quản lý (theo Mst_NNT.GovTaxID của TVAN gốc).
+    public string? GovTaxID { get; set; }
+
+    // Chứng thư số (theo Mst_NNT.CANumber/CAOrg/CAEffDTimeUTCStart/CAEffDTimeUTCEnd của TVAN gốc).
+    public string? CANumber { get; set; }
+    public string? CAOrg { get; set; }
+    public DateTime? CAEffDTimeUTCStart { get; set; }
+    public DateTime? CAEffDTimeUTCEnd { get; set; }
+
+    // Ngân hàng (theo Mst_NNT.AccNo/AccHolder/BankName của TVAN gốc).
+    public string? AccNo { get; set; }
+    public string? AccHolder { get; set; }
+    public string? BankName { get; set; }
+
+    // Loại hình / lĩnh vực / quy mô tổ chức (theo Mst_NNT.BizType/BizFieldCode/BizSizeCode của TVAN gốc).
+    public string? BizType { get; set; }
+    public string? BizFieldCode { get; set; }
+    public string? BizSizeCode { get; set; }
+
+    // Ghi chú (theo Mst_NNT.Remark của TVAN gốc) — dùng khi cập nhật trạng thái đăng ký.
+    public string? Remark { get; set; }
+
+    public bool FlagActive { get; set; } = true;      // Đang dùng / ngừng dùng
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
 }
 
 // Danh mục khách hàng / người mua (theo bảng Mst_CustomerNNT của TVAN gốc):
@@ -1172,6 +1229,41 @@ public class ColumnConfig : IOrgOwned
 // Kiểu dữ liệu vật lý của cột hóa đơn (theo Mst_SortColumnInvoice.ColumnType của TVAN gốc):
 // TEXT = chuỗi, NUMBER = số, DATE = ngày tháng.
 public enum SortColumnType { Text = 0, Number = 1, Date = 2 }
+
+// Danh mục tiền tệ / ngoại tệ (theo bảng Mst_CurrencyEx của TVAN gốc):
+// dùng để lấy tên đơn vị tiền tệ (CurrencyName) khi đọc số tiền thành chữ trên hóa đơn
+// (theo luồng DocTien của TVAN gốc — Invoice_InvoiceController.DocTien).
+// Khóa nghiệp vụ: (OrgId, CurrencyCode). FlagActive = tiền tệ đang dùng hay không.
+public class CurrencyEx : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string CurrencyCode { get; set; } = "";      // Mã tiền tệ (VD VND, USD)
+    public string CurrencyName { get; set; } = "";      // Tên tiền tệ (VD đồng, đô la Mỹ)
+    public string? BaseCurrencyCode { get; set; }         // Mã tiền tệ gốc (quy đổi)
+    public decimal BuyRate { get; set; }                  // Tỷ giá mua
+    public decimal SellRate { get; set; }                 // Tỷ giá bán
+    public string? Remark { get; set; }
+    public bool FlagActive { get; set; } = true;          // Tiền tệ đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
+// Nhật ký đọc tiền bằng chữ (theo luồng DocTien của TVAN gốc —
+// Invoice_InvoiceController.DocTien gọi clsDocTien.DocSo). Mỗi lần đọc một số tiền
+// thành chữ tiếng Việt ghi lại để đối soát: số tiền, mã + tên tiền tệ, kết quả chữ.
+public class DocTienLog : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public decimal Amount { get; set; }                  // Số tiền đọc (đã làm tròn)
+    public string CurrencyCode { get; set; } = "";      // Mã tiền tệ
+    public string CurrencyName { get; set; } = "";      // Tên tiền tệ
+    public string Text { get; set; } = "";              // Kết quả đọc tiền bằng chữ
+    public string? By { get; set; }                      // Người thực hiện
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
 
 // Cấu hình cột hiển thị danh sách hóa đơn theo tổ chức (theo bảng Mst_SortColumnInvoice của TVAN gốc):
 // mỗi tổ chức tự khai báo danh sách cột hiển thị trên lưới hóa đơn, gồm mã cột (ColumnCode),

@@ -3626,3 +3626,116 @@ public class TvanServiceTests
         }
     }
 }
+
+// Đọc tiền bằng chữ (theo luồng DocTien của TVAN gốc) + danh mục tiền tệ (Mst_CurrencyEx).
+public class DocTienTests
+{
+    private static (AppDbContext db, ITvanService svc, SqliteConnection conn) NewSvc()
+    {
+        var conn = new SqliteConnection("DataSource=:memory:"); conn.Open();
+        var opt = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options;
+        var db = new AppDbContext(opt, new TenantContext { OrgId = TenantContext.DefaultOrgId });
+        db.Database.EnsureCreated();
+        return (db, new TvanService(db), conn);
+    }
+
+    [Fact]
+    public void DocSo_Zero_ReturnsKhongDong()
+    {
+        var text = DocTienService.DocSo("0", "VND", "đồng");
+        Assert.Equal("Không đồng./.", text);
+    }
+
+    [Fact]
+    public void DocSo_Simple_ReturnsWords()
+    {
+        var text = DocTienService.DocSo("1500000", "VND", "đồng");
+        Assert.Equal("Một triệu năm trăm nghìn đồng./.", text);
+    }
+
+    [Fact]
+    public void DocSo_WithDecimals_ReadsDigits()
+    {
+        var text = DocTienService.DocSo("1234.56", "VND", "đồng");
+        Assert.Contains("phẩy năm sáu", text);
+        Assert.EndsWith("đồng./.", text);
+    }
+
+    [Fact]
+    public async Task DocTien_DefaultCurrency_LogsAndReturnsText()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, text, id) = await svc.DocTienAsync(2_000_000, null, "kế toán");
+            Assert.True(ok);
+            Assert.Equal("Hai triệu đồng./.", text);
+            Assert.True(id > 0);
+            var logs = await svc.DocTienLogsAsync();
+            Assert.Single(logs);
+            Assert.Equal("VND", logs[0].CurrencyCode);
+        }
+    }
+
+    [Fact]
+    public async Task DocTien_UsdCurrency_UsesCatalogName()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveCurrencyExAsync(null, "USD", "đô la Mỹ", "VND", 25400, 25600, null, true, "kế toán");
+            var (ok, _, text, _) = await svc.DocTienAsync(100, "USD", "kế toán");
+            Assert.True(ok);
+            Assert.Contains("đô la Mỹ", text);
+        }
+    }
+
+    [Fact]
+    public async Task SaveCurrencyEx_SameCode_UpsertsNotDuplicate()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveCurrencyExAsync(null, "VND", "đồng", null, 1, 1, null, true, "kế toán");
+            // Lưu lại cùng mã = cập nhật (không tạo bản ghi mới, không báo trùng).
+            var (ok, _, id2) = await svc.SaveCurrencyExAsync(null, "VND", "đồng Việt Nam", null, 1, 1, null, true, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            Assert.Single(await svc.CurrencyExesAsync(null));
+        }
+    }
+
+    [Fact]
+    public async Task SaveCurrencyEx_MissingName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveCurrencyExAsync(null, "VND", "  ", null, 1, 1, null, true, "kế toán");
+            Assert.False(ok);
+            Assert.Contains("tên tiền tệ", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SaveCurrencyEx_UpdateSameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveCurrencyExAsync(null, "VND", "đồng", null, 1, 1, null, true, "kế toán");
+            var (ok, _, id2) = await svc.SaveCurrencyExAsync(null, "VND", "Việt Nam đồng", null, 1, 1, "cập nhật", true, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            var e = await svc.GetCurrencyExAsync(id);
+            Assert.Equal("Việt Nam đồng", e!.CurrencyName);
+        }
+    }
+
+    [Fact]
+    public async Task DeleteCurrencyEx_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveCurrencyExAsync(null, "JPY", "yên Nhật", null, 1, 1, null, true, "kế toán");
+            var (ok, _) = await svc.DeleteCurrencyExAsync(id);
+            Assert.True(ok);
+            Assert.Null(await svc.GetCurrencyExAsync(id));
+        }
+    }
+}

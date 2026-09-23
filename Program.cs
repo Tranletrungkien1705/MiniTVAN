@@ -998,7 +998,6 @@ app.MapGet("/api/sort-columns", async (string? keyword, ITvanService svc) =>
     var ls = await svc.SortColumnInvoicesAsync(keyword);
     return Results.Ok(ls.Select(c => new { c.Id, c.ColumnCode, c.Idx, c.ColumnName, type = c.ColumnType.ToString(), c.FlagActive, c.UpdatedAt, c.UpdatedBy }));
 });
-
 // Lưu (tạo mới/cập nhật) cột hiển thị danh sách hóa đơn theo mã cột (theo Mst_SortColumnInvoice_Create/Update của TVAN gốc).
 app.MapPost("/api/sort-columns", async (SortColumnDto dto, ITvanService svc) =>
 {
@@ -1011,6 +1010,41 @@ app.MapDelete("/api/sort-columns/{id:int}", async (int id, ITvanService svc) =>
 {
     var (ok, msg) = await svc.DeleteSortColumnInvoiceAsync(id);
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
+// Danh mục tiền tệ / ngoại tệ (theo Mst_CurrencyEx của TVAN gốc): danh sách (lọc theo từ khóa).
+app.MapGet("/api/currencies", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.CurrencyExesAsync(keyword);
+    return Results.Ok(ls.Select(c => new { c.Id, c.CurrencyCode, c.CurrencyName, c.BaseCurrencyCode, c.BuyRate, c.SellRate, c.Remark, c.FlagActive, c.UpdatedAt, c.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) tiền tệ theo mã (theo Mst_CurrencyEx của TVAN gốc).
+app.MapPost("/api/currencies", async (CurrencyExDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveCurrencyExAsync(dto.Id, dto.Code ?? "", dto.Name ?? "", dto.BaseCode, dto.BuyRate, dto.SellRate, dto.Remark, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa tiền tệ theo id (theo Mst_CurrencyEx của TVAN gốc).
+app.MapDelete("/api/currencies/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteCurrencyExAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
+// Đọc số tiền thành chữ tiếng Việt (theo luồng DocTien của TVAN gốc).
+app.MapPost("/api/doc-tien", async (DocTienDto dto, ITvanService svc) =>
+{
+    var (ok, msg, text, id) = await svc.DocTienAsync(dto.Amount, dto.CurrencyCode, dto.By);
+    return ok ? Results.Ok(new { id, text, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Nhật ký đọc tiền bằng chữ (theo luồng DocTien của TVAN gốc).
+app.MapGet("/api/doc-tien-logs", async (ITvanService svc) =>
+{
+    var ls = await svc.DocTienLogsAsync();
+    return Results.Ok(ls.Select(l => new { l.Id, l.Amount, l.CurrencyCode, l.CurrencyName, l.Text, l.By, l.CreatedAt }));
 });
 
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
@@ -1079,4 +1113,6 @@ record NotifyRecipientTypeDto(string? NotifyType, bool FlagNotify);
 record SaveNotifyRecipientTypesDto(List<NotifyRecipientTypeDto>? Types, string? By);
 record ColumnConfigDto(int? Id, string? TableName, string? ColumnName, string? ColumnFormat, string? ColumnDesc, bool Active, string? By);
 record SortColumnDto(int? Id, string? ColumnCode, int Idx, string? ColumnName, SortColumnType Type, bool Active, string? By);
+record CurrencyExDto(int? Id, string? Code, string? Name, string? BaseCode, decimal BuyRate, decimal SellRate, string? Remark, bool Active, string? By);
+record DocTienDto(decimal Amount, string? CurrencyCode, string? By);
 record TaxOfficeDto(int? Id, string? Code, string? CodeParent, string? ProvinceCode, string? DistrictCode, string? Name, string? Level, string? Address, string? ContactEmail, string? ContactPhone, bool Active, string? By);

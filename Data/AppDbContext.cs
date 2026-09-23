@@ -57,6 +57,8 @@ public class AppDbContext : DbContext
     public DbSet<NotifyRecipientType> NotifyRecipientTypes => Set<NotifyRecipientType>();
     public DbSet<ColumnConfig> ColumnConfigs => Set<ColumnConfig>();
     public DbSet<SortColumnInvoice> SortColumnInvoices => Set<SortColumnInvoice>();
+    public DbSet<CurrencyEx> CurrencyExes => Set<CurrencyEx>();
+    public DbSet<DocTienLog> DocTienLogs => Set<DocTienLog>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -65,6 +67,7 @@ public class AppDbContext : DbContext
         b.Entity<Nnt>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.Mst }).IsUnique();
+            e.HasIndex(x => new { x.OrgId, x.MstParent });   // cây đơn vị trực thuộc (Mst_NNT_UpdBU)
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<CustomerNnt>(e =>
@@ -341,6 +344,19 @@ public class AppDbContext : DbContext
         b.Entity<SortColumnInvoice>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.ColumnCode }).IsUnique();   // mỗi tổ chức một mã cột
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CurrencyEx>(e =>
+        {
+            e.Property(x => x.BuyRate).HasPrecision(18, 2);
+            e.Property(x => x.SellRate).HasPrecision(18, 2);
+            e.HasIndex(x => new { x.OrgId, x.CurrencyCode }).IsUnique();   // mỗi tổ chức một mã tiền tệ
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<DocTienLog>(e =>
+        {
+            e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.HasIndex(x => new { x.OrgId, x.CreatedAt });
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

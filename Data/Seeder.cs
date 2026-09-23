@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MiniTVAN.Models;
+using MiniTVAN.Services;
 namespace MiniTVAN.Data;
 
 public static class Seeder
@@ -701,6 +702,29 @@ public static class Seeder
                 new SortColumnInvoice { ColumnCode = "InvoiceDateUTC", Idx = 2, ColumnName = "Ngày hóa đơn", ColumnType = SortColumnType.Date, FlagActive = true, UpdatedBy = "kế toán" },
                 new SortColumnInvoice { ColumnCode = "CustomerNNTName", Idx = 3, ColumnName = "Người mua", ColumnType = SortColumnType.Text, FlagActive = true, UpdatedBy = "kế toán" },
                 new SortColumnInvoice { ColumnCode = "TotalValPmt", Idx = 4, ColumnName = "Tổng tiền thanh toán", ColumnType = SortColumnType.Number, FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+
+        // Danh mục tiền tệ / ngoại tệ (theo Mst_CurrencyEx của TVAN gốc):
+        // tổ chức demo khai báo VND (tiền tệ gốc) + USD để đọc tiền bằng chữ.
+        if (!await db.CurrencyExes.AnyAsync())
+        {
+            db.CurrencyExes.AddRange(
+                new CurrencyEx { CurrencyCode = "VND", CurrencyName = "đồng", BaseCurrencyCode = "VND", BuyRate = 1, SellRate = 1, Remark = "Tiền tệ gốc", FlagActive = true, UpdatedBy = "kế toán" },
+                new CurrencyEx { CurrencyCode = "USD", CurrencyName = "đô la Mỹ", BaseCurrencyCode = "VND", BuyRate = 25400, SellRate = 25600, Remark = "Ngoại tệ", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+
+        // Nhật ký đọc tiền bằng chữ (theo luồng DocTien của TVAN gốc):
+        // minh họa 1 lần đọc số tiền 1.500.000 đồng thành chữ.
+        if (!await db.DocTienLogs.AnyAsync())
+        {
+            db.DocTienLogs.Add(new DocTienLog
+            {
+                Amount = 1_500_000, CurrencyCode = "VND", CurrencyName = "đồng",
+                Text = DocTienService.DocSo("1500000", "VND", "đồng"), By = "kế toán",
+                CreatedAt = DateTime.UtcNow.AddDays(-1)
+            });
             await db.SaveChangesAsync();
         }
     }

@@ -1,0 +1,124 @@
+@model List<CurrencyEx>
+@{
+    ViewData["Title"] = "Đọc tiền bằng chữ";
+    var keyword = ViewBag.Keyword as string;
+    var amount = ViewBag.Amount as decimal?;
+    var currencyCode = ViewBag.CurrencyCode as string;
+    var currencies = ViewBag.Currencies as List<CurrencyEx> ?? new();
+    var logs = ViewBag.Logs as List<DocTienLog> ?? new();
+    var ok = ViewBag.Ok as bool?;
+    var text = ViewBag.Text as string;
+}
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-cash-coin me-1"></i>Đọc số tiền thành chữ</h6>
+            <form method="post" action="/DocTien/Doc" class="row g-2 align-items-end">
+                @Html.AntiForgeryToken()
+                <div class="col-sm-5">
+                    <label class="form-label small mb-1">Số tiền</label>
+                    <input name="amount" type="number" step="0.01" value="@(amount?.ToString("0.##"))" class="form-control form-control-sm" placeholder="1500000" required />
+                </div>
+                <div class="col-sm-4">
+                    <label class="form-label small mb-1">Tiền tệ</label>
+                    <select name="currencyCode" class="form-select form-select-sm">
+                        @foreach (var c in currencies)
+                        {
+                            <option value="@c.CurrencyCode" selected="@(c.CurrencyCode == currencyCode)">@c.CurrencyCode — @c.CurrencyName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-sm-3">
+                    <button class="btn btn-sm btn-primary w-100"><i class="bi bi-fonts me-1"></i>Đọc tiền</button>
+                </div>
+            </form>
+            @if (ok == true && !string.IsNullOrWhiteSpace(text))
+            {
+                <div class="alert alert-success mt-3 mb-0"><i class="bi bi-check-circle me-2"></i><strong>@text</strong></div>
+            }
+            else if (ok == false)
+            {
+                <div class="alert alert-danger mt-3 mb-0"><i class="bi bi-exclamation-triangle me-2"></i>@ViewBag.Msg</div>
+            }
+            <p class="small text-muted mt-3 mb-0">Đọc số tiền thành chữ tiếng Việt (theo luồng DocTien của TVAN gốc). Tên tiền tệ lấy từ danh mục bên dưới; mặc định VND → "đồng".</p>
+        </div></div>
+
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-clock-history me-1"></i>Nhật ký đọc tiền</h6>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Số tiền</th><th>Tiền tệ</th><th>Bằng chữ</th><th>Người đọc</th><th>Thời điểm</th></tr></thead>
+                <tbody>
+                @foreach (var l in logs)
+                {
+                    <tr>
+                        <td class="fw-semibold text-end">@l.Amount.ToString("N2")</td>
+                        <td><span class="badge bg-light text-dark">@l.CurrencyCode</span></td>
+                        <td>@l.Text</td>
+                        <td class="small text-muted">@(string.IsNullOrWhiteSpace(l.By) ? "—" : l.By)</td>
+                        <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                    </tr>
+                }
+                @if (logs.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-4">Chưa có lần đọc tiền nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-currency-exchange me-1"></i>Danh mục tiền tệ</h6>
+                <form method="get" action="/DocTien" class="d-flex gap-2">
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm mã / tên" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã</th><th>Tên</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var c in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@c.CurrencyCode</td>
+                        <td>@c.CurrencyName</td>
+                        <td>
+                            @if (c.FlagActive) { <span class="badge bg-success">Đang dùng</span> }
+                            else { <span class="badge bg-secondary">Ngừng dùng</span> }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/DocTien/Delete" class="d-inline" onsubmit="return confirm('Xóa tiền tệ @c.CurrencyName?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@c.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-4">Chưa có tiền tệ nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm / cập nhật tiền tệ</h6>
+            <form method="post" action="/DocTien/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-6"><label class="form-label small mb-1">Mã tiền tệ</label><input name="code" class="form-control form-control-sm" placeholder="VND" required /></div>
+                <div class="col-6"><label class="form-label small mb-1">Tên tiền tệ</label><input name="name" class="form-control form-control-sm" placeholder="đồng" required /></div>
+                <div class="col-6"><label class="form-label small mb-1">Mã gốc</label><input name="baseCode" class="form-control form-control-sm" placeholder="VND" /></div>
+                <div class="col-3"><label class="form-label small mb-1">Tỷ giá mua</label><input name="buyRate" type="number" step="0.01" value="0" class="form-control form-control-sm" /></div>
+                <div class="col-3"><label class="form-label small mb-1">Tỷ giá bán</label><input name="sellRate" type="number" step="0.01" value="0" class="form-control form-control-sm" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Ghi chú</label><input name="remark" class="form-control form-control-sm" /></div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="active" value="true" id="curActive" checked />
+                    <label class="form-check-label small" for="curActive">Đang dùng</label>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu tiền tệ</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Lưu cùng mã tiền tệ = cập nhật tiền tệ đã có (theo khóa nghiệp vụ OrgId + mã tiền tệ).</p>
+        </div></div>
+    </div>
+</div>

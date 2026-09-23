@@ -9,9 +9,15 @@ public record TvanDash(int Nnts, int Registered, int Invoices, int Sent, int Acc
 public interface ITvanService
 {
     Task<List<Nnt>> NntsAsync();
+    Task<List<Nnt>> NntsAsync(string? keyword, string? mst, string? dlCode, RegStatus? regStatus);
     Task<Nnt?> GetNntAsync(int id);
     Task<(bool ok, string msg, int id)> CreateNntAsync(Nnt n);
     Task<(bool ok, string msg)> RegisterNntAsync(int id);
+    // Hồ sơ NNT đầy đủ (theo Mst_NNT_Create/Update/Delete của TVAN gốc).
+    Task<(bool ok, string msg, int id)> SaveNntAsync(int? id, NntProfile p);
+    Task<(bool ok, string msg)> DeleteNntAsync(int id);
+    // Cập nhật trạng thái đăng ký NNT (theo Mst_NNT_UpdateRegisterStatusX của TVAN gốc).
+    Task<(bool ok, string msg)> UpdateNntRegisterStatusAsync(int id, RegStatus status, string? remark, string? by);
     Task<List<Invoice>> InvoicesAsync(InvoiceStatus? status, int? nntId);
     Task<Invoice?> GetInvoiceAsync(int id);
     Task<(bool ok, string msg, int id)> CreateInvoiceAsync(Invoice inv);
@@ -174,7 +180,26 @@ public interface ITvanService
     Task<SortColumnInvoice?> GetSortColumnInvoiceAsync(int id);
     Task<(bool ok, string msg, int id)> SaveSortColumnInvoiceAsync(int? id, string columnCode, int idx, string columnName, SortColumnType columnType, bool active, string? by);
     Task<(bool ok, string msg)> DeleteSortColumnInvoiceAsync(int id);
+
+    // Danh mục tiền tệ / ngoại tệ (theo Mst_CurrencyEx của TVAN gốc)
+    Task<List<CurrencyEx>> CurrencyExesAsync(string? keyword);
+    Task<CurrencyEx?> GetCurrencyExAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveCurrencyExAsync(int? id, string code, string name, string? baseCode, decimal buyRate, decimal sellRate, string? remark, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteCurrencyExAsync(int id);
+
+    // Đọc tiền bằng chữ (theo luồng DocTien của TVAN gốc)
+    Task<(bool ok, string msg, string text, int id)> DocTienAsync(decimal amount, string? currencyCode, string? by);
+    Task<List<DocTienLog>> DocTienLogsAsync();
 }
+
+// Hồ sơ NNT đầy đủ dùng khi lưu (theo Mst_NNT_Create/Update của TVAN gốc).
+public record NntProfile(
+    string Mst, string Name, string? MstParent, string? ProvinceCode, string? DistrictCode, string? DLCode,
+    string? Address, string? Mobile, string? Phone, string? Fax, string? PresentBy, string? BusinessRegNo,
+    string? NntPosition, string? PresentIdNo, string? PresentIdType, string? GovTaxID, string? ContactName,
+    string? ContactPhone, string? ContactEmail, string? Website, string? CANumber, string? CAOrg,
+    DateTime? CAEffDTimeUTCStart, DateTime? CAEffDTimeUTCEnd, string? AccNo, string? AccHolder, string? BankName,
+    string? BizType, string? BizFieldCode, string? BizSizeCode, bool Active, string? By);
 
 public class TvanService(AppDbContext db) : ITvanService
 {
@@ -214,6 +239,214 @@ public class TvanService(AppDbContext db) : ITvanService
         db.Messages.Add(new TranMessage { NntId = n.Id, Type = MsgType.RegisterNnt, Dir = MsgDir.In, Code = "204", Text = "TCT từ chối — MST không hợp lệ (cần 10/13 số)" });
         await db.SaveChangesAsync();
         return (false, "TCT từ chối đăng ký: MST không hợp lệ.");
+    }
+
+    // Danh sách NNT (theo Mst_NNT_Get của TVAN gốc): lọc theo từ khóa (MST/tên/liên hệ),
+    // MST chính xác, mã đại lý và trạng thái đăng ký.
+    public Task<List<Nnt>> NntsAsync(string? keyword, string? mst, string? dlCode, RegStatus? regStatus)
+    {
+        var q = db.Nnts.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(mst))
+        {
+            var m = mst.Trim();
+            q = q.Where(n => n.Mst == m);
+        }
+        if (!string.IsNullOrWhiteSpace(dlCode))
+        {
+            var d = dlCode.Trim();
+            q = q.Where(n => n.DLCode == d);
+        }
+        if (regStatus.HasValue) q = q.Where(n => n.RegStatus == regStatus.Value);
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(n => n.Mst.Contains(k) || n.Name.Contains(k)
+                || (n.ContactEmail != null && n.ContactEmail.Contains(k))
+                || (n.ContactPhone != null && n.ContactPhone.Contains(k)));
+        }
+        return q.OrderBy(n => n.Name).ToListAsync();
+    }
+
+    // Lưu (tạo mới/cập nhật) hồ sơ NNT theo khóa nghiệp vụ (OrgId, MST)
+    // (theo Mst_NNT_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần MST + tên NNT + địa chỉ + người đại diện + chức vụ + tên/ĐT/email liên hệ
+    //    (Mst_NNT_Create_InvalidMST / _InvalidNNTFullName / _InvalidNNTAddress / _InvalidPresentBy /
+    //     _InvalidNNTPosition / _InvalidContactName / _InvalidContactPhone / _InvalidContactEmail);
+    //  - khi tạo: MST chưa tồn tại trong tổ chức (Mst_NNT_CheckDB_NNTExist);
+    //  - đơn vị trực thuộc (nếu có) phải tồn tại + đang dùng (Mst_NNT_CheckDB);
+    //  - tỉnh/thành + quận/huyện phải tồn tại + đang dùng (Mst_Province_CheckDB / Mst_District_CheckDB);
+    //  - đại lý (nếu có) phải tồn tại + đang dùng (Mst_Dealer_CheckDB);
+    //  - cơ quan thuế quản lý (nếu có) phải tồn tại + đang dùng (Mst_GovTaxID_CheckDB).
+    public async Task<(bool ok, string msg, int id)> SaveNntAsync(int? id, NntProfile p)
+    {
+        var mst = (p.Mst ?? "").Trim();
+        var name = (p.Name ?? "").Trim();
+        var address = (p.Address ?? "").Trim();
+        var presentBy = (p.PresentBy ?? "").Trim();
+        var position = (p.NntPosition ?? "").Trim();
+        var contactName = (p.ContactName ?? "").Trim();
+        var contactPhone = (p.ContactPhone ?? "").Trim();
+        var contactEmail = (p.ContactEmail ?? "").Trim();
+        if (mst.Length == 0) return (false, "Cần mã số thuế.", 0);
+        if (name.Length == 0) return (false, "Cần tên người nộp thuế.", 0);
+        if (address.Length == 0) return (false, "Cần địa chỉ NNT.", 0);
+        if (presentBy.Length == 0) return (false, "Cần người đại diện.", 0);
+        if (position.Length == 0) return (false, "Cần chức vụ người đại diện.", 0);
+        if (contactName.Length == 0) return (false, "Cần tên người liên hệ.", 0);
+        if (contactPhone.Length == 0) return (false, "Cần điện thoại người liên hệ.", 0);
+        if (contactEmail.Length == 0) return (false, "Cần email người liên hệ.", 0);
+
+        // Đơn vị trực thuộc (nếu có) phải tồn tại + đang dùng (theo Mst_NNT_CheckDB của TVAN gốc).
+        var mstParent = (p.MstParent ?? "").Trim();
+        if (mstParent.Length > 0)
+        {
+            var parent = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == mstParent);
+            if (parent == null) return (false, "Đơn vị trực thuộc (MST cấp trên) không tồn tại.", 0);
+            if (!parent.FlagActive) return (false, "Đơn vị trực thuộc (MST cấp trên) đã ngừng dùng.", 0);
+        }
+
+        // Tỉnh/thành + quận/huyện phải tồn tại + đang dùng (theo Mst_Province_CheckDB / Mst_District_CheckDB).
+        var provinceCode = (p.ProvinceCode ?? "").Trim();
+        var districtCode = (p.DistrictCode ?? "").Trim();
+        if (provinceCode.Length > 0)
+        {
+            var prov = await db.Provinces.FirstOrDefaultAsync(x => x.ProvinceCode == provinceCode);
+            if (prov == null) return (false, "Tỉnh/thành phố không tồn tại.", 0);
+            if (!prov.FlagActive) return (false, "Tỉnh/thành phố đã ngừng dùng.", 0);
+        }
+        if (districtCode.Length > 0)
+        {
+            var dist = await db.Districts.FirstOrDefaultAsync(x => x.ProvinceCode == provinceCode && x.DistrictCode == districtCode);
+            if (dist == null) return (false, "Quận/huyện không tồn tại.", 0);
+            if (!dist.FlagActive) return (false, "Quận/huyện đã ngừng dùng.", 0);
+        }
+
+        // Đại lý (nếu có) phải tồn tại + đang dùng (theo Mst_Dealer_CheckDB).
+        var dlCode = (p.DLCode ?? "").Trim();
+        if (dlCode.Length > 0)
+        {
+            var dealer = await db.Dealers.FirstOrDefaultAsync(x => x.DLCode == dlCode);
+            if (dealer == null) return (false, "Đại lý không tồn tại.", 0);
+            if (!dealer.FlagActive) return (false, "Đại lý đã ngừng hoạt động.", 0);
+        }
+
+        // Cơ quan thuế quản lý (nếu có) phải tồn tại + đang dùng (theo Mst_GovTaxID_CheckDB).
+        var govTaxID = (p.GovTaxID ?? "").Trim();
+        if (govTaxID.Length > 0)
+        {
+            var office = await db.TaxOffices.FirstOrDefaultAsync(x => x.GovTaxID == govTaxID);
+            if (office == null) return (false, "Cơ quan thuế quản lý không tồn tại.", 0);
+            if (!office.FlagActive) return (false, "Cơ quan thuế quản lý đã ngừng dùng.", 0);
+        }
+
+        Nnt? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.Nnts.FirstOrDefaultAsync(n => n.Id == id.Value);
+        else e = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == mst);
+
+        if (e == null)
+        {
+            if (await db.Nnts.AnyAsync(n => n.Mst == mst))
+                return (false, "MST đã tồn tại.", 0);
+            e = new Nnt { Mst = mst, RegStatus = RegStatus.Pending };
+            db.Nnts.Add(e);
+        }
+        else
+        {
+            // Đổi MST: chặn trùng với NNT khác.
+            if (!string.Equals(e.Mst, mst, StringComparison.OrdinalIgnoreCase)
+                && await db.Nnts.AnyAsync(n => n.Mst == mst && n.Id != e.Id))
+                return (false, "MST đã tồn tại.", 0);
+            e.Mst = mst;
+        }
+
+        e.Name = name;
+        e.Address = address;
+        e.Email = contactEmail;
+        e.MstParent = mstParent.Length > 0 ? mstParent : null;
+        e.ProvinceCode = provinceCode.Length > 0 ? provinceCode : null;
+        e.DistrictCode = districtCode.Length > 0 ? districtCode : null;
+        e.DLCode = dlCode.Length > 0 ? dlCode : null;
+        e.Mobile = p.Mobile;
+        e.Phone = p.Phone;
+        e.Fax = p.Fax;
+        e.PresentBy = presentBy;
+        e.BusinessRegNo = p.BusinessRegNo;
+        e.NntPosition = position;
+        e.PresentIdNo = p.PresentIdNo;
+        e.PresentIdType = p.PresentIdType;
+        e.GovTaxID = govTaxID.Length > 0 ? govTaxID : null;
+        e.ContactName = contactName;
+        e.ContactPhone = contactPhone;
+        e.Website = p.Website;
+        e.CANumber = p.CANumber;
+        e.CAOrg = p.CAOrg;
+        e.CAEffDTimeUTCStart = p.CAEffDTimeUTCStart;
+        e.CAEffDTimeUTCEnd = p.CAEffDTimeUTCEnd;
+        e.AccNo = p.AccNo;
+        e.AccHolder = p.AccHolder;
+        e.BankName = p.BankName;
+        e.BizType = p.BizType;
+        e.BizFieldCode = p.BizFieldCode;
+        e.BizSizeCode = p.BizSizeCode;
+        e.FlagActive = p.Active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = p.By;
+        await db.SaveChangesAsync();
+
+        // Tính lại mã đơn vị nghiệp vụ/mẫu/cấp cho cây NNT (theo Mst_NNT_UpdBU của TVAN gốc).
+        await UpdNntBuAsync();
+        return (true, $"Đã lưu người nộp thuế {mst} — {name}.", e.Id);
+    }
+
+    // Xóa NNT theo id (theo Mst_NNT_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteNntAsync(int id)
+    {
+        var e = await db.Nnts.FirstOrDefaultAsync(n => n.Id == id);
+        if (e == null) return (false, "Không tìm thấy người nộp thuế.");
+        var mst = e.Mst;
+        db.Nnts.Remove(e);
+        await db.SaveChangesAsync();
+        await UpdNntBuAsync();
+        return (true, $"Đã xóa người nộp thuế {mst}.");
+    }
+
+    // Cập nhật trạng thái đăng ký NNT (theo Mst_NNT_UpdateRegisterStatusX của TVAN gốc):
+    // chỉ cập nhật RegisterStatus + Remark, ghi người/thời điểm cập nhật.
+    public async Task<(bool ok, string msg)> UpdateNntRegisterStatusAsync(int id, RegStatus status, string? remark, string? by)
+    {
+        var e = await db.Nnts.FirstOrDefaultAsync(n => n.Id == id);
+        if (e == null) return (false, "Không tìm thấy người nộp thuế.");
+        e.RegStatus = status;
+        e.Remark = remark;
+        if (status == RegStatus.Registered && e.RegisteredAt == null) e.RegisteredAt = DateTime.UtcNow;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật trạng thái đăng ký NNT {e.Mst}.");
+    }
+
+    // Tính lại mã đơn vị nghiệp vụ/mẫu/cấp cho cây NNT (theo Mst_NNT_UpdBU của TVAN gốc):
+    // gốc 'ALL' (MstBuCode='ALL', pattern='ALL%', level=1), lan truyền 7 lần
+    // MstBuCode = <MstBuCode cha> + '.' + <MST>, level = <level cha> + 1.
+    private async Task UpdNntBuAsync()
+    {
+        const string root = "ALL";
+        var all = await db.Nnts.ToListAsync();
+        var byMst = all.ToDictionary(n => n.Mst, StringComparer.OrdinalIgnoreCase);
+        for (int pass = 0; pass < 7; pass++)
+        {
+            foreach (var n in all)
+            {
+                if (string.Equals(n.Mst, root, StringComparison.OrdinalIgnoreCase)) { n.MstBuCode = root; n.MstBuPattern = root + "%"; n.MstLevel = 1; continue; }
+                Nnt? parent = null;
+                if (!string.IsNullOrWhiteSpace(n.MstParent)) byMst.TryGetValue(n.MstParent!, out parent);
+                var parentBu = parent?.MstBuCode;
+                n.MstBuCode = (string.IsNullOrEmpty(parentBu) ? "" : parentBu + ".") + n.Mst;
+                n.MstBuPattern = n.MstBuCode + "%";
+                n.MstLevel = (parent?.MstLevel ?? 0) + 1;
+            }
+        }
+        await db.SaveChangesAsync();
     }
 
     public Task<List<Invoice>> InvoicesAsync(InvoiceStatus? status, int? nntId)
@@ -3413,6 +3646,96 @@ public class TvanService(AppDbContext db) : ITvanService
         await db.SaveChangesAsync();
         return (true, $"Đã xóa cấu hình cột {e.ColumnCode}.");
     }
+
+    // Danh mục tiền tệ / ngoại tệ (theo Mst_CurrencyEx của TVAN gốc): lọc theo từ khóa mã/tên.
+    public Task<List<CurrencyEx>> CurrencyExesAsync(string? keyword)
+    {
+        var q = db.CurrencyExes.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(c => c.CurrencyCode.Contains(k) || c.CurrencyName.Contains(k));
+        }
+        return q.OrderBy(c => c.CurrencyCode).ToListAsync();
+    }
+
+    public Task<CurrencyEx?> GetCurrencyExAsync(int id) => db.CurrencyExes.FirstOrDefaultAsync(c => c.Id == id);
+
+    // Lưu (tạo mới/cập nhật) tiền tệ theo khóa nghiệp vụ (OrgId, CurrencyCode)
+    // (theo Mst_CurrencyEx của TVAN gốc). Ràng buộc: cần mã + tên tiền tệ; khi tạo chặn trùng mã.
+    public async Task<(bool ok, string msg, int id)> SaveCurrencyExAsync(int? id, string code, string name, string? baseCode, decimal buyRate, decimal sellRate, string? remark, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã tiền tệ.", 0);
+        if (name.Length == 0) return (false, "Cần tên tiền tệ.", 0);
+
+        CurrencyEx? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.CurrencyExes.FirstOrDefaultAsync(c => c.Id == id.Value);
+        else e = await db.CurrencyExes.FirstOrDefaultAsync(c => c.CurrencyCode == code);
+
+        if (e == null)
+        {
+            if (await db.CurrencyExes.AnyAsync(c => c.CurrencyCode == code))
+                return (false, "Mã tiền tệ đã tồn tại.", 0);
+            e = new CurrencyEx { CurrencyCode = code };
+            db.CurrencyExes.Add(e);
+        }
+        else
+        {
+            if (!string.Equals(e.CurrencyCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.CurrencyExes.AnyAsync(c => c.CurrencyCode == code && c.Id != e.Id))
+                return (false, "Mã tiền tệ đã tồn tại.", 0);
+            e.CurrencyCode = code;
+        }
+
+        e.CurrencyName = name;
+        e.BaseCurrencyCode = string.IsNullOrWhiteSpace(baseCode) ? null : baseCode.Trim();
+        e.BuyRate = buyRate;
+        e.SellRate = sellRate;
+        e.Remark = remark;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu tiền tệ {code} — {name}.", e.Id);
+    }
+
+    // Xóa tiền tệ theo id (theo Mst_CurrencyEx của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteCurrencyExAsync(int id)
+    {
+        var e = await db.CurrencyExes.FirstOrDefaultAsync(c => c.Id == id);
+        if (e == null) return (false, "Không tìm thấy tiền tệ.");
+        var code = e.CurrencyCode;
+        db.CurrencyExes.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa tiền tệ {code}.");
+    }
+
+    // Đọc số tiền thành chữ tiếng Việt (theo luồng DocTien của TVAN gốc —
+    // Invoice_InvoiceController.DocTien gọi clsDocTien.DocSo). Lấy tên tiền tệ từ danh mục
+    // Mst_CurrencyEx theo mã (mặc định VND → "đồng"); mọi lần đọc ghi nhật ký đối soát.
+    public async Task<(bool ok, string msg, string text, int id)> DocTienAsync(decimal amount, string? currencyCode, string? by)
+    {
+        var code = string.IsNullOrWhiteSpace(currencyCode) ? "VND" : currencyCode.Trim().ToUpperInvariant();
+        var cur = await db.CurrencyExes.FirstOrDefaultAsync(c => c.CurrencyCode == code);
+        var name = cur?.CurrencyName ?? (code == "USD" ? "đô la Mỹ" : "đồng");
+
+        // Làm tròn 2 chữ số thập phân rồi đọc (theo clsDocTien.DocSo của TVAN gốc).
+        var rounded = Math.Round(amount, 2, MidpointRounding.AwayFromZero);
+        var so = rounded.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        var text = DocTienService.DocSo(so, code, name);
+        if (string.IsNullOrWhiteSpace(text)) return (false, "Số tiền không hợp lệ.", "", 0);
+
+        var log = new DocTienLog { Amount = rounded, CurrencyCode = code, CurrencyName = name, Text = text, By = by };
+        db.DocTienLogs.Add(log);
+        await db.SaveChangesAsync();
+        return (true, text, text, log.Id);
+    }
+
+    // Nhật ký đọc tiền bằng chữ (theo luồng DocTien của TVAN gốc): mới nhất trước.
+    public Task<List<DocTienLog>> DocTienLogsAsync() =>
+        db.DocTienLogs.OrderByDescending(l => l.Id).ToListAsync();
 
     private static (DateTime from, DateTime to) PeriodRange(PeriodType t, string kdlieu)
     {
