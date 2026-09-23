@@ -562,6 +562,17 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Danh mục loại dòng hàng hóa/dịch vụ trên hóa đơn (theo Mst_InvoiceDtlType của TVAN gốc):
+        // các loại dòng demo dùng để phân loại dòng chi tiết hóa đơn.
+        if (!await db.InvoiceDtlTypes.AnyAsync())
+        {
+            db.InvoiceDtlTypes.AddRange(
+                new InvoiceDtlType { InvoiceDtlTypeCode = "GOODS", Desc = "Hàng hóa / dịch vụ", FlagActive = true, UpdatedBy = "kế toán" },
+                new InvoiceDtlType { InvoiceDtlTypeCode = "NOTES", Desc = "Dòng ghi chú", FlagActive = true, UpdatedBy = "kế toán" },
+                new InvoiceDtlType { InvoiceDtlTypeCode = "FEES", Desc = "Phí / lệ phí", FlagActive = true, UpdatedBy = "kế toán" });
+            await db.SaveChangesAsync();
+        }
+
         // Danh mục Thương hiệu (theo Mst_Brand của TVAN gốc):
         // các thương hiệu demo dùng để phân loại sản phẩm/hàng hóa.
         if (!await db.Brands.AnyAsync())

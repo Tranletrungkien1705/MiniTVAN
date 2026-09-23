@@ -950,6 +950,33 @@ public class UnitController(ITvanService svc) : Controller
     }
 }
 
+// Danh mục loại dòng hàng hóa/dịch vụ trên hóa đơn (theo Mst_InvoiceDtlType của TVAN gốc):
+// phân loại từng dòng chi tiết hóa đơn (GOODS = hàng hóa/dịch vụ, NOTES = ghi chú, FEES/PHI = phí).
+public class InvoiceDtlTypeController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.InvoiceDtlTypesAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string? desc, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveInvoiceDtlTypeAsync(id, code, desc, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteInvoiceDtlTypeAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Danh mục Thương hiệu (theo Mst_Brand của TVAN gốc):
 // các thương hiệu (hãng sản xuất) dùng để phân loại sản phẩm/hàng hóa.
 public class BrandController(ITvanService svc) : Controller

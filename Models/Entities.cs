@@ -1304,6 +1304,23 @@ public class Unit : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Danh mục loại dòng hàng hóa/dịch vụ trên hóa đơn (theo bảng Mst_InvoiceDtlType của TVAN gốc):
+// phân loại từng dòng chi tiết hóa đơn (VD GOODS = hàng hóa/dịch vụ, NOTES = dòng ghi chú,
+// FEES/PHI = phí). Khi lưu hóa đơn, mỗi dòng chi tiết phải có InvoiceDtlType tồn tại trong danh mục
+// (theo Invoice_InvoiceDtl_SaveX_Input_InvoiceDtlType của TVAN gốc).
+// Khóa nghiệp vụ: (OrgId, InvoiceDtlType). FlagActive = loại dòng đang dùng hay không.
+public class InvoiceDtlType : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string InvoiceDtlTypeCode { get; set; } = "";   // Mã loại dòng (VD GOODS, NOTES, FEES)
+    public string? Desc { get; set; }                        // Mô tả loại dòng
+    public bool FlagActive { get; set; } = true;             // Loại dòng đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 // Nhật ký đọc tiền bằng chữ (theo luồng DocTien của TVAN gốc —
 // Invoice_InvoiceController.DocTien gọi clsDocTien.DocSo). Mỗi lần đọc một số tiền
 // thành chữ tiếng Việt ghi lại để đối soát: số tiền, mã + tên tiền tệ, kết quả chữ.

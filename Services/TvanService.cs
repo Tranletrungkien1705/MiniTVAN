@@ -133,6 +133,10 @@ public interface ITvanService
     Task<Unit?> GetUnitAsync(int id);
     Task<(bool ok, string msg, int id)> SaveUnitAsync(int? id, string code, string name, string? remark, bool active, string? by);
     Task<(bool ok, string msg)> DeleteUnitAsync(int id);
+    Task<List<InvoiceDtlType>> InvoiceDtlTypesAsync(string? keyword);
+    Task<InvoiceDtlType?> GetInvoiceDtlTypeAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveInvoiceDtlTypeAsync(int? id, string code, string? desc, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteInvoiceDtlTypeAsync(int id);
     Task<List<Brand>> BrandsAsync(string? keyword);
     Task<Brand?> GetBrandAsync(int id);
     Task<(bool ok, string msg, int id)> SaveBrandAsync(int? id, string code, string name, string? remark, bool active, string? by);
@@ -2945,6 +2949,70 @@ public class TvanService(AppDbContext db) : ITvanService
         db.Units.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa đơn vị tính {code}.");
+    }
+
+    // Danh mục loại dòng hàng hóa/dịch vụ trên hóa đơn (theo Mst_InvoiceDtlType của TVAN gốc):
+    // danh sách loại dòng (lọc theo từ khóa mã/mô tả nếu có).
+    public Task<List<InvoiceDtlType>> InvoiceDtlTypesAsync(string? keyword)
+    {
+        var q = db.InvoiceDtlTypes.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.InvoiceDtlTypeCode.Contains(k) || (t.Desc != null && t.Desc.Contains(k)));
+        }
+        return q.OrderBy(t => t.InvoiceDtlTypeCode).ToListAsync();
+    }
+
+    public Task<InvoiceDtlType?> GetInvoiceDtlTypeAsync(int id) =>
+        db.InvoiceDtlTypes.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) loại dòng hàng hóa/dịch vụ theo khóa nghiệp vụ (OrgId, InvoiceDtlTypeCode)
+    // (theo Mst_InvoiceDtlType của TVAN gốc). Ràng buộc:
+    //  - cần mã loại dòng;
+    //  - khi tạo: mã loại dòng chưa tồn tại trong tổ chức (Mst_InvoiceDtlType_CheckDB_InvoiceDtlTypeExist).
+    public async Task<(bool ok, string msg, int id)> SaveInvoiceDtlTypeAsync(int? id, string code, string? desc, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã loại dòng hàng hóa/dịch vụ.", 0);
+
+        InvoiceDtlType? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.InvoiceDtlTypes.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.InvoiceDtlTypes.FirstOrDefaultAsync(t => t.InvoiceDtlTypeCode == code);
+
+        if (e == null)
+        {
+            if (await db.InvoiceDtlTypes.AnyAsync(t => t.InvoiceDtlTypeCode == code))
+                return (false, "Mã loại dòng hàng hóa/dịch vụ đã tồn tại.", 0);
+            e = new InvoiceDtlType { InvoiceDtlTypeCode = code };
+            db.InvoiceDtlTypes.Add(e);
+        }
+        else
+        {
+            // Đổi mã loại dòng: chặn trùng với loại dòng khác.
+            if (!string.Equals(e.InvoiceDtlTypeCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.InvoiceDtlTypes.AnyAsync(t => t.InvoiceDtlTypeCode == code && t.Id != e.Id))
+                return (false, "Mã loại dòng hàng hóa/dịch vụ đã tồn tại.", 0);
+            e.InvoiceDtlTypeCode = code;
+        }
+
+        e.Desc = desc;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu loại dòng hàng hóa/dịch vụ {code}.", e.Id);
+    }
+
+    // Xóa loại dòng hàng hóa/dịch vụ theo id (theo Mst_InvoiceDtlType của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteInvoiceDtlTypeAsync(int id)
+    {
+        var e = await db.InvoiceDtlTypes.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy loại dòng hàng hóa/dịch vụ.");
+        var code = e.InvoiceDtlTypeCode;
+        db.InvoiceDtlTypes.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa loại dòng hàng hóa/dịch vụ {code}.");
     }
 
     // Danh mục Thương hiệu (theo Mst_Brand của TVAN gốc):

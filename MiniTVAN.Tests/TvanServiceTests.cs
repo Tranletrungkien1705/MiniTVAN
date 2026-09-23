@@ -4239,6 +4239,73 @@ public class DocTienTests
     }
 
     [Fact]
+    public async Task InvoiceDtlType_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveInvoiceDtlTypeAsync(null, "GOODS", "Hàng hóa / dịch vụ", true, "kế toán");
+            Assert.True(ok);
+            var e = await svc.GetInvoiceDtlTypeAsync(id);
+            Assert.Equal("GOODS", e!.InvoiceDtlTypeCode);
+            Assert.Equal("Hàng hóa / dịch vụ", e.Desc);
+            Assert.True(e.FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceDtlType_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveInvoiceDtlTypeAsync(null, "GOODS", "Hàng hóa", true, "kế toán");
+            // Lưu lại cùng mã = cập nhật (không tạo bản ghi mới, không báo trùng).
+            var (ok, _, id2) = await svc.SaveInvoiceDtlTypeAsync(null, "GOODS", "Hàng hóa / dịch vụ", true, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            Assert.Single(await svc.InvoiceDtlTypesAsync(null));
+            Assert.Equal("Hàng hóa / dịch vụ", (await svc.GetInvoiceDtlTypeAsync(id))!.Desc);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceDtlType_Save_MissingCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveInvoiceDtlTypeAsync(null, "  ", "Hàng hóa", true, "kế toán");
+            Assert.False(ok);
+            Assert.Contains("mã loại dòng", msg);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceDtlType_List_FilteredByKeyword()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveInvoiceDtlTypeAsync(null, "GOODS", "Hàng hóa / dịch vụ", true, "kế toán");
+            await svc.SaveInvoiceDtlTypeAsync(null, "NOTES", "Dòng ghi chú", true, "kế toán");
+            var all = await svc.InvoiceDtlTypesAsync(null);
+            Assert.Equal(2, all.Count);
+            var filtered = await svc.InvoiceDtlTypesAsync("NOTES");
+            Assert.Single(filtered);
+            Assert.Equal("NOTES", filtered[0].InvoiceDtlTypeCode);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceDtlType_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveInvoiceDtlTypeAsync(null, "FEES", "Phí / lệ phí", true, "kế toán");
+            var (ok, _) = await svc.DeleteInvoiceDtlTypeAsync(id);
+            Assert.True(ok);
+            Assert.Null(await svc.GetInvoiceDtlTypeAsync(id));
+        }
+    }
+
+    [Fact]
     public async Task Brand_Save_Creates()
     {
         var (db, svc, conn) = NewSvc(); using (conn)
