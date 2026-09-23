@@ -2192,3 +2192,31 @@ public class PaymentMethodController(ITvanService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+
+// Nhập hóa đơn từ Excel (theo luồng Invoice_ImportExcel của TVAN gốc — màn Invoice_ImportExcelController):
+// mỗi lần NNT nhập danh sách hóa đơn từ file Excel tạo một lô nhập kèm kết quả tổng hợp
+// (tổng dòng dữ liệu, tổng số hóa đơn, bỏ qua, thành công, không thành công).
+public class InvoiceImportController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword)
+    {
+        ViewBag.Keyword = keyword;
+        return View(await svc.InvoiceImportBatchesAsync(keyword));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var batch = await svc.GetInvoiceImportBatchAsync(id);
+        if (batch == null) return NotFound();
+        return View(batch);
+    }
+
+    // Tạo lô nhập từ danh sách dòng dữ liệu (mô phỏng kết quả đọc file Excel).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string batchNo, string fileName, ImportType importType, string? remark, string? by)
+    {
+        var (ok, msg, _) = await svc.CreateInvoiceImportBatchAsync(batchNo, fileName, importType, new List<InvoiceImportRow>(), remark, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}

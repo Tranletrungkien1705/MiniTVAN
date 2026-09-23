@@ -1182,6 +1182,23 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
         }
+
+        // Nhập hóa đơn từ Excel (theo luồng Invoice_ImportExcel của TVAN gốc):
+        // minh họa 1 lô nhập 3 hóa đơn (2 thành công, 1 không thành công).
+        if (!await db.InvoiceImportBatches.AnyAsync())
+        {
+            var batch = new InvoiceImportBatch
+            {
+                BatchNo = "IMP-2026-001", FileName = "hoadon_thang6.xlsx", ImportType = ImportType.LuuVaCapSo,
+                TotalRows = 3, TotalInvoices = 3, Skipped = 0, Succeeded = 2, Failed = 1,
+                Remark = "Lô nhập hóa đơn tháng 6", By = "kế toán"
+            };
+            batch.Rows.Add(new InvoiceImportRow { Idx = 1, InvoiceCode = "0026083012345001", FormNo = "1C26TAA", Sign = "1C26TAA", InvoiceNo = "00000010", CustomerNNTName = "Nguyễn Văn A", CustomerMST = "8012345678", TotalValPmt = 5_500_000, InvoiceStatus = "ISSUED", FlagResult = ImportFlagResult.Success, ImportResult = "Lưu và cấp số thành công" });
+            batch.Rows.Add(new InvoiceImportRow { Idx = 2, InvoiceCode = "0026083012345002", FormNo = "1C26TAA", Sign = "1C26TAA", InvoiceNo = "00000011", CustomerNNTName = "Trần Thị B", CustomerMST = "8012345679", TotalValPmt = 3_300_000, InvoiceStatus = "ISSUED", FlagResult = ImportFlagResult.Success, ImportResult = "Lưu và cấp số thành công" });
+            batch.Rows.Add(new InvoiceImportRow { Idx = 3, InvoiceCode = "0026083012345003", FormNo = "1C26TAA", Sign = "1C26TAA", InvoiceNo = "", CustomerNNTName = "Lê Văn C", CustomerMST = "", TotalValPmt = 0, InvoiceStatus = "", FlagResult = ImportFlagResult.Fail, ImportResult = "Thiếu MST người mua" });
+            db.InvoiceImportBatches.Add(batch);
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

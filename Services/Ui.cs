@@ -383,4 +383,21 @@ public static class Ui
         Models.RegSendMethod.BTH  => "Gửi tổng hợp",
         _ => m.ToString()
     };
+
+    // Loại thao tác nhập hóa đơn từ Excel (theo tham số `type` của Invoice_ImportExcelController.ImportResult của TVAN gốc).
+    public static string ImportType(Models.ImportType t) => t switch
+    {
+        Models.ImportType.Luu        => "Lưu",
+        Models.ImportType.LuuVaCapSo => "Lưu và cấp số",
+        Models.ImportType.PhatHanh   => "Phát hành",
+        _ => t.ToString()
+    };
+
+    // Kết quả xử lý của một dòng dữ liệu nhập hóa đơn từ Excel (theo Invoice_ImportExcel.FlagResult của TVAN gốc).
+    public static (string text, string css) ImportFlag(Models.ImportFlagResult f) => f switch
+    {
+        Models.ImportFlagResult.Success => ("Thành công", "success"),
+        Models.ImportFlagResult.Fail    => ("Không thành công", "danger"),
+        _ => ("Bỏ qua", "secondary")
+    };
 }

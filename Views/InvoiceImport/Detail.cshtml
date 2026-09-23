@@ -1,0 +1,50 @@
+@model InvoiceImportBatch
+@{
+    ViewData["Title"] = "Chi tiết lô nhập hóa đơn";
+}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h6 class="fw-bold mb-0"><i class="bi bi-file-earmark-excel me-1"></i>Lô nhập @Model.BatchNo — @Model.FileName</h6>
+    <a class="btn btn-sm btn-outline-secondary" href="/InvoiceImport"><i class="bi bi-arrow-left"></i> Danh sách</a>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3"><div class="card"><div class="card-body text-center"><div class="text-muted small">Tổng dòng dữ liệu</div><div class="stat-num">@Model.TotalRows</div></div></div></div>
+    <div class="col-md-3"><div class="card"><div class="card-body text-center"><div class="text-muted small">Tổng số hóa đơn</div><div class="stat-num">@Model.TotalInvoices</div></div></div></div>
+    <div class="col-md-2"><div class="card"><div class="card-body text-center"><div class="text-muted small">Bỏ qua</div><div class="stat-num text-muted">@Model.Skipped</div></div></div></div>
+    <div class="col-md-2"><div class="card"><div class="card-body text-center"><div class="text-muted small">Thành công</div><div class="stat-num text-success">@Model.Succeeded</div></div></div></div>
+    <div class="col-md-2"><div class="card"><div class="card-body text-center"><div class="text-muted small">Không thành công</div><div class="stat-num text-danger">@Model.Failed</div></div></div></div>
+</div>
+
+<div class="card"><div class="card-body">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <h6 class="fw-bold mb-0">Dòng dữ liệu nhập</h6>
+        <div class="small text-muted">
+            Loại: <span class="badge bg-info-subtle text-info-emphasis">@Ui.ImportType(Model.ImportType)</span>
+            @if (!string.IsNullOrWhiteSpace(Model.By)) { <span class="ms-2">Người nhập: @Model.By</span> }
+            <span class="ms-2">@Model.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
+        </div>
+    </div>
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Idx</th><th>Số tra cứu</th><th>Mẫu số</th><th>Ký hiệu</th><th>Số HĐ</th><th>Người mua</th><th>MST</th><th class="text-end">Tổng thanh toán</th><th>Trạng thái HĐ</th><th>Kết quả</th><th>Thông báo</th></tr></thead>
+        <tbody>
+        @foreach (var r in Model.Rows.OrderBy(x => x.Idx))
+        {
+            var (text, css) = Ui.ImportFlag(r.FlagResult);
+            <tr>
+                <td>@r.Idx</td>
+                <td class="small">@(string.IsNullOrWhiteSpace(r.InvoiceCode) ? "—" : r.InvoiceCode)</td>
+                <td class="small">@(string.IsNullOrWhiteSpace(r.FormNo) ? "—" : r.FormNo)</td>
+                <td class="small">@(string.IsNullOrWhiteSpace(r.Sign) ? "—" : r.Sign)</td>
+                <td class="small">@(string.IsNullOrWhiteSpace(r.InvoiceNo) ? "—" : r.InvoiceNo)</td>
+                <td>@(string.IsNullOrWhiteSpace(r.CustomerNNTName) ? "—" : r.CustomerNNTName)</td>
+                <td class="small">@(string.IsNullOrWhiteSpace(r.CustomerMST) ? "—" : r.CustomerMST)</td>
+                <td class="text-end">@Ui.Money(r.TotalValPmt)</td>
+                <td class="small">@(string.IsNullOrWhiteSpace(r.InvoiceStatus) ? "—" : r.InvoiceStatus)</td>
+                <td><span class="badge bg-@css">@text</span></td>
+                <td class="small text-muted">@(string.IsNullOrWhiteSpace(r.ImportResult) ? "—" : r.ImportResult)</td>
+            </tr>
+        }
+        @if (Model.Rows.Count == 0) { <tr><td colspan="11" class="text-center text-muted py-4">Lô nhập chưa có dòng dữ liệu.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

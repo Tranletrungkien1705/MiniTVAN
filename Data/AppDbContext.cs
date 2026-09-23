@@ -90,6 +90,8 @@ public class AppDbContext : DbContext
     public DbSet<PrdIdCustomField> PrdIdCustomFields => Set<PrdIdCustomField>();
     public DbSet<HistRegisterService> HistRegisterServices => Set<HistRegisterService>();
     public DbSet<PaymentMethodMaster> PaymentMethods => Set<PaymentMethodMaster>();
+    public DbSet<InvoiceImportBatch> InvoiceImportBatches => Set<InvoiceImportBatch>();
+    public DbSet<InvoiceImportRow> InvoiceImportRows => Set<InvoiceImportRow>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -566,6 +568,18 @@ public class AppDbContext : DbContext
         b.Entity<PaymentMethodMaster>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.PaymentMethodCode }).IsUnique();   // mỗi tổ chức một mã phương thức
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InvoiceImportBatch>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.BatchNo }).IsUnique();   // mỗi tổ chức một số lô nhập
+            e.HasMany(x => x.Rows).WithOne(r => r.Batch).HasForeignKey(r => r.BatchId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InvoiceImportRow>(e =>
+        {
+            e.Property(x => x.TotalValPmt).HasPrecision(18, 2);
+            e.HasIndex(x => new { x.OrgId, x.BatchId });
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

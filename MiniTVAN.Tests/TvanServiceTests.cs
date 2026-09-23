@@ -5929,4 +5929,82 @@ public class DocTienTests
             Assert.Contains("ngừng dùng", msg);
         }
     }
+
+    // Nhập hóa đơn từ Excel (theo luồng Invoice_ImportExcel của TVAN gốc).
+    [Fact]
+    public async Task InvoiceImport_Create_ComputesSummary()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var rows = new List<InvoiceImportRow>
+            {
+                new() { Idx = 1, InvoiceNo = "00000010", InvoiceStatus = "ISSUED", FlagResult = ImportFlagResult.Success },
+                new() { Idx = 2, InvoiceNo = "00000011", InvoiceStatus = "ISSUED", FlagResult = ImportFlagResult.Success },
+                new() { Idx = 3, InvoiceNo = "", InvoiceStatus = "", FlagResult = ImportFlagResult.Fail },
+                new() { Idx = 4, InvoiceNo = "", InvoiceStatus = "", FlagResult = ImportFlagResult.Skip }
+            };
+            var (ok, msg, id) = await svc.CreateInvoiceImportBatchAsync("IMP-1", "a.xlsx", ImportType.LuuVaCapSo, rows, null, "kt");
+            Assert.True(ok);
+            var b = await svc.GetInvoiceImportBatchAsync(id);
+            Assert.NotNull(b);
+            Assert.Equal(4, b!.TotalRows);
+            Assert.Equal(4, b.TotalInvoices);
+            Assert.Equal(1, b.Skipped);
+            Assert.Equal(2, b.Succeeded);
+            Assert.Equal(1, b.Failed);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceImport_PhatHanh_RequiresIssued()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var rows = new List<InvoiceImportRow>
+            {
+                new() { Idx = 1, InvoiceStatus = "ISSUED", FlagResult = ImportFlagResult.Success },
+                new() { Idx = 2, InvoiceStatus = "PENDING", FlagResult = ImportFlagResult.Success }
+            };
+            var (ok, _, id) = await svc.CreateInvoiceImportBatchAsync("IMP-2", "b.xlsx", ImportType.PhatHanh, rows, null, null);
+            Assert.True(ok);
+            var b = await svc.GetInvoiceImportBatchAsync(id);
+            Assert.Equal(1, b!.Succeeded);   // chỉ dòng có InvoiceStatus = ISSUED mới tính thành công
+            Assert.Equal(1, b.Failed);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceImport_DuplicateBatchNo_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateInvoiceImportBatchAsync("IMP-3", "c.xlsx", ImportType.Luu, new List<InvoiceImportRow>(), null, null);
+            var (ok, msg, _) = await svc.CreateInvoiceImportBatchAsync("IMP-3", "d.xlsx", ImportType.Luu, new List<InvoiceImportRow>(), null, null);
+            Assert.False(ok);
+            Assert.Contains("đã tồn tại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceImport_MissingBatchNo_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.CreateInvoiceImportBatchAsync("", "e.xlsx", ImportType.Luu, new List<InvoiceImportRow>(), null, null);
+            Assert.False(ok);
+            Assert.Contains("số lô nhập", msg);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceImport_List_FilteredByKeyword()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateInvoiceImportBatchAsync("IMP-A", "thang6.xlsx", ImportType.Luu, new List<InvoiceImportRow>(), null, null);
+            await svc.CreateInvoiceImportBatchAsync("IMP-B", "thang7.xlsx", ImportType.Luu, new List<InvoiceImportRow>(), null, null);
+            Assert.Equal(2, (await svc.InvoiceImportBatchesAsync(null)).Count);
+            Assert.Single(await svc.InvoiceImportBatchesAsync("thang6"));
+        }
+    }
 }

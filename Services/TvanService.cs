@@ -317,6 +317,12 @@ public interface ITvanService
     Task<List<PaymentMethodMaster>> PaymentMethodsAsync(string? keyword);
     Task<PaymentMethodMaster?> GetPaymentMethodAsync(int id);
     Task<(bool ok, string msg)> CheckPaymentMethodAsync(string code, bool mustExist, bool mustActive);
+
+    // Nhập hóa đơn từ Excel (theo luồng Invoice_ImportExcel của TVAN gốc)
+    Task<List<InvoiceImportBatch>> InvoiceImportBatchesAsync(string? keyword);
+    Task<InvoiceImportBatch?> GetInvoiceImportBatchAsync(int id);
+    Task<(bool ok, string msg, int id)> CreateInvoiceImportBatchAsync(string batchNo, string fileName, ImportType importType, List<InvoiceImportRow> rows, string? remark, string? by);
+    Task<List<InvoiceImportRow>> InvoiceImportRowsAsync(int batchId);
 }
 
 // Hồ sơ NNT đầy đủ dùng khi lưu (theo Mst_NNT_Create/Update của TVAN gốc).
@@ -6056,5 +6062,82 @@ public class TvanService(AppDbContext db) : ITvanService
         if (mustActive && e != null && !e.FlagActive)
             return (false, $"Phương thức thanh toán {code} đã ngừng dùng.");
         return (true, e == null ? $"Phương thức thanh toán {code} chưa có trong danh mục." : $"Phương thức thanh toán {code} hợp lệ.");
+    }
+
+    // Nhập hóa đơn từ Excel (theo luồng Invoice_ImportExcel của TVAN gốc):
+    // danh sách lô nhập (lọc theo từ khóa số lô/tên file/ghi chú nếu có).
+    public Task<List<InvoiceImportBatch>> InvoiceImportBatchesAsync(string? keyword)
+    {
+        var q = db.InvoiceImportBatches.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.BatchNo.Contains(k) || t.FileName.Contains(k) || (t.Remark != null && t.Remark.Contains(k)));
+        }
+        return q.OrderByDescending(t => t.Id).ToListAsync();
+    }
+
+    public Task<InvoiceImportBatch?> GetInvoiceImportBatchAsync(int id) =>
+        db.InvoiceImportBatches.Include(t => t.Rows).FirstOrDefaultAsync(t => t.Id == id);
+
+    public Task<List<InvoiceImportRow>> InvoiceImportRowsAsync(int batchId) =>
+        db.InvoiceImportRows.Where(r => r.BatchId == batchId).OrderBy(r => r.Idx).ToListAsync();
+
+    // Tạo lô nhập hóa đơn từ Excel (theo luồng Invoice_ImportExcel của TVAN gốc).
+    // Ràng buộc: cần số lô nhập + tên file; số lô nhập chưa tồn tại trong tổ chức.
+    // Kết quả tổng hợp tính theo ImportResult của TVAN gốc:
+    //  - TotalRows = số dòng dữ liệu;
+    //  - TotalInvoices = số hóa đơn distinct theo Idx;
+    //  - Skipped = số hóa đơn có FlagResult = 0 (bỏ qua);
+    //  - Succeeded/Failed: với loại "lưu"/"lưu và cấp số" → FlagResult 1/2;
+    //    với loại phát hành → thành công phải có InvoiceStatus = ISSUED, ngược lại tính là không thành công.
+    public async Task<(bool ok, string msg, int id)> CreateInvoiceImportBatchAsync(string batchNo, string fileName, ImportType importType, List<InvoiceImportRow> rows, string? remark, string? by)
+    {
+        batchNo = (batchNo ?? "").Trim();
+        fileName = (fileName ?? "").Trim();
+        if (batchNo.Length == 0) return (false, "Cần số lô nhập.", 0);
+        if (fileName.Length == 0) return (false, "Cần tên file Excel.", 0);
+        if (await db.InvoiceImportBatches.AnyAsync(t => t.BatchNo == batchNo))
+            return (false, "Số lô nhập đã tồn tại.", 0);
+
+        rows ??= new List<InvoiceImportRow>();
+        // Distinct theo Idx (như listInvoice_ImportExcel_Distinct của TVAN gốc).
+        var distinct = rows.GroupBy(r => r.Idx).Select(g => g.First()).ToList();
+
+        int skipped = distinct.Count(r => r.FlagResult == ImportFlagResult.Skip);
+        int succeeded, failed;
+        if (importType == ImportType.Luu || importType == ImportType.LuuVaCapSo)
+        {
+            succeeded = distinct.Count(r => r.FlagResult == ImportFlagResult.Success);
+            failed = distinct.Count(r => r.FlagResult == ImportFlagResult.Fail);
+        }
+        else
+        {
+            succeeded = distinct.Count(r => r.FlagResult == ImportFlagResult.Success && string.Equals(r.InvoiceStatus, "ISSUED", StringComparison.OrdinalIgnoreCase));
+            failed = distinct.Count(r => r.FlagResult == ImportFlagResult.Fail || !string.Equals(r.InvoiceStatus, "ISSUED", StringComparison.OrdinalIgnoreCase));
+        }
+
+        var batch = new InvoiceImportBatch
+        {
+            BatchNo = batchNo,
+            FileName = fileName,
+            ImportType = importType,
+            TotalRows = rows.Count,
+            TotalInvoices = distinct.Count,
+            Skipped = skipped,
+            Succeeded = succeeded,
+            Failed = failed,
+            Remark = remark,
+            By = by
+        };
+        foreach (var r in rows)
+        {
+            r.Id = 0;
+            r.BatchId = 0;
+            batch.Rows.Add(r);
+        }
+        db.InvoiceImportBatches.Add(batch);
+        await db.SaveChangesAsync();
+        return (true, $"Đã nhập lô {batchNo}: {distinct.Count} hóa đơn ({succeeded} thành công, {failed} không thành công, {skipped} bỏ qua).", batch.Id);
     }
 }

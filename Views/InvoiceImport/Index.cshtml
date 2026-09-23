@@ -1,0 +1,61 @@
+@model List<InvoiceImportBatch>
+@{
+    ViewData["Title"] = "Nhập hóa đơn từ Excel";
+    var keyword = ViewBag.Keyword as string;
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-file-earmark-excel me-1"></i>Lô nhập hóa đơn từ Excel</h6>
+                <form method="get" action="/InvoiceImport" class="d-flex gap-2">
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm số lô / tên file / ghi chú" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Số lô</th><th>File</th><th>Loại</th><th class="text-end">Dòng</th><th class="text-end">HĐ</th><th class="text-end">Bỏ qua</th><th class="text-end">Thành công</th><th class="text-end">Không TC</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var b in Model)
+                {
+                    <tr>
+                        <td class="fw-semibold">@b.BatchNo</td>
+                        <td class="small">@b.FileName</td>
+                        <td><span class="badge bg-info-subtle text-info-emphasis">@Ui.ImportType(b.ImportType)</span></td>
+                        <td class="text-end">@b.TotalRows</td>
+                        <td class="text-end fw-semibold">@b.TotalInvoices</td>
+                        <td class="text-end text-muted">@b.Skipped</td>
+                        <td class="text-end text-success fw-semibold">@b.Succeeded</td>
+                        <td class="text-end text-danger fw-semibold">@b.Failed</td>
+                        <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/InvoiceImport/Detail/@b.Id"><i class="bi bi-list-ul"></i> Chi tiết</a></td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="9" class="text-center text-muted py-4">Chưa có lô nhập nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Tạo lô nhập mới</h6>
+            <form method="post" action="/InvoiceImport/Create" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12"><label class="form-label small mb-1">Số lô nhập</label><input name="batchNo" class="form-control form-control-sm" placeholder="IMP-2026-001" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Tên file Excel</label><input name="fileName" class="form-control form-control-sm" placeholder="hoadon_thang6.xlsx" required /></div>
+                <div class="col-12">
+                    <label class="form-label small mb-1">Loại thao tác</label>
+                    <select name="importType" class="form-select form-select-sm">
+                        <option value="0">Lưu</option>
+                        <option value="1">Lưu và cấp số</option>
+                        <option value="2">Phát hành</option>
+                    </select>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Ghi chú</label><textarea name="remark" class="form-control form-control-sm" rows="2" maxlength="400" placeholder="Lô nhập hóa đơn tháng 6"></textarea></div>
+                <div class="col-12"><label class="form-label small mb-1">Người nhập</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Tạo lô nhập</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Theo luồng Invoice_ImportExcel của TVAN gốc: mỗi lần nhập danh sách hóa đơn từ file Excel tạo một lô nhập kèm kết quả tổng hợp (tổng dòng dữ liệu, tổng số hóa đơn, bỏ qua, thành công, không thành công).</p>
+        </div></div>
+    </div>
+</div>

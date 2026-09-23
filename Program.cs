@@ -1693,6 +1693,39 @@ app.MapPost("/api/hist-register-services/{id:int}/receive", async (int id, HistR
     return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
 });
 
+// Nhập hóa đơn từ Excel (theo luồng Invoice_ImportExcel của TVAN gốc): danh sách lô nhập.
+app.MapGet("/api/invoice-imports", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.InvoiceImportBatchesAsync(keyword);
+    return Results.Ok(ls.Select(b => new { b.Id, b.BatchNo, b.FileName, importType = b.ImportType.ToString(), b.TotalRows, b.TotalInvoices, b.Skipped, b.Succeeded, b.Failed, b.Remark, b.By, b.CreatedAt }));
+});
+
+// Chi tiết một lô nhập (kèm danh sách dòng dữ liệu).
+app.MapGet("/api/invoice-imports/{id:int}", async (int id, ITvanService svc) =>
+{
+    var b = await svc.GetInvoiceImportBatchAsync(id);
+    if (b == null) return Results.NotFound();
+    return Results.Ok(new
+    {
+        b.Id, b.BatchNo, b.FileName, importType = b.ImportType.ToString(),
+        b.TotalRows, b.TotalInvoices, b.Skipped, b.Succeeded, b.Failed, b.Remark, b.By, b.CreatedAt,
+        rows = b.Rows.OrderBy(r => r.Idx).Select(r => new { r.Idx, r.InvoiceCode, r.FormNo, r.Sign, r.InvoiceNo, r.CustomerNNTName, r.CustomerMST, r.TotalValPmt, r.InvoiceStatus, flagResult = r.FlagResult.ToString(), r.ImportResult })
+    });
+});
+
+// Tạo lô nhập hóa đơn từ Excel (mô phỏng kết quả đọc file).
+app.MapPost("/api/invoice-imports", async (InvoiceImportDto dto, ITvanService svc) =>
+{
+    var rows = (dto.Rows ?? new()).Select(r => new InvoiceImportRow
+    {
+        Idx = r.Idx, InvoiceCode = r.InvoiceCode, FormNo = r.FormNo, Sign = r.Sign, InvoiceNo = r.InvoiceNo,
+        CustomerNNTName = r.CustomerNNTName, CustomerMST = r.CustomerMST, TotalValPmt = r.TotalValPmt,
+        InvoiceStatus = r.InvoiceStatus, FlagResult = r.FlagResult, ImportResult = r.ImportResult
+    }).ToList();
+    var (ok, msg, id) = await svc.CreateInvoiceImportBatchAsync(dto.BatchNo ?? "", dto.FileName ?? "", dto.ImportType, rows, dto.Remark, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -1795,3 +1828,5 @@ record InvoiceInputDeleteDto(string? Reason, string? By);
 record ProductIdDto(int? Id, string? ProductId, string? SpecCode, DateTime? ProductionDate, string? LotNo, DateTime? BuyDate, string? SecretNo, DateTime? WarrantyStartDate, DateTime? WarrantyExpiredDate, int? WarrantyDuration, string? RefNo1, string? RefBiz1, string? RefNo2, string? RefBiz2, string? RefNo3, string? RefBiz3, string? Buyer, ProductIdStatus Status, string? CustomField1, string? CustomField2, string? CustomField3, string? CustomField4, string? CustomField5, string? By);
 record HistRegisterServiceDto(string? Mst, DateTime? NGui, string? Htdk, string? LhDon, string? HThuc, bool CMa, bool CMTTien, bool KCMa, RegSendMethod PtghDon, string? MlTDiep, string? Mccqt, string? XmlBase64, string? By);
 record HistRegisterServiceReceiveDto(string? MltDiep, bool ChapNhan, string? Mccqt, string? Message, string? By);
+record InvoiceImportRowDto(int Idx, string? InvoiceCode, string? FormNo, string? Sign, string? InvoiceNo, string? CustomerNNTName, string? CustomerMST, decimal TotalValPmt, string? InvoiceStatus, ImportFlagResult FlagResult, string? ImportResult);
+record InvoiceImportDto(string? BatchNo, string? FileName, ImportType ImportType, string? Remark, List<InvoiceImportRowDto>? Rows, string? By);

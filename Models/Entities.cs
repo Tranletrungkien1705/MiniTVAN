@@ -2067,3 +2067,62 @@ public class PaymentMethodMaster : IOrgOwned
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
+
+// Kết quả xử lý của MỘT dòng dữ liệu nhập hóa đơn từ Excel (theo Invoice_ImportExcel.FlagResult của TVAN gốc):
+// Skip = '0' (tính toán thử lỗi → bỏ qua, không truyền cho Biz);
+// Success = '1' (tính toán thử thành công → truyền cho Biz, kết quả thành công);
+// Fail = '2' (tính toán thử thành công → truyền cho Biz, kết quả KHÔNG thành công).
+public enum ImportFlagResult { Skip = 0, Success = 1, Fail = 2 }
+
+// Loại thao tác nhập hóa đơn từ Excel (theo tham số `type` của Invoice_ImportExcelController.ImportResult của TVAN gốc):
+// Luu = "luu" (chỉ lưu), LuuVaCapSo = "luuvacapso" (lưu và cấp số), PhatHanh = các loại còn lại (phát hành —
+// khi đó dòng thành công phải có InvoiceStatus = ISSUED).
+public enum ImportType { Luu = 0, LuuVaCapSo = 1, PhatHanh = 2 }
+
+// Lô nhập hóa đơn từ Excel (theo luồng Invoice_ImportExcel của TVAN gốc — màn Invoice_ImportExcelController):
+// mỗi lần NNT nhập danh sách hóa đơn từ file Excel tạo MỘT lô nhập, lưu lại tên file, loại thao tác
+// (lưu / lưu và cấp số / phát hành) và kết quả tổng hợp: tổng dòng dữ liệu, tổng số hóa đơn (distinct theo Idx),
+// số hóa đơn bỏ qua, số hóa đơn thành công, số hóa đơn không thành công.
+// Khóa nghiệp vụ: (OrgId, BatchNo) — số lô nhập là duy nhất trong một tổ chức.
+public class InvoiceImportBatch : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string BatchNo { get; set; } = "";              // Số lô nhập
+    public string FileName { get; set; } = "";             // Tên file Excel đã nhập
+    public ImportType ImportType { get; set; } = ImportType.Luu;   // Loại thao tác nhập
+    public int TotalRows { get; set; }                     // Tổng dòng dữ liệu (TongDongDuLieu)
+    public int TotalInvoices { get; set; }                 // Tổng số hóa đơn (distinct theo Idx — TongSLHD)
+    public int Skipped { get; set; }                       // Số hóa đơn bỏ qua (TongSLHDBoQua)
+    public int Succeeded { get; set; }                     // Số hóa đơn thành công (TongSLHDThanhCong)
+    public int Failed { get; set; }                        // Số hóa đơn không thành công (TongSLHDKoThanhCong)
+    public string? Remark { get; set; }                    // Ghi chú
+    public string? By { get; set; }                        // Người nhập
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public List<InvoiceImportRow> Rows { get; set; } = new();
+}
+
+// Dòng dữ liệu nhập hóa đơn từ Excel (theo model Invoice_ImportExcel của TVAN gốc):
+// mỗi dòng ứng với một hóa đơn trong file Excel, lưu chỉ số dòng (Idx), số tra cứu/số hóa đơn/mẫu số/ký hiệu,
+// thông tin người mua, tổng tiền thanh toán, trạng thái hóa đơn sau khi xử lý và kết quả xử lý (FlagResult).
+// Khóa nghiệp vụ: (OrgId, BatchId, Idx).
+public class InvoiceImportRow : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int BatchId { get; set; }
+    public InvoiceImportBatch? Batch { get; set; }
+    public int Idx { get; set; }                           // Chỉ số dòng (nhóm hóa đơn trong file)
+    public string? InvoiceCode { get; set; }               // Số tra cứu hóa đơn
+    public string? FormNo { get; set; }                    // Mẫu số
+    public string? Sign { get; set; }                      // Ký hiệu
+    public string? InvoiceNo { get; set; }                 // Số hóa đơn
+    public string? CustomerNNTName { get; set; }           // Tên người mua
+    public string? CustomerMST { get; set; }               // MST người mua
+    public decimal TotalValPmt { get; set; }               // Tổng tiền thanh toán
+    public string? InvoiceStatus { get; set; }             // Trạng thái hóa đơn sau xử lý (VD ISSUED)
+    public ImportFlagResult FlagResult { get; set; } = ImportFlagResult.Skip;   // Kết quả xử lý dòng
+    public string? ImportResult { get; set; }              // Thông báo kết quả xử lý dòng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
