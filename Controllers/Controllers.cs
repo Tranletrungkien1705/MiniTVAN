@@ -849,6 +849,35 @@ public class DealerController(ITvanService svc) : Controller
     }
 }
 
+// Danh mục Phòng ban (theo Mst_Department của TVAN gốc):
+// cây phòng ban của một NNT (MST), tự tính mã đơn vị nghiệp vụ/mẫu/cấp từ cây.
+public class DepartmentController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? mst, string? keyword)
+    {
+        ViewBag.Mst = mst;
+        ViewBag.Keyword = keyword;
+        ViewBag.Nnts = await svc.NntsAsync();
+        return View(await svc.DepartmentsAsync(mst, keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string code, string? codeParent, string mst, string name, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveDepartmentAsync(id, code, codeParent, mst, name, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index), new { mst });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id, string? mst)
+    {
+        var (ok, msg) = await svc.DeleteDepartmentAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index), new { mst });
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

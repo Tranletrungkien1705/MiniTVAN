@@ -265,6 +265,28 @@ public class Dealer : IOrgOwned
     public string? UpdatedBy { get; set; }
 }
 
+// Danh mục Phòng ban (theo bảng Mst_Department của TVAN gốc): cây phòng ban của một NNT (MST),
+// mỗi phòng ban có phòng ban cha (DepartmentCodeParent) tạo thành cấu trúc phân cấp.
+// Hệ thống tự tính mã đơn vị nghiệp vụ (DepartmentBUCode), mẫu (DepartmentBUPattern) và cấp
+// (DepartmentLevel) từ cây phòng ban — theo Mst_Department_UpdBU của TVAN gốc.
+// Khóa nghiệp vụ: (OrgId, DepartmentCode). FlagActive = phòng ban đang dùng hay không.
+public class Department : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string DepartmentCode { get; set; } = "";        // Mã phòng ban (VD HO, KT, KT1)
+    public string? DepartmentCodeParent { get; set; }         // Mã phòng ban cha (rỗng = cấp gốc)
+    public string DepartmentBUCode { get; set; } = "";       // Mã đơn vị nghiệp vụ (tự tính từ cây)
+    public string DepartmentBUPattern { get; set; } = "";    // Mẫu đơn vị nghiệp vụ (tự tính từ cây)
+    public int DepartmentLevel { get; set; } = 1;            // Cấp phòng ban (tự tính từ cây)
+    public string MST { get; set; } = "";                    // MST người nộp thuế sở hữu phòng ban
+    public string DepartmentName { get; set; } = "";         // Tên phòng ban
+    public bool FlagActive { get; set; } = true;             // Phòng ban đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
 public class Invoice : IOrgOwned
 {
     public int Id { get; set; }

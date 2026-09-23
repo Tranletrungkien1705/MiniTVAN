@@ -119,6 +119,10 @@ public interface ITvanService
     Task<Dealer?> GetDealerAsync(int id);
     Task<(bool ok, string msg, int id)> SaveDealerAsync(int? id, string code, string name, string provinceCode, string? address, string? presentBy, string? govIdNumber, string? email, string? phone, bool active, string? by);
     Task<(bool ok, string msg)> DeleteDealerAsync(int id);
+    Task<List<Department>> DepartmentsAsync(string? mst, string? keyword);
+    Task<Department?> GetDepartmentAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveDepartmentAsync(int? id, string code, string? codeParent, string mst, string name, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteDepartmentAsync(int id);
 }
 
 public class TvanService(AppDbContext db) : ITvanService
@@ -2441,6 +2445,131 @@ public class TvanService(AppDbContext db) : ITvanService
         db.Dealers.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa đại lý {code}.");
+    }
+
+    // Danh mục Phòng ban (theo Mst_Department của TVAN gốc): danh sách phòng ban của một NNT (MST),
+    // lọc theo MST + từ khóa (mã/tên).
+    public Task<List<Department>> DepartmentsAsync(string? mst, string? keyword)
+    {
+        var q = db.Departments.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(mst)) q = q.Where(d => d.MST == mst.Trim());
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(d => d.DepartmentCode.Contains(k) || d.DepartmentName.Contains(k));
+        }
+        return q.OrderBy(d => d.DepartmentBUCode).ThenBy(d => d.DepartmentCode).ToListAsync();
+    }
+
+    public Task<Department?> GetDepartmentAsync(int id) =>
+        db.Departments.FirstOrDefaultAsync(d => d.Id == id);
+
+    // Lưu (tạo mới/cập nhật) phòng ban theo khóa nghiệp vụ (OrgId, DepartmentCode)
+    // (theo Mst_Department_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã phòng ban (Mst_Department_Create_InvalidDepartmentCode);
+    //  - cần tên phòng ban (Mst_Department_Create_InvalidDepartmentName / _UpdateX_InvalidDepartmentName);
+    //  - MST phải là NNT đã tồn tại và đang dùng (Mst_NNT_CheckDB);
+    //  - phòng ban cha (nếu có) phải tồn tại và đang dùng (Mst_Department_CheckDB);
+    //  - khi tạo: mã phòng ban chưa tồn tại (Mst_Department_CheckDB_DepartmentExist).
+    // Sau khi lưu, tính lại mã đơn vị nghiệp vụ/mẫu/cấp cho toàn bộ cây (Mst_Department_UpdBU).
+    public async Task<(bool ok, string msg, int id)> SaveDepartmentAsync(int? id, string code, string? codeParent, string mst, string name, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        codeParent = (codeParent ?? "").Trim();
+        mst = (mst ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã phòng ban.", 0);
+        if (name.Length == 0) return (false, "Cần tên phòng ban.", 0);
+
+        // MST phải là NNT đã tồn tại và đang dùng (theo Mst_NNT_CheckDB của TVAN gốc).
+        var nnt = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == mst);
+        if (nnt == null) return (false, "MST người nộp thuế không tồn tại.", 0);
+
+        // Phòng ban cha (nếu có) phải tồn tại và đang dùng (theo Mst_Department_CheckDB của TVAN gốc).
+        if (codeParent.Length > 0)
+        {
+            var parent = await db.Departments.FirstOrDefaultAsync(d => d.DepartmentCode == codeParent);
+            if (parent == null) return (false, "Phòng ban cha không tồn tại.", 0);
+            if (!parent.FlagActive) return (false, "Phòng ban cha đã ngừng dùng.", 0);
+        }
+
+        Department? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.Departments.FirstOrDefaultAsync(d => d.Id == id.Value);
+        else e = await db.Departments.FirstOrDefaultAsync(d => d.DepartmentCode == code);
+
+        if (e == null)
+        {
+            if (await db.Departments.AnyAsync(d => d.DepartmentCode == code))
+                return (false, "Mã phòng ban đã tồn tại.", 0);
+            e = new Department { DepartmentCode = code };
+            db.Departments.Add(e);
+        }
+        else
+        {
+            // Đổi mã phòng ban: chặn trùng với phòng ban khác.
+            if (!string.Equals(e.DepartmentCode, code, StringComparison.OrdinalIgnoreCase)
+                && await db.Departments.AnyAsync(d => d.DepartmentCode == code && d.Id != e.Id))
+                return (false, "Mã phòng ban đã tồn tại.", 0);
+            e.DepartmentCode = code;
+        }
+
+        e.DepartmentCodeParent = codeParent.Length > 0 ? codeParent : null;
+        e.MST = mst;
+        e.DepartmentName = name;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+
+        // Tính lại mã đơn vị nghiệp vụ/mẫu/cấp cho toàn bộ cây (theo Mst_Department_UpdBU của TVAN gốc).
+        await RecomputeDepartmentBuAsync();
+        return (true, $"Đã lưu phòng ban {code} — {name}.", e.Id);
+    }
+
+    // Xóa phòng ban theo id (theo Mst_Department_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteDepartmentAsync(int id)
+    {
+        var e = await db.Departments.FirstOrDefaultAsync(d => d.Id == id);
+        if (e == null) return (false, "Không tìm thấy phòng ban.");
+        var code = e.DepartmentCode;
+        db.Departments.Remove(e);
+        await db.SaveChangesAsync();
+        await RecomputeDepartmentBuAsync();
+        return (true, $"Đã xóa phòng ban {code}.");
+    }
+
+    // Tính lại mã đơn vị nghiệp vụ (DepartmentBUCode), mẫu (DepartmentBUPattern) và cấp
+    // (DepartmentLevel) cho toàn bộ cây phòng ban — theo Mst_Department_UpdBU của TVAN gốc:
+    // phòng ban gốc 'HO' có BUCode='HO', pattern='HO%', level=1; các phòng ban khác có
+    // BUCode = <BUCode cha> + '.' + <mã>, pattern = BUCode + '%', level = <level cha> + 1.
+    private async Task RecomputeDepartmentBuAsync()
+    {
+        var all = await db.Departments.ToListAsync();
+        var byCode = all.ToDictionary(d => d.DepartmentCode, StringComparer.OrdinalIgnoreCase);
+        const string root = "HO";
+
+        // Lặp tối đa 7 lần (như vòng while @nDeepDealer <= 6 của TVAN gốc) để lan truyền theo cây.
+        for (int pass = 0; pass < 7; pass++)
+        {
+            foreach (var d in all)
+            {
+                if (string.Equals(d.DepartmentCode, root, StringComparison.OrdinalIgnoreCase))
+                {
+                    d.DepartmentBUCode = root;
+                    d.DepartmentBUPattern = root + "%";
+                    d.DepartmentLevel = 1;
+                    continue;
+                }
+                Department? parent = null;
+                if (!string.IsNullOrWhiteSpace(d.DepartmentCodeParent))
+                    byCode.TryGetValue(d.DepartmentCodeParent!, out parent);
+                var parentBu = parent?.DepartmentBUCode;
+                d.DepartmentBUCode = (string.IsNullOrEmpty(parentBu) ? "" : parentBu + ".") + d.DepartmentCode;
+                d.DepartmentBUPattern = d.DepartmentBUCode + "%";
+                d.DepartmentLevel = (parent?.DepartmentLevel ?? 0) + 1;
+            }
+        }
+        await db.SaveChangesAsync();
     }
 
     // Khoảng thời gian [from, to) của kỳ dữ liệu theo loại kỳ (LKDLieu).

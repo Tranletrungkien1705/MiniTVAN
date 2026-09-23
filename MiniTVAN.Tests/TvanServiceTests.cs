@@ -2722,4 +2722,76 @@ public class TvanServiceTests
             Assert.Empty(await svc.DealersAsync(null, null));
         }
     }
+
+    // Danh mục Phòng ban (theo Mst_Department của TVAN gốc).
+    [Fact]
+    public async Task Department_Save_ComputesBuCodeAndLevel()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            await svc.SaveDepartmentAsync(null, "HO", null, "0101243150", "Hội sở", true, null);
+            await svc.SaveDepartmentAsync(null, "KT", "HO", "0101243150", "Phòng Kế toán", true, null);
+            await svc.SaveDepartmentAsync(null, "KT1", "KT", "0101243150", "Bộ phận KT1", true, null);
+
+            var list = await svc.DepartmentsAsync("0101243150", null);
+            var ho = list.First(d => d.DepartmentCode == "HO");
+            var kt = list.First(d => d.DepartmentCode == "KT");
+            var kt1 = list.First(d => d.DepartmentCode == "KT1");
+            Assert.Equal("HO", ho.DepartmentBUCode);
+            Assert.Equal(1, ho.DepartmentLevel);
+            Assert.Equal("HO.KT", kt.DepartmentBUCode);
+            Assert.Equal(2, kt.DepartmentLevel);
+            Assert.Equal("HO.KT.KT1", kt1.DepartmentBUCode);
+            Assert.Equal(3, kt1.DepartmentLevel);
+        }
+    }
+
+    [Fact]
+    public async Task Department_Save_MissingCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            var (ok, msg, _) = await svc.SaveDepartmentAsync(null, "  ", null, "0101243150", "Phòng X", true, null);
+            Assert.False(ok);
+            Assert.Contains("mã phòng ban", msg);
+        }
+    }
+
+    [Fact]
+    public async Task Department_Save_UnknownMst_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveDepartmentAsync(null, "KT", null, "9999999999", "Phòng Kế toán", true, null);
+            Assert.False(ok);
+            Assert.Contains("MST", msg);
+        }
+    }
+
+    [Fact]
+    public async Task Department_Save_UnknownParent_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            var (ok, msg, _) = await svc.SaveDepartmentAsync(null, "KT", "XX", "0101243150", "Phòng Kế toán", true, null);
+            Assert.False(ok);
+            Assert.Contains("cha", msg);
+        }
+    }
+
+    [Fact]
+    public async Task Department_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            var (_, _, id) = await svc.SaveDepartmentAsync(null, "KT", null, "0101243150", "Phòng Kế toán", true, null);
+            var (ok, _) = await svc.DeleteDepartmentAsync(id);
+            Assert.True(ok);
+            Assert.Empty(await svc.DepartmentsAsync(null, null));
+        }
+    }
 }

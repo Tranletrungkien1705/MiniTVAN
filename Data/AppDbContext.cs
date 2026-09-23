@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<District> Districts => Set<District>();
     public DbSet<Country> Countries => Set<Country>();
     public DbSet<Dealer> Dealers => Set<Dealer>();
+    public DbSet<Department> Departments => Set<Department>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<TranMessage> Messages => Set<TranMessage>();
     public DbSet<InvoiceLicense> Licenses => Set<InvoiceLicense>();
@@ -83,6 +84,11 @@ public class AppDbContext : DbContext
         b.Entity<Dealer>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.DLCode }).IsUnique();   // mỗi tổ chức một mã đại lý
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Department>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.DepartmentCode }).IsUnique();   // mỗi tổ chức một mã phòng ban
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<Invoice>(e =>

@@ -500,6 +500,39 @@ public static class Seeder
                 });
             await db.SaveChangesAsync();
         }
+
+        // Danh mục Phòng ban (theo Mst_Department của TVAN gốc):
+        // seller có cây phòng ban demo (HO → KT → KT1) — mã đơn vị nghiệp vụ/cấp được tính từ cây.
+        if (!await db.Departments.AnyAsync())
+        {
+            var seller = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == "0101243150");
+            if (seller != null)
+            {
+                db.Departments.AddRange(
+                    new Department { DepartmentCode = "HO", DepartmentCodeParent = null, MST = seller.Mst, DepartmentName = "Hội sở", FlagActive = true, UpdatedBy = "kế toán" },
+                    new Department { DepartmentCode = "KT", DepartmentCodeParent = "HO", MST = seller.Mst, DepartmentName = "Phòng Kế toán", FlagActive = true, UpdatedBy = "kế toán" },
+                    new Department { DepartmentCode = "KT1", DepartmentCodeParent = "KT", MST = seller.Mst, DepartmentName = "Bộ phận Kế toán 1", FlagActive = true, UpdatedBy = "kế toán" });
+                await db.SaveChangesAsync();
+
+                // Tính lại mã đơn vị nghiệp vụ/mẫu/cấp cho cây phòng ban (theo Mst_Department_UpdBU của TVAN gốc).
+                var all = await db.Departments.ToListAsync();
+                var byCode = all.ToDictionary(d => d.DepartmentCode, StringComparer.OrdinalIgnoreCase);
+                for (int pass = 0; pass < 7; pass++)
+                {
+                    foreach (var d in all)
+                    {
+                        if (d.DepartmentCode == "HO") { d.DepartmentBUCode = "HO"; d.DepartmentBUPattern = "HO%"; d.DepartmentLevel = 1; continue; }
+                        Department? parent = null;
+                        if (!string.IsNullOrWhiteSpace(d.DepartmentCodeParent)) byCode.TryGetValue(d.DepartmentCodeParent!, out parent);
+                        var parentBu = parent?.DepartmentBUCode;
+                        d.DepartmentBUCode = (string.IsNullOrEmpty(parentBu) ? "" : parentBu + ".") + d.DepartmentCode;
+                        d.DepartmentBUPattern = d.DepartmentBUCode + "%";
+                        d.DepartmentLevel = (parent?.DepartmentLevel ?? 0) + 1;
+                    }
+                }
+                await db.SaveChangesAsync();
+            }
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)

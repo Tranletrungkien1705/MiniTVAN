@@ -744,6 +744,27 @@ app.MapDelete("/api/dealers/{id:int}", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Danh mục Phòng ban (theo Mst_Department của TVAN gốc): danh sách (lọc theo MST + từ khóa nếu có).
+app.MapGet("/api/departments", async (string? mst, string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.DepartmentsAsync(mst, keyword);
+    return Results.Ok(ls.Select(d => new { d.Id, d.DepartmentCode, d.DepartmentCodeParent, d.DepartmentBUCode, d.DepartmentBUPattern, d.DepartmentLevel, d.MST, d.DepartmentName, d.FlagActive, d.UpdatedAt, d.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) phòng ban theo mã (theo Mst_Department_Create/Update của TVAN gốc).
+app.MapPost("/api/departments", async (DepartmentDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveDepartmentAsync(dto.Id, dto.Code ?? "", dto.CodeParent, dto.Mst ?? "", dto.Name ?? "", dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa phòng ban theo id (theo Mst_Department_Delete của TVAN gốc).
+app.MapDelete("/api/departments/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteDepartmentAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -792,3 +813,4 @@ record ProvinceDto(int? Id, string? Code, string? Name, bool Active, string? By)
 record DistrictDto(int? Id, string? ProvinceCode, string? Code, string? Name, bool Active, string? By);
 record CountryDto(int? Id, string? Code, string? Name, bool Active, string? By);
 record DealerDto(int? Id, string? Code, string? Name, string? ProvinceCode, string? Address, string? PresentBy, string? GovIdNumber, string? Email, string? Phone, bool Active, string? By);
+record DepartmentDto(int? Id, string? Code, string? CodeParent, string? Mst, string? Name, bool Active, string? By);
