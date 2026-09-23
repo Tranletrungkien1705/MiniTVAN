@@ -65,6 +65,8 @@ public class AppDbContext : DbContext
     public DbSet<SysUserInGroup> SysUserInGroups => Set<SysUserInGroup>();
     public DbSet<SysModule> SysModules => Set<SysModule>();
     public DbSet<SysSolution> SysSolutions => Set<SysSolution>();
+    public DbSet<SysObject> SysObjects => Set<SysObject>();
+    public DbSet<SysObjectInModule> SysObjectInModules => Set<SysObjectInModule>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -394,6 +396,16 @@ public class AppDbContext : DbContext
         b.Entity<SysSolution>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.SolutionCode }).IsUnique();   // mỗi tổ chức một mã giải pháp
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SysObject>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ObjectCode }).IsUnique();   // mỗi tổ chức một mã đối tượng
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SysObjectInModule>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ModuleCode, x.ObjectCode }).IsUnique();   // mỗi gói một đối tượng
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

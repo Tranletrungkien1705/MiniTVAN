@@ -312,4 +312,13 @@ public static class Ui
         Models.SortColumnType.Date => "Ngày tháng",
         _ => t.ToString()
     };
+
+    // Loại đối tượng (chức năng) trong hệ thống (theo Sys_Object.ObjectType của TVAN gốc).
+    public static string SysObjectType(SysObjectType t) => t switch
+    {
+        Models.SysObjectType.Func   => "FUNC — Chức năng",
+        Models.SysObjectType.Menu   => "MENU — Menu",
+        Models.SysObjectType.Button => "BUTTON — Nút chức năng",
+        _ => t.ToString()
+    };
 }

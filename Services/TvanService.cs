@@ -194,6 +194,13 @@ public interface ITvanService
     Task<(bool ok, string msg)> SetSysModuleActiveAsync(int id, bool active, string? by);
     Task<List<SysSolution>> SysSolutionsAsync(string? keyword);
 
+    // Đối tượng (chức năng) + phân gán vào gói Module (theo Sys_Object / Sys_ObjectInModules của TVAN gốc)
+    Task<List<SysObject>> SysObjectsAsync(string? keyword);
+    Task<(bool ok, string msg, int id)> SaveSysObjectAsync(int? id, string objectCode, string objectName, string? serviceCode, SysObjectType objectType, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteSysObjectAsync(int id);
+    Task<List<SysObjectInModule>> SysObjectInModulesAsync(string? moduleCode);
+    Task<(bool ok, string msg)> SaveSysObjectInModulesAsync(int moduleId, List<string> objectCodes, string? by);
+
     // Cấu hình định dạng cột hiển thị theo bảng (theo Mst_ColumnConfig của TVAN gốc)
     Task<List<ColumnConfig>> ColumnConfigsAsync(string? tableName, string? keyword);
     Task<ColumnConfig?> GetColumnConfigAsync(int id);
@@ -3879,6 +3886,98 @@ public class TvanService(AppDbContext db) : ITvanService
             q = q.Where(s => s.SolutionCode.Contains(k) || s.SolutionName.Contains(k));
         }
         return q.OrderBy(s => s.SolutionCode).ToListAsync();
+    }
+
+    // ===== Đối tượng (chức năng) + phân gán vào gói Module (theo Sys_Object / Sys_ObjectInModules của TVAN gốc) =====
+
+    // Danh sách đối tượng (lọc theo từ khóa mã/tên/dịch vụ nếu có).
+    public Task<List<SysObject>> SysObjectsAsync(string? keyword)
+    {
+        var q = db.SysObjects.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(o => o.ObjectCode.Contains(k) || o.ObjectName.Contains(k) || (o.ServiceCode != null && o.ServiceCode.Contains(k)));
+        }
+        return q.OrderBy(o => o.ObjectCode).ToListAsync();
+    }
+
+    // Lưu (tạo mới/cập nhật) đối tượng theo mã (theo Sys_Object của TVAN gốc):
+    // lưu lần đầu = tạo mới, lưu lại cùng mã = cập nhật. Chặn thiếu mã/tên, chặn trùng mã khi tạo.
+    public async Task<(bool ok, string msg, int id)> SaveSysObjectAsync(int? id, string objectCode, string objectName, string? serviceCode, SysObjectType objectType, bool active, string? by)
+    {
+        objectCode = (objectCode ?? "").Trim();
+        objectName = (objectName ?? "").Trim();
+        if (objectCode.Length == 0) return (false, "Cần mã đối tượng.", 0);
+        if (objectName.Length == 0) return (false, "Cần tên đối tượng.", 0);
+
+        SysObject? e;
+        if (id is > 0)
+        {
+            e = await db.SysObjects.FirstOrDefaultAsync(o => o.Id == id);
+            if (e == null) return (false, "Không tìm thấy đối tượng.", 0);
+            if (await db.SysObjects.AnyAsync(o => o.ObjectCode == objectCode && o.Id != e.Id))
+                return (false, $"Mã đối tượng {objectCode} đã tồn tại.", 0);
+            e.ObjectCode = objectCode;
+            e.ObjectName = objectName;
+            e.ServiceCode = serviceCode;
+            e.ObjectType = objectType;
+            e.FlagActive = active;
+            e.UpdatedAt = DateTime.UtcNow;
+            e.UpdatedBy = by;
+            await db.SaveChangesAsync();
+            return (true, $"Đã cập nhật đối tượng {objectCode}.", e.Id);
+        }
+
+        if (await db.SysObjects.AnyAsync(o => o.ObjectCode == objectCode))
+            return (false, $"Mã đối tượng {objectCode} đã tồn tại.", 0);
+        e = new SysObject { ObjectCode = objectCode, ObjectName = objectName, ServiceCode = serviceCode, ObjectType = objectType, FlagActive = active, UpdatedBy = by };
+        db.SysObjects.Add(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã tạo đối tượng {objectCode}.", e.Id);
+    }
+
+    // Xóa đối tượng theo id (theo Sys_Object của TVAN gốc): chặn khi không tồn tại;
+    // xóa kèm toàn bộ phân gán đối tượng vào gói Module.
+    public async Task<(bool ok, string msg)> DeleteSysObjectAsync(int id)
+    {
+        var e = await db.SysObjects.FirstOrDefaultAsync(o => o.Id == id);
+        if (e == null) return (false, "Không tìm thấy đối tượng.");
+        var code = e.ObjectCode;
+        var maps = await db.SysObjectInModules.Where(m => m.ObjectCode == code).ToListAsync();
+        db.SysObjectInModules.RemoveRange(maps);
+        db.SysObjects.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa đối tượng {code}.");
+    }
+
+    // Danh sách phân gán đối tượng của một gói Module (lọc theo mã gói nếu có).
+    public Task<List<SysObjectInModule>> SysObjectInModulesAsync(string? moduleCode)
+    {
+        var q = db.SysObjectInModules.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(moduleCode)) q = q.Where(m => m.ModuleCode == moduleCode.Trim());
+        return q.OrderBy(m => m.ModuleCode).ThenBy(m => m.ObjectCode).ToListAsync();
+    }
+
+    // Lưu danh sách đối tượng gán vào gói Module (theo Sys_ObjectInModules_Save của TVAN gốc):
+    // thay thế toàn bộ danh sách (xóa hết rồi chèn lại). Chặn khi gói Module không tồn tại.
+    public async Task<(bool ok, string msg)> SaveSysObjectInModulesAsync(int moduleId, List<string> objectCodes, string? by)
+    {
+        var m = await db.SysModules.FirstOrDefaultAsync(x => x.Id == moduleId);
+        if (m == null) return (false, "Không tìm thấy gói Module.");
+
+        var existing = await db.SysObjectInModules.Where(x => x.SysModuleId == moduleId).ToListAsync();
+        db.SysObjectInModules.RemoveRange(existing);
+        foreach (var raw in objectCodes ?? new())
+        {
+            var oc = (raw ?? "").Trim();
+            if (oc.Length == 0) continue;
+            db.SysObjectInModules.Add(new SysObjectInModule { SysModuleId = moduleId, ModuleCode = m.ModuleCode, ObjectCode = oc, UpdatedBy = by });
+        }
+        m.UpdatedAt = DateTime.UtcNow;
+        m.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu đối tượng cho gói Module {m.ModuleCode}.");
     }
 
     // Cấu hình định dạng cột hiển thị theo bảng (theo Mst_ColumnConfig của TVAN gốc):

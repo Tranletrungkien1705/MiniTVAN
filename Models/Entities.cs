@@ -1387,3 +1387,42 @@ public class SysSolution : IOrgOwned
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
+
+// Loại đối tượng (chức năng) trong hệ thống (theo Sys_Object.ObjectType của TVAN gốc):
+// FUNC = chức năng/màn hình, MENU = menu, BUTTON = nút chức năng.
+public enum SysObjectType { Func = 0, Menu = 1, Button = 2 }
+
+// Đối tượng (chức năng/menu/nút) của hệ thống (theo bảng Sys_Object của TVAN gốc):
+// mỗi đối tượng có mã (ObjectCode), tên (ObjectName), dịch vụ (ServiceCode), loại (ObjectType)
+// và cờ đang dùng (FlagActive). Dùng để phân gán quyền chức năng vào gói Module (Sys_ObjectInModules).
+// Khóa nghiệp vụ: (OrgId, ObjectCode). FlagActive = đối tượng đang dùng hay không.
+public class SysObject : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ObjectCode { get; set; } = "";       // Mã đối tượng (VD INV_ISSUE)
+    public string ObjectName { get; set; } = "";       // Tên đối tượng (VD Phát hành hóa đơn)
+    public string? ServiceCode { get; set; }             // Mã dịch vụ/nhóm chức năng
+    public SysObjectType ObjectType { get; set; } = SysObjectType.Func;   // Loại đối tượng (FUNC/MENU/BUTTON)
+    public bool FlagActive { get; set; } = true;         // Đối tượng đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
+// Phân gán đối tượng (chức năng) vào gói Module (theo bảng Sys_ObjectInModules của TVAN gốc):
+// mỗi dòng gắn một đối tượng (ObjectCode) vào một gói Module (ModuleCode). Lưu theo kiểu thay thế
+// toàn bộ danh sách đối tượng của gói (theo Sys_ObjectInModules_Save của TVAN gốc: xóa hết rồi chèn lại).
+// Khóa nghiệp vụ: (OrgId, ModuleCode, ObjectCode).
+public class SysObjectInModule : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int SysModuleId { get; set; }
+    public SysModule? Module { get; set; }
+    public string ModuleCode { get; set; } = "";       // Mã gói Module
+    public string ObjectCode { get; set; } = "";       // Mã đối tượng được gán vào gói
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}

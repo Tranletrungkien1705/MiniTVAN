@@ -1152,6 +1152,41 @@ app.MapGet("/api/sys-solutions", async (string? keyword, ITvanService svc) =>
     return Results.Ok(ls.Select(s => new { s.Id, s.SolutionCode, s.SolutionName, s.FlagActive, s.UpdatedAt, s.UpdatedBy }));
 });
 
+// Đối tượng (chức năng) của hệ thống (theo Sys_Object của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
+app.MapGet("/api/sys-objects", async (string? keyword, ITvanService svc) =>
+{
+    var ls = await svc.SysObjectsAsync(keyword);
+    return Results.Ok(ls.Select(o => new { o.Id, o.ObjectCode, o.ObjectName, o.ServiceCode, type = o.ObjectType.ToString(), o.FlagActive, o.UpdatedAt, o.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) đối tượng theo mã (theo Sys_Object của TVAN gốc).
+app.MapPost("/api/sys-objects", async (SysObjectDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveSysObjectAsync(dto.Id, dto.ObjectCode ?? "", dto.ObjectName ?? "", dto.ServiceCode, dto.ObjectType, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa đối tượng theo id (theo Sys_Object của TVAN gốc): xóa kèm phân gán vào gói Module.
+app.MapDelete("/api/sys-objects/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteSysObjectAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
+// Phân gán đối tượng vào gói Module (theo Sys_ObjectInModules của TVAN gốc): danh sách (lọc theo mã gói nếu có).
+app.MapGet("/api/sys-object-in-modules", async (string? moduleCode, ITvanService svc) =>
+{
+    var ls = await svc.SysObjectInModulesAsync(moduleCode);
+    return Results.Ok(ls.Select(m => new { m.Id, m.ModuleCode, m.ObjectCode, m.UpdatedAt, m.UpdatedBy }));
+});
+
+// Lưu danh sách đối tượng gán vào gói Module (theo Sys_ObjectInModules_Save của TVAN gốc): thay thế toàn bộ.
+app.MapPost("/api/sys-object-in-modules", async (SaveSysObjectInModulesDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.SaveSysObjectInModulesAsync(dto.ModuleId, dto.ObjectCodes ?? new(), dto.By);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -1226,4 +1261,6 @@ record SysGroupDto(int? Id, string? Code, string? Name, bool Active, string? By)
 record SaveSysGroupMembersDto(List<string>? UserCodes, string? By);
 record SysModuleDto(int? Id, string? ModuleCode, string? SolutionCode, string? ModuleName, string? Description, double QtyInvoice, double ValCapacity, bool Active, string? By);
 record SysModuleActiveDto(bool Active, string? By);
+record SysObjectDto(int? Id, string? ObjectCode, string? ObjectName, string? ServiceCode, SysObjectType ObjectType, bool Active, string? By);
+record SaveSysObjectInModulesDto(int ModuleId, List<string>? ObjectCodes, string? By);
 record TaxOfficeDto(int? Id, string? Code, string? CodeParent, string? ProvinceCode, string? DistrictCode, string? Name, string? Level, string? Address, string? ContactEmail, string? ContactPhone, bool Active, string? By);

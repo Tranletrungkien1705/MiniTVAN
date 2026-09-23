@@ -1340,6 +1340,49 @@ public class SysModuleController(ITvanService svc) : Controller
     }
 }
 
+// Đối tượng (chức năng) + phân gán đối tượng vào gói Module (theo Sys_Object / Sys_ObjectInModules của TVAN gốc):
+// mỗi tổ chức khai báo danh mục đối tượng (menu/nút chức năng) và gán các đối tượng vào từng gói Module.
+public class SysObjectController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword, string? moduleCode)
+    {
+        ViewBag.Keyword = keyword;
+        ViewBag.ModuleCode = moduleCode;
+        ViewBag.Modules = await svc.SysModulesAsync(null);
+        ViewBag.Maps = await svc.SysObjectInModulesAsync(moduleCode);
+        return View(await svc.SysObjectsAsync(keyword));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string objectCode, string objectName, string? serviceCode, SysObjectType objectType, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveSysObjectAsync(id, objectCode, objectName, serviceCode, objectType, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteSysObjectAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Gán danh sách đối tượng vào một gói Module (theo Sys_ObjectInModules_Save của TVAN gốc):
+    // thay thế toàn bộ danh sách đối tượng của gói.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveObjects(int moduleId, string? objectCodes, string? by)
+    {
+        var codes = (objectCodes ?? "")
+            .Split(new[] { ',', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+        var (ok, msg) = await svc.SaveSysObjectInModulesAsync(moduleId, codes, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 // Cấu hình định dạng cột hiển thị theo bảng (theo Mst_ColumnConfig của TVAN gốc):
 // mỗi tổ chức khai báo định dạng hiển thị + mô tả cho một cột của một bảng.
 public class ColumnConfigController(ITvanService svc) : Controller

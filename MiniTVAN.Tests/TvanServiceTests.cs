@@ -3374,6 +3374,91 @@ public class TvanServiceTests
     }
 
     [Fact]
+    public async Task SysObject_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveSysObjectAsync(null, "INV_ISSUE", "Phát hành hóa đơn", "INVOICE", SysObjectType.Func, true, "quản trị");
+            Assert.True(ok);
+            var o = (await svc.SysObjectsAsync(null)).FirstOrDefault(x => x.Id == id);
+            Assert.NotNull(o);
+            Assert.Equal("INV_ISSUE", o!.ObjectCode);
+            Assert.Equal(SysObjectType.Func, o.ObjectType);
+            Assert.True(o.FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task SysObject_Save_DuplicateCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveSysObjectAsync(null, "INV_ISSUE", "A", null, SysObjectType.Func, true, null);
+            var (ok, msg, _) = await svc.SaveSysObjectAsync(null, "INV_ISSUE", "B", null, SysObjectType.Func, true, null);
+            Assert.False(ok);
+            Assert.Contains("đã tồn tại", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SysObject_Save_MissingName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.SaveSysObjectAsync(null, "INV_ISSUE", "  ", null, SysObjectType.Func, true, null);
+            Assert.False(ok);
+            Assert.Contains("Cần tên đối tượng", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SysObjectInModules_Save_Replaces()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            db.SysSolutions.Add(new SysSolution { SolutionCode = "TVAN", SolutionName = "TVAN", FlagActive = true });
+            await db.SaveChangesAsync();
+            var (_, _, mid) = await svc.SaveSysModuleAsync(null, "TVAN_BASIC", "TVAN", "Gói cơ bản", null, 0, 0, true, null);
+            var (ok, _) = await svc.SaveSysObjectInModulesAsync(mid, new() { "INV_ISSUE", "INV_CANCEL" }, "quản trị");
+            Assert.True(ok);
+            Assert.Equal(2, (await svc.SysObjectInModulesAsync("TVAN_BASIC")).Count);
+            // Lưu lại thay thế toàn bộ danh sách.
+            await svc.SaveSysObjectInModulesAsync(mid, new() { "MENU_INVOICE" }, "quản trị");
+            var maps = await svc.SysObjectInModulesAsync("TVAN_BASIC");
+            Assert.Single(maps);
+            Assert.Equal("MENU_INVOICE", maps[0].ObjectCode);
+        }
+    }
+
+    [Fact]
+    public async Task SysObjectInModules_Save_UnknownModule_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg) = await svc.SaveSysObjectInModulesAsync(9999, new() { "INV_ISSUE" }, null);
+            Assert.False(ok);
+            Assert.Contains("Không tìm thấy gói Module", msg);
+        }
+    }
+
+    [Fact]
+    public async Task SysObject_Delete_RemovesMappings()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            db.SysSolutions.Add(new SysSolution { SolutionCode = "TVAN", SolutionName = "TVAN", FlagActive = true });
+            await db.SaveChangesAsync();
+            var (_, _, mid) = await svc.SaveSysModuleAsync(null, "TVAN_BASIC", "TVAN", "Gói cơ bản", null, 0, 0, true, null);
+            var (_, _, oid) = await svc.SaveSysObjectAsync(null, "INV_ISSUE", "Phát hành", null, SysObjectType.Func, true, null);
+            await svc.SaveSysObjectInModulesAsync(mid, new() { "INV_ISSUE" }, null);
+            var (ok, _) = await svc.DeleteSysObjectAsync(oid);
+            Assert.True(ok);
+            Assert.Empty(await svc.SysObjectsAsync(null));
+            Assert.Empty(await svc.SysObjectInModulesAsync(null));
+        }
+    }
+
+    [Fact]
     public async Task ColumnConfig_Save_Creates()
     {
         var (db, svc, conn) = NewSvc(); using (conn)

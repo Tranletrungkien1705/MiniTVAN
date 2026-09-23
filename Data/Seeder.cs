@@ -784,6 +784,29 @@ public static class Seeder
                 new SysModule { ModuleCode = "TVAN_PRO", SolutionCode = "TVAN", ModuleName = "Gói chuyên nghiệp", Description = "Gói đầy đủ tính năng", QtyInvoice = 100000, ValCapacity = 500000, FlagActive = true, UpdatedBy = "quản trị" });
             await db.SaveChangesAsync();
         }
+
+        // Đối tượng (chức năng) + phân gán vào gói Module (theo Sys_Object / Sys_ObjectInModules của TVAN gốc):
+        // 4 đối tượng demo, gán một số đối tượng vào gói TVAN_BASIC.
+        if (!await db.SysObjects.AnyAsync())
+        {
+            db.SysObjects.AddRange(
+                new SysObject { ObjectCode = "INV_ISSUE", ObjectName = "Phát hành hóa đơn", ServiceCode = "INVOICE", ObjectType = SysObjectType.Func, FlagActive = true, UpdatedBy = "quản trị" },
+                new SysObject { ObjectCode = "INV_CANCEL", ObjectName = "Hủy hóa đơn", ServiceCode = "INVOICE", ObjectType = SysObjectType.Func, FlagActive = true, UpdatedBy = "quản trị" },
+                new SysObject { ObjectCode = "MENU_INVOICE", ObjectName = "Menu hóa đơn", ServiceCode = "INVOICE", ObjectType = SysObjectType.Menu, FlagActive = true, UpdatedBy = "quản trị" },
+                new SysObject { ObjectCode = "BTN_APPROVE", ObjectName = "Nút duyệt hóa đơn", ServiceCode = "INVOICE", ObjectType = SysObjectType.Button, FlagActive = true, UpdatedBy = "quản trị" });
+            await db.SaveChangesAsync();
+        }
+        if (!await db.SysObjectInModules.AnyAsync())
+        {
+            var basic = await db.SysModules.FirstOrDefaultAsync(m => m.ModuleCode == "TVAN_BASIC");
+            if (basic != null)
+            {
+                db.SysObjectInModules.AddRange(
+                    new SysObjectInModule { SysModuleId = basic.Id, ModuleCode = basic.ModuleCode, ObjectCode = "INV_ISSUE", UpdatedBy = "quản trị" },
+                    new SysObjectInModule { SysModuleId = basic.Id, ModuleCode = basic.ModuleCode, ObjectCode = "MENU_INVOICE", UpdatedBy = "quản trị" });
+                await db.SaveChangesAsync();
+            }
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
