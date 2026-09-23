@@ -5637,4 +5637,156 @@ public class DocTienTests
             Assert.True(allowed);
         }
     }
+
+    // ===== Lịch sử đăng ký dịch vụ (theo Hist_RegisterServices của TVAN gốc) =====
+
+    [Fact]
+    public async Task HistRegister_Create_SetsSentTct_WithMessageAndRefNo()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, id) = await svc.CreateHistRegisterServiceAsync("0101243150", DateTime.Today, "Mới", "1,2", "C", true, false, false, RegSendMethod.Full, "100", null, null, "kế toán");
+            Assert.True(ok);
+            Assert.Contains("thành công", msg);
+            var e = await svc.GetHistRegisterServiceAsync(id);
+            Assert.NotNull(e);
+            Assert.Equal(RegServiceStatus.SentTCT, e!.TThai);
+            Assert.StartsWith("K", e.MTDiep);
+            Assert.StartsWith("V", e.TCTRefNo);
+            Assert.Equal("100", e.MLTDiep);
+        }
+    }
+
+    [Fact]
+    public async Task HistRegister_Create_MissingMst_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.CreateHistRegisterServiceAsync("  ", DateTime.Today, "Mới", "1", "C", true, false, false, RegSendMethod.Full, "100", null, null, "kế toán");
+            Assert.False(ok);
+            Assert.Contains("MST", msg);
+        }
+    }
+
+    [Fact]
+    public async Task HistRegister_Create_MissingHtdk_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, _) = await svc.CreateHistRegisterServiceAsync("0101243150", DateTime.Today, "  ", "1", "C", true, false, false, RegSendMethod.Full, "100", null, null, "kế toán");
+            Assert.False(ok);
+            Assert.Contains("hình thức đăng ký", msg);
+        }
+    }
+
+    [Fact]
+    public async Task HistRegister_List_FilterByMstAndStatus()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateHistRegisterServiceAsync("0101243150", DateTime.Today, "Mới", "1,2", "C", true, false, false, RegSendMethod.Full, "100", null, null, "kế toán");
+            await svc.CreateHistRegisterServiceAsync("0312345678", DateTime.Today, "Mới", "1", "K", false, false, true, RegSendMethod.BTH, "100", null, null, "kế toán");
+
+            Assert.Equal(2, (await svc.HistRegisterServicesAsync(null, null, null, null, null, null, null)).Count);
+            Assert.Single(await svc.HistRegisterServicesAsync("0101243150", null, null, null, null, null, null));
+            Assert.Single(await svc.HistRegisterServicesAsync(null, null, "K", null, null, null, null));
+            Assert.Equal(2, (await svc.HistRegisterServicesAsync(null, null, null, RegServiceStatus.SentTCT, null, null, null)).Count);
+        }
+    }
+
+    [Fact]
+    public async Task HistRegister_List_FilterByDateRange()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateHistRegisterServiceAsync("0101243150", DateTime.Today.AddDays(-10), "Mới", "1", "C", true, false, false, RegSendMethod.Full, "100", null, null, "kế toán");
+            await svc.CreateHistRegisterServiceAsync("0101243150", DateTime.Today, "Mới", "1", "C", true, false, false, RegSendMethod.Full, "100", null, null, "kế toán");
+
+            Assert.Single(await svc.HistRegisterServicesAsync(null, null, null, null, null, DateTime.Today.AddDays(-1), null));
+            Assert.Equal(2, (await svc.HistRegisterServicesAsync(null, null, null, null, null, DateTime.Today.AddDays(-20), null)).Count);
+        }
+    }
+
+    // Sửa lỗi hàng loạt hóa đơn theo mẫu (theo luồng Invoice_Invoice_Fix của TVAN gốc).
+    private static async Task<(int nntId, int tplId, int inv1, int inv2)> SetupFix(AppDbContext db, ITvanService svc)
+    {
+        var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+        await svc.RegisterNntAsync(nntId);
+        var (_, _, inv1) = await svc.CreateInvoiceAsync(new Invoice { NntId = nntId, Symbol = "1C26TAA", BuyerName = "Cty Mua", Amount = 10_000_000 });
+        var (_, _, inv2) = await svc.CreateInvoiceAsync(new Invoice { NntId = nntId, Symbol = "1C26TAA", BuyerName = "Cty Mua", Amount = 20_000_000 });
+        await svc.TransmitAsync(inv1);   // inv1 → Accepted (ISSUED)
+        await svc.TransmitAsync(inv2);   // inv2 → Accepted (ISSUED)
+        var tplId = await AddTemplate(db, nntId);
+        return (nntId, tplId, inv1, inv2);
+    }
+
+    [Fact]
+    public async Task BulkFix_ByTemplate_ReSignsAllAndLogs()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, inv1, inv2) = await SetupFix(db, svc);
+            var (ok, msg, count) = await svc.BulkFixByTemplateAsync("TINV-1C26TAA", "sai thuế suất", "kế toán trưởng");
+            Assert.True(ok);
+            Assert.Equal(2, count);
+            Assert.Equal(HotfixFlag.Hotfixed, (await svc.GetInvoiceAsync(inv1))!.FlagHotfix);
+            Assert.Equal(HotfixFlag.Hotfixed, (await svc.GetInvoiceAsync(inv2))!.FlagHotfix);
+            var logs = await svc.BulkFixLogsAsync(null);
+            Assert.Single(logs);
+            Assert.Equal(2, logs[0].FixedCount);
+            Assert.Equal("kế toán trưởng", logs[0].By);
+        }
+    }
+
+    [Fact]
+    public async Task BulkFix_EmptyCode_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, count) = await svc.BulkFixByTemplateAsync("  ", null, null);
+            Assert.False(ok);
+            Assert.Equal(0, count);
+            Assert.Contains("mã mẫu", msg);
+        }
+    }
+
+    [Fact]
+    public async Task BulkFix_UnknownTemplate_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, msg, count) = await svc.BulkFixByTemplateAsync("TINV-KHONG-CO", null, null);
+            Assert.False(ok);
+            Assert.Equal(0, count);
+            Assert.Contains("Không tìm thấy mẫu", msg);
+        }
+    }
+
+    [Fact]
+    public async Task BulkFix_NoCandidates_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, nntId) = await svc.CreateNntAsync(new Nnt { Mst = "0101243150", Name = "Cty Bán" });
+            await svc.RegisterNntAsync(nntId);
+            await AddTemplate(db, nntId);   // mẫu có nhưng chưa có HĐ nào đã phát hành
+            var (ok, msg, count) = await svc.BulkFixByTemplateAsync("TINV-1C26TAA", null, null);
+            Assert.False(ok);
+            Assert.Equal(0, count);
+            Assert.Contains("Không có hóa đơn", msg);
+        }
+    }
+
+    [Fact]
+    public async Task BulkFix_AlreadyHotfixed_NotCandidate()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, inv1, inv2) = await SetupFix(db, svc);
+            await svc.ReSignAsync(inv1, "PD94bWwgdmVyc2lvbj0iMS4wIj8+", null, null);   // inv1 đã ký lại
+            var candidates = await svc.BulkFixCandidatesAsync("TINV-1C26TAA");
+            Assert.Single(candidates);
+            Assert.Equal(inv2, candidates[0].Id);
+        }
+    }
 }

@@ -2004,3 +2004,47 @@ public class PrdIdCustomField : IOrgOwned
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 }
+
+// Trạng thái xử lý của một bản ghi lịch sử đăng ký dịch vụ (theo Hist_RegisterServices.TThai của TVAN gốc):
+// Pending = chờ gửi, SentTCT = đã gửi CQT, Receive = CQT tiếp nhận, Accept = CQT chấp nhận, Reject = CQT từ chối.
+public enum RegServiceStatus { Pending = 0, SentTCT = 1, Receive = 2, Accept = 3, Reject = 4 }
+
+// Phương thức gửi hóa đơn tới CQT (theo TConst.PTGui của TVAN gốc):
+// Full = gửi đầy đủ từng hóa đơn, BTH = gửi theo bảng tổng hợp.
+public enum RegSendMethod { Full = 0, BTH = 1 }
+
+// Lịch sử đăng ký dịch vụ (theo bảng Hist_RegisterServices của TVAN gốc — màn Hist_RegisterServicesController):
+// mỗi bản ghi là MỘT lần NNT gửi tờ khai đăng ký/thay đổi thông tin sử dụng hóa đơn điện tử tới cơ quan thuế,
+// lưu lại hình thức đăng ký, loại hóa đơn đăng ký, hình thức (có mã/không mã/máy tính tiền), phương thức gửi,
+// mã thông điệp (K) + mã loại thông điệp (100/102/103/999), kết quả CQT trả về và mã tham chiếu TCT.
+// Khóa nghiệp vụ: (OrgId, MTDiep) — mã thông điệp là duy nhất trong một tổ chức.
+public class HistRegisterService : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string MST { get; set; } = "";                  // Mã số thuế NNT đăng ký
+    public DateTime NGui { get; set; } = DateTime.Today;   // Ngày gửi tờ khai
+    public string? HTDK { get; set; }                      // Hình thức đăng ký (mới/thay đổi...)
+    public string? LHDon { get; set; }                     // Loại hóa đơn đăng ký (1,2,3,4,5,6)
+    public string? HThuc { get; set; }                     // Hình thức: C = có mã, K = không mã
+    public bool CMa { get; set; }                          // Có mã
+    public bool CMTMTTien { get; set; }                    // Máy tính tiền có mã
+    public bool KCMa { get; set; }                         // Không mã
+    public RegSendMethod PTGHDon { get; set; } = RegSendMethod.Full;   // Phương thức gửi hóa đơn
+    public string? MTDiep { get; set; }                    // Mã thông điệp (mã K)
+    public string? MLTDiep { get; set; }                   // Mã loại thông điệp (100/102/103/999)
+    public string? MCCQT { get; set; }                     // Mã CQT cấp cho máy tính tiền
+    public string? KQua { get; set; }                      // Kết quả CQT trả về
+    public string? MLoi { get; set; }                      // Mã lỗi
+    public string? HDXLy { get; set; }                     // Hướng dẫn xử lý
+    public string? GChu { get; set; }                      // Ghi chú
+    public string? MTa { get; set; }                       // Mô tả
+    public RegServiceStatus TThai { get; set; } = RegServiceStatus.Pending;   // Trạng thái xử lý
+    public string? TCTRefNo { get; set; }                  // Mã tham chiếu TCT (mã V)
+    public string? XmlBase64 { get; set; }                 // Nội dung tờ khai (base64 XML)
+    public DateTime? UpdDTime { get; set; }                // Thời điểm cập nhật kết quả
+    public string? UpdBy { get; set; }                     // Người cập nhật kết quả
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}

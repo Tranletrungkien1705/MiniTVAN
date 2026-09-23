@@ -340,7 +340,26 @@ public static class Seeder
             }
         }
 
-        // Hóa đơn khởi tạo từ MÁY TÍNH TIỀN (theo Invoice_Invoice_AllocatedInvoiceTypeM / GenMCCQTMTTTypeM của TVAN gốc):
+        // Sửa lỗi hàng loạt hóa đơn theo mẫu (theo luồng Invoice_Invoice_Fix của TVAN gốc):
+        // minh họa 1 lần ký lại hàng loạt HĐ đã phát hành chưa ký lại của mẫu 1C26TAA.
+        if (!await db.BulkFixLogs.AnyAsync())
+        {
+            var fixTpl = await db.InvoiceTemplates.FirstOrDefaultAsync(t => t.TInvoiceCode == "TINV-1C26TAA");
+            if (fixTpl != null)
+            {
+                var fixInvs = await db.Invoices.Where(i => i.Symbol == fixTpl.FormNo && i.Status == InvoiceStatus.Accepted)
+                    .OrderBy(i => i.Id).Take(2).ToListAsync();
+                db.BulkFixLogs.Add(new BulkFixLog
+                {
+                    TemplateId = fixTpl.Id, Action = BulkFixAction.FixByTemplate,
+                    TInvoiceCode = fixTpl.TInvoiceCode, FormNo = fixTpl.FormNo, FixedCount = fixInvs.Count,
+                    InvoiceNos = string.Join(", ", fixInvs.Select(i => i.No)),
+                    Reason = "Sửa lỗi thuế suất theo thông báo", By = "kế toán trưởng",
+                    CreatedAt = DateTime.UtcNow.AddDays(-3)
+                });
+                await db.SaveChangesAsync();
+            }
+        }
         // seller được CQT cấp mã máy tính tiền (MCCQT), có mẫu loại MTT (FormNo ký tự thứ 4 = 'M')
         // và 1 HĐ MTT đang chờ đã cấp số + đã sinh mã CQT máy tính tiền (MCCQTMTT).
         if (!await db.InvoiceTemplates.AnyAsync(t => t.FormNo == "1C2MAA"))
@@ -763,6 +782,36 @@ public static class Seeder
                     ProductIDStatus = ProductIdStatus.New, CustomField1 = "Bạc", UpdatedBy = "kế toán"
                 });
             await db.SaveChangesAsync();
+        }
+
+        // Lịch sử đăng ký dịch vụ (theo Hist_RegisterServices của TVAN gốc):
+        // NNT demo đã gửi 2 tờ khai đăng ký sử dụng HĐT tới cơ quan thuế (1 đã gửi, 1 CQT chấp nhận).
+        if (!await db.HistRegisterServices.AnyAsync())
+        {
+            var seller = await db.Nnts.FirstOrDefaultAsync(n => n.Mst == "0101243150");
+            if (seller != null)
+            {
+                db.HistRegisterServices.AddRange(
+                    new HistRegisterService
+                    {
+                        MST = seller.Mst, NGui = DateTime.Today.AddDays(-30), HTDK = "Mới", LHDon = "1,2",
+                        HThuc = "C", CMa = true, CMTMTTien = false, KCMa = false, PTGHDon = RegSendMethod.Full,
+                        MTDiep = "K" + DateTime.UtcNow.AddDays(-30).ToString("yyyyMMddHHmmss") + "0001", MLTDiep = "100",
+                        KQua = "CQT đã tiếp nhận tờ khai đăng ký sử dụng hóa đơn điện tử.",
+                        TThai = RegServiceStatus.Accept, TCTRefNo = "V" + DateTime.UtcNow.AddDays(-30).ToString("yyMMddHHmmss") + "0001",
+                        UpdDTime = DateTime.UtcNow.AddDays(-29), UpdBy = "kế toán", UpdatedBy = "kế toán"
+                    },
+                    new HistRegisterService
+                    {
+                        MST = seller.Mst, NGui = DateTime.Today.AddDays(-2), HTDK = "Thay đổi", LHDon = "1,2,6",
+                        HThuc = "C", CMa = true, CMTMTTien = true, KCMa = false, PTGHDon = RegSendMethod.BTH,
+                        MTDiep = "K" + DateTime.UtcNow.AddDays(-2).ToString("yyyyMMddHHmmss") + "0002", MLTDiep = "102",
+                        MCCQT = "A1B2C", KQua = "CQT đã tiếp nhận tờ khai thay đổi thông tin.",
+                        TThai = RegServiceStatus.SentTCT, TCTRefNo = "V" + DateTime.UtcNow.AddDays(-2).ToString("yyMMddHHmmss") + "0002",
+                        UpdatedBy = "kế toán"
+                    });
+                await db.SaveChangesAsync();
+            }
         }
 
         // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):

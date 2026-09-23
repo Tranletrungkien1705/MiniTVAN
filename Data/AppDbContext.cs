@@ -88,6 +88,7 @@ public class AppDbContext : DbContext
     public DbSet<InvoiceInputDtl> InvoiceInputDtls => Set<InvoiceInputDtl>();
     public DbSet<ProductId> ProductIds => Set<ProductId>();
     public DbSet<PrdIdCustomField> PrdIdCustomFields => Set<PrdIdCustomField>();
+    public DbSet<HistRegisterService> HistRegisterServices => Set<HistRegisterService>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -554,6 +555,11 @@ public class AppDbContext : DbContext
         b.Entity<PrdIdCustomField>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.PrdCustomFieldCode }).IsUnique();   // mỗi tổ chức một mã trường
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<HistRegisterService>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.MTDiep }).IsUnique();   // mỗi tổ chức một mã thông điệp đăng ký
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

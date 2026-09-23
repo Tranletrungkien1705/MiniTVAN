@@ -385,6 +385,28 @@ app.MapGet("/api/bulk-delete-logs", async (ITvanService svc) =>
     return Results.Ok(ls.Select(l => new { l.Id, action = l.Action.ToString(), l.DeletedCount, l.InvoiceNos, l.Note, l.By, l.CreatedAt }));
 });
 
+// Sửa lỗi hàng loạt hóa đơn theo mẫu (theo luồng Invoice_Invoice_Fix của TVAN gốc):
+// liệt kê các HĐ đã phát hành (ISSUED) chưa ký lại của một mẫu hóa đơn.
+app.MapGet("/api/bulk-fix/candidates", async (string tinvoiceCode, ITvanService svc) =>
+{
+    var ls = await svc.BulkFixCandidatesAsync(tinvoiceCode);
+    return Results.Ok(ls.Select(i => new { i.Id, i.Symbol, i.No, i.BuyerName, i.Amount, i.IssuedDate, status = i.Status.ToString() }));
+});
+
+// Ký lại hàng loạt HĐ đã phát hành chưa ký lại của một mẫu hóa đơn (theo luồng Invoice_Invoice_Fix của TVAN gốc).
+app.MapPost("/api/bulk-fix", async (BulkFixDto dto, ITvanService svc) =>
+{
+    var (ok, msg, count) = await svc.BulkFixByTemplateAsync(dto.TInvoiceCode ?? "", dto.Reason, dto.By);
+    return ok ? Results.Ok(new { fixedCount = count, msg }) : Results.BadRequest(new { error = msg });
+});
+
+// Nhật ký sửa lỗi hàng loạt hóa đơn theo mẫu.
+app.MapGet("/api/bulk-fix-logs", async (int? templateId, ITvanService svc) =>
+{
+    var ls = await svc.BulkFixLogsAsync(templateId);
+    return Results.Ok(ls.Select(l => new { l.Id, l.TemplateId, l.TInvoiceCode, l.FormNo, action = l.Action.ToString(), l.FixedCount, l.InvoiceNos, l.Reason, l.By, l.CreatedAt }));
+});
+
 // Phát hành hóa đơn đã duyệt (theo Invoice_Invoice_Issued của TVAN gốc): APPROVED → ISSUED,
 // ghi thời điểm/người phát hành + email người nhận.
 app.MapPost("/api/invoices/{id:int}/issue", async (int id, IssueDto dto, ITvanService svc) =>
@@ -1634,6 +1656,20 @@ app.MapGet("/api/prd-id-custom-fields", async (string? keyword, ITvanService svc
     return Results.Ok(ls.Select(f => new { f.PrdCustomFieldCode, f.PrdCustomFieldName, type = f.DBPhysicalType.ToString(), f.FlagActive }));
 });
 
+// Lịch sử đăng ký dịch vụ (theo Hist_RegisterServices của TVAN gốc): danh sách (lọc theo MST/loại HĐ/hình thức/trạng thái/mã loại/khoảng ngày).
+app.MapGet("/api/hist-register-services", async (string? mst, string? lhDon, string? hThuc, RegServiceStatus? status, string? mlTDiep, DateTime? fromDate, DateTime? toDate, ITvanService svc) =>
+{
+    var ls = await svc.HistRegisterServicesAsync(mst, lhDon, hThuc, status, mlTDiep, fromDate, toDate);
+    return Results.Ok(ls.Select(h => new { h.Id, h.MST, h.NGui, h.HTDK, h.LHDon, h.HThuc, h.CMa, h.CMTMTTien, h.KCMa, ptghDon = h.PTGHDon.ToString(), h.MTDiep, h.MLTDiep, h.MCCQT, h.KQua, h.MLoi, h.HDXLy, h.GChu, h.MTa, tthai = h.TThai.ToString(), h.TCTRefNo, h.UpdDTime, h.UpdBy }));
+});
+
+// Ghi một bản ghi lịch sử đăng ký dịch vụ (theo Hist_RegisterServices_Create của TVAN gốc).
+app.MapPost("/api/hist-register-services", async (HistRegisterServiceDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.CreateHistRegisterServiceAsync(dto.Mst ?? "", dto.NGui ?? DateTime.Today, dto.Htdk, dto.LhDon, dto.HThuc, dto.CMa, dto.CMTTien, dto.KCMa, dto.PtghDon, dto.MlTDiep, dto.Mccqt, dto.XmlBase64, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
@@ -1658,6 +1694,7 @@ record ApproveDto(string? FilePath, string? PdfFilePath, string? Note, string? B
 record UnapproveDto(string? Note, string? By);
 record BulkApproveDto(List<int>? Ids, string? Note, string? By);
 record BulkDeleteDto(List<int>? Ids, string? Note, string? By);
+record BulkFixDto(string? TInvoiceCode, string? Reason, string? By);
 record IssueDto(string? EmailSend, string? Note, string? By);
 record Sign60DayDto(Sign60DayFlag Flag, string? Note);
 record DynamicCommaDto(DynamicCommaStyle FlagStyle, string? By);
@@ -1733,3 +1770,4 @@ record InvoiceInputLineDto(string? ProductName, string? UnitCode, decimal Quanti
 record InvoiceInputDto(int? Id, string? Mst, string? InvoiceCode, string? RefNo, string? FormNo, string? Sign, SourceInvoiceCode SourceCode, InvoiceAdjType AdjType, PaymentMethod PaymentMethod, string? InvoiceType2, DateTime InvoiceDate, string? SellerName, string? SellerMst, string? SellerAddress, string? SellerPhone, string? SellerEmail, string? SellerBankName, string? SellerAccNo, string? BuyerName, string? BuyerMst, string? BuyerAddress, string? BuyerPhone, string? BuyerEmail, string? TInvoiceCode, string? InvoiceNo, string? EmailSend, string? InvoiceFileSpec, string? InvoiceFilePath, string? InvoicePDFFilePath, string? InvoiceVerifyCQTCode, string? CurrencyCode, decimal CurrencyRate, string? Remark, List<InvoiceInputLineDto>? Lines, string? By);
 record InvoiceInputDeleteDto(string? Reason, string? By);
 record ProductIdDto(int? Id, string? ProductId, string? SpecCode, DateTime? ProductionDate, string? LotNo, DateTime? BuyDate, string? SecretNo, DateTime? WarrantyStartDate, DateTime? WarrantyExpiredDate, int? WarrantyDuration, string? RefNo1, string? RefBiz1, string? RefNo2, string? RefBiz2, string? RefNo3, string? RefBiz3, string? Buyer, ProductIdStatus Status, string? CustomField1, string? CustomField2, string? CustomField3, string? CustomField4, string? CustomField5, string? By);
+record HistRegisterServiceDto(string? Mst, DateTime? NGui, string? Htdk, string? LhDon, string? HThuc, bool CMa, bool CMTTien, bool KCMa, RegSendMethod PtghDon, string? MlTDiep, string? Mccqt, string? XmlBase64, string? By);

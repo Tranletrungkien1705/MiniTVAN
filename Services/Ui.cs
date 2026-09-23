@@ -364,4 +364,23 @@ public static class Ui
         Models.ProductIdStatus.Locked => ("Đã khóa", "danger"),
         _ => (s.ToString(), "secondary")
     };
+
+    // Trạng thái xử lý của một bản ghi lịch sử đăng ký dịch vụ (theo Hist_RegisterServices.TThai của TVAN gốc).
+    public static (string text, string css) RegServiceStatus(Models.RegServiceStatus s) => s switch
+    {
+        Models.RegServiceStatus.Pending => ("Chờ gửi", "secondary"),
+        Models.RegServiceStatus.SentTCT => ("Đã gửi CQT", "info"),
+        Models.RegServiceStatus.Receive => ("CQT tiếp nhận", "primary"),
+        Models.RegServiceStatus.Accept  => ("CQT chấp nhận", "success"),
+        Models.RegServiceStatus.Reject  => ("CQT từ chối", "danger"),
+        _ => (s.ToString(), "secondary")
+    };
+
+    // Phương thức gửi hóa đơn tới CQT (theo TConst.PTGui của TVAN gốc).
+    public static string RegSendMethod(Models.RegSendMethod m) => m switch
+    {
+        Models.RegSendMethod.Full => "Gửi đầy đủ",
+        Models.RegSendMethod.BTH  => "Gửi tổng hợp",
+        _ => m.ToString()
+    };
 }

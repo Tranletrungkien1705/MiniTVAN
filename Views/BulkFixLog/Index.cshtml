@@ -1,0 +1,92 @@
+@model List<BulkFixLog>
+@{
+    ViewData["Title"] = "Sửa lỗi hàng loạt hóa đơn theo mẫu";
+    string? code = ViewBag.TInvoiceCode as string;
+    var candidates = ViewBag.Candidates as List<Invoice> ?? new List<Invoice>();
+}
+<div class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0"><i class="bi bi-tools me-1"></i>Sửa lỗi hàng loạt hóa đơn theo mẫu</h6>
+        <a class="small" href="/InvoiceTemplate">Mẫu &amp; cấp số HĐ</a>
+    </div>
+    <p class="small text-muted mb-3">
+        Nhập mã mẫu hóa đơn để liệt kê các hóa đơn đã phát hành (ISSUED) <b>chưa ký lại</b> của mẫu đó,
+        sau đó ký lại hàng loạt khi mẫu/nội dung có sai sót (theo luồng <code>Invoice_Invoice_Fix</code> của TVAN gốc).
+    </p>
+    <form method="get" action="/BulkFixLog" class="row g-2 align-items-end">
+        <div class="col-auto">
+            <label class="form-label small mb-1">Mã mẫu hóa đơn</label>
+            <input name="tinvoiceCode" value="@code" class="form-control form-control-sm" placeholder="VD TINV-1C26TAA" />
+        </div>
+        <div class="col-auto"><button class="btn btn-sm btn-outline-primary">Tìm hóa đơn cần sửa</button></div>
+    </form>
+
+    @if (!string.IsNullOrWhiteSpace(code))
+    {
+        <hr />
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="small fw-bold">Hóa đơn cần sửa lỗi của mẫu <code>@code</code>: @candidates.Count</span>
+        </div>
+        @if (candidates.Count > 0)
+        {
+            <table class="table table-sm table-hover align-middle mb-3">
+                <thead><tr><th>Số HĐ</th><th>Ký hiệu</th><th>Người mua</th><th class="text-end">Tiền hàng</th><th>Ngày HĐ</th></tr></thead>
+                <tbody>
+                @foreach (var i in candidates)
+                {
+                    <tr>
+                        <td class="small"><a href="/Invoice/Detail/@i.Id">@i.No</a></td>
+                        <td class="small">@i.Symbol</td>
+                        <td class="small">@i.BuyerName</td>
+                        <td class="small text-end">@i.Amount.ToString("N0")</td>
+                        <td class="small text-muted">@i.IssuedDate.ToString("dd/MM/yyyy")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            <form method="post" action="/BulkFixLog/Fix" class="row g-2 align-items-end">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="tinvoiceCode" value="@code" />
+                <div class="col-md-5">
+                    <label class="form-label small mb-1">Lý do sửa lỗi</label>
+                    <input name="reason" class="form-control form-control-sm" placeholder="VD sai thuế suất, lỗi chữ ký..." />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">Người thực hiện</label>
+                    <input name="by" class="form-control form-control-sm" placeholder="kế toán" />
+                </div>
+                <div class="col-auto">
+                    <button class="btn btn-sm btn-primary" onclick="return confirm('Ký lại hàng loạt @candidates.Count hóa đơn của mẫu @code?');">
+                        <i class="bi bi-vector-pen me-1"></i>Ký lại hàng loạt
+                    </button>
+                </div>
+            </form>
+        }
+        else
+        {
+            <div class="alert alert-info small mb-0">Không có hóa đơn đã phát hành nào cần sửa lỗi cho mẫu này.</div>
+        }
+    }
+</div></div>
+
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-3"><i class="bi bi-clock-history me-1"></i>Nhật ký sửa lỗi hàng loạt</h6>
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Thời điểm</th><th>Mẫu hóa đơn</th><th>Mẫu số</th><th>Số HĐ đã sửa</th><th>Danh sách số hóa đơn</th><th>Lý do</th><th>Người thực hiện</th></tr></thead>
+        <tbody>
+        @foreach (var l in Model)
+        {
+            <tr>
+                <td class="small text-muted">@l.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                <td class="small">@l.TInvoiceCode</td>
+                <td class="small">@l.FormNo</td>
+                <td class="small fw-bold">@l.FixedCount</td>
+                <td class="small text-break">@l.InvoiceNos</td>
+                <td class="small text-muted">@l.Reason</td>
+                <td class="small text-muted">@l.By</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có lần sửa lỗi hàng loạt nào.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

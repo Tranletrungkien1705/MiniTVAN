@@ -306,6 +306,11 @@ public interface ITvanService
     Task<(bool ok, string msg, int id)> SaveProductIdAsync(int? id, string productId, string specCode, DateTime? productionDate, string? lotNo, DateTime? buyDate, string? secretNo, DateTime? warrantyStartDate, DateTime? warrantyExpiredDate, int? warrantyDuration, string? refNo1, string? refBiz1, string? refNo2, string? refBiz2, string? refNo3, string? refBiz3, string? buyer, ProductIdStatus status, string? customField1, string? customField2, string? customField3, string? customField4, string? customField5, string? by);
     Task<(bool ok, string msg)> DeleteProductIdAsync(int id);
     Task<List<PrdIdCustomField>> PrdIdCustomFieldsAsync(string? keyword);
+
+    // Lịch sử đăng ký dịch vụ (theo Hist_RegisterServices của TVAN gốc)
+    Task<List<HistRegisterService>> HistRegisterServicesAsync(string? mst, string? lhDon, string? hThuc, RegServiceStatus? status, string? mlTDiep, DateTime? fromDate, DateTime? toDate);
+    Task<HistRegisterService?> GetHistRegisterServiceAsync(int id);
+    Task<(bool ok, string msg, int id)> CreateHistRegisterServiceAsync(string mst, DateTime ngui, string? htdk, string? lhDon, string? hThuc, bool cMa, bool cMTTien, bool kCMa, RegSendMethod ptghDon, string? mlTDiep, string? mccqt, string? xmlBase64, string? by);
 }
 
 // Hồ sơ NNT đầy đủ dùng khi lưu (theo Mst_NNT_Create/Update của TVAN gốc).
@@ -5894,5 +5899,72 @@ public class TvanService(AppDbContext db) : ITvanService
             q = q.Where(f => f.PrdCustomFieldCode.Contains(k) || f.PrdCustomFieldName.Contains(k));
         }
         return q.OrderBy(f => f.PrdCustomFieldCode).ToListAsync();
+    }
+
+    // ===== Lịch sử đăng ký dịch vụ (theo Hist_RegisterServices của TVAN gốc — màn Hist_RegisterServicesController) =====
+
+    // Danh sách lịch sử đăng ký dịch vụ (lọc theo MST, loại hóa đơn, hình thức, trạng thái, mã loại thông điệp, khoảng ngày gửi).
+    public Task<List<HistRegisterService>> HistRegisterServicesAsync(string? mst, string? lhDon, string? hThuc, RegServiceStatus? status, string? mlTDiep, DateTime? fromDate, DateTime? toDate)
+    {
+        var q = db.HistRegisterServices.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(mst)) q = q.Where(h => h.MST == mst.Trim());
+        if (!string.IsNullOrWhiteSpace(lhDon)) q = q.Where(h => h.LHDon != null && h.LHDon.Contains(lhDon.Trim()));
+        if (!string.IsNullOrWhiteSpace(hThuc))
+        {
+            // Hình thức: C = có mã, CMTMTTien = máy tính tiền có mã, K = không mã (theo strWhereClause_Hist_RegisterServices của TVAN gốc).
+            var ht = hThuc.Trim();
+            if (ht.Equals("C", StringComparison.OrdinalIgnoreCase)) q = q.Where(h => h.CMa);
+            else if (ht.Equals("CMTMTTien", StringComparison.OrdinalIgnoreCase)) q = q.Where(h => h.CMTMTTien);
+            else if (ht.Equals("K", StringComparison.OrdinalIgnoreCase)) q = q.Where(h => h.KCMa);
+        }
+        if (status.HasValue) q = q.Where(h => h.TThai == status.Value);
+        if (!string.IsNullOrWhiteSpace(mlTDiep)) q = q.Where(h => h.MLTDiep == mlTDiep.Trim());
+        if (fromDate.HasValue) q = q.Where(h => h.NGui >= fromDate.Value.Date);
+        if (toDate.HasValue) q = q.Where(h => h.NGui <= toDate.Value.Date);
+        return q.OrderByDescending(h => h.NGui).ThenByDescending(h => h.Id).ToListAsync();
+    }
+
+    public Task<HistRegisterService?> GetHistRegisterServiceAsync(int id) =>
+        db.HistRegisterServices.FirstOrDefaultAsync(h => h.Id == id);
+
+    // Ghi một bản ghi lịch sử đăng ký dịch vụ (theo Hist_RegisterServices_CreateX của TVAN gốc):
+    // chặn thiếu MST/hình thức đăng ký/loại hóa đơn/hình thức/phương thức gửi; sinh mã thông điệp (K) nếu chưa có;
+    // lưu ở trạng thái đã gửi CQT (SENTTCT) kèm mã tham chiếu TCT (mã V).
+    public async Task<(bool ok, string msg, int id)> CreateHistRegisterServiceAsync(string mst, DateTime ngui, string? htdk, string? lhDon, string? hThuc, bool cMa, bool cMTTien, bool kCMa, RegSendMethod ptghDon, string? mlTDiep, string? mccqt, string? xmlBase64, string? by)
+    {
+        mst = (mst ?? "").Trim();
+        if (mst.Length == 0) return (false, "Cần mã số thuế (MST).", 0);
+        if (string.IsNullOrWhiteSpace(htdk)) return (false, "Cần hình thức đăng ký (HTDK).", 0);
+        if (string.IsNullOrWhiteSpace(lhDon)) return (false, "Cần loại hóa đơn đăng ký (LHDon).", 0);
+        if (string.IsNullOrWhiteSpace(hThuc)) return (false, "Cần hình thức (HThuc: C/K).", 0);
+
+        // Sinh mã thông điệp (mã K) nếu chưa có — duy nhất trong tổ chức.
+        var mtDiep = $"K{DateTime.UtcNow:yyyyMMddHHmmss}{Guid.NewGuid().ToString("N")[..4]}";
+        var tctRefNo = $"V{DateTime.UtcNow:yyyyMMddHHmmss}{Guid.NewGuid().ToString("N")[..4]}";
+
+        var e = new HistRegisterService
+        {
+            MST = mst,
+            NGui = ngui.Date,
+            HTDK = htdk.Trim(),
+            LHDon = lhDon.Trim(),
+            HThuc = hThuc.Trim(),
+            CMa = cMa,
+            CMTMTTien = cMTTien,
+            KCMa = kCMa,
+            PTGHDon = ptghDon,
+            MTDiep = mtDiep,
+            MLTDiep = string.IsNullOrWhiteSpace(mlTDiep) ? "100" : mlTDiep.Trim(),
+            MCCQT = mccqt,
+            KQua = "CQT đã tiếp nhận tờ khai đăng ký dịch vụ.",
+            TThai = RegServiceStatus.SentTCT,
+            TCTRefNo = tctRefNo,
+            XmlBase64 = xmlBase64,
+            UpdatedAt = DateTime.UtcNow,
+            UpdatedBy = by
+        };
+        db.HistRegisterServices.Add(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã gửi cơ quan thuế thành công! Mã thông điệp: {mtDiep}", e.Id);
     }
 }

@@ -1,0 +1,137 @@
+@model List<HistRegisterService>
+@{
+    ViewData["Title"] = "Lịch sử đăng ký dịch vụ";
+    var mst = ViewBag.Mst as string;
+    var lhDon = ViewBag.LhDon as string;
+    var hThuc = ViewBag.HThuc as string;
+    var status = ViewBag.Status as RegServiceStatus?;
+    var mlTDiep = ViewBag.MlTDiep as string;
+    var fromDate = ViewBag.FromDate as DateTime?;
+    var toDate = ViewBag.ToDate as DateTime?;
+    var nnts = ViewBag.Nnts as List<Nnt> ?? new List<Nnt>();
+    string D(DateTime? d) => d.HasValue ? d.Value.ToString("dd/MM/yyyy") : "—";
+    string NntName(string m) => nnts.FirstOrDefault(x => x.Mst == m)?.Name ?? "";
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-journal-text me-1"></i>Lịch sử đăng ký dịch vụ</h6>
+            </div>
+            <form method="get" action="/HistRegisterService" class="row g-2 mb-3">
+                <div class="col-md-3">
+                    <select name="mst" class="form-select form-select-sm">
+                        <option value="">— Tất cả NNT —</option>
+                        @foreach (var n in nnts)
+                        {
+                            <option value="@n.Mst" selected="@(n.Mst == mst)">@n.Mst — @n.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2"><input name="lhDon" value="@lhDon" class="form-control form-control-sm" placeholder="Loại HĐ (1,2..)" /></div>
+                <div class="col-md-2">
+                    <select name="hThuc" class="form-select form-select-sm">
+                        <option value="">— Hình thức —</option>
+                        <option value="C" selected="@(hThuc == "C")">Có mã</option>
+                        <option value="CMTMTTien" selected="@(hThuc == "CMTMTTien")">Máy tính tiền có mã</option>
+                        <option value="K" selected="@(hThuc == "K")">Không mã</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="">— Trạng thái —</option>
+                        @foreach (var st in Enum.GetValues<RegServiceStatus>())
+                        {
+                            var (t, _) = Ui.RegServiceStatus(st);
+                            <option value="@((int)st)" selected="@(status == st)">@t</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2"><input name="mlTDiep" value="@mlTDiep" class="form-control form-control-sm" placeholder="Mã loại (100..)" /></div>
+                <div class="col-md-3"><input name="fromDate" type="date" value="@(fromDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" /></div>
+                <div class="col-md-3"><input name="toDate" type="date" value="@(toDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" /></div>
+                <div class="col-md-2"><button class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-search"></i> Lọc</button></div>
+            </form>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Ngày gửi</th><th>MST</th><th>Loại HĐ</th><th>Hình thức</th><th>Mã thông điệp</th><th>Kết quả</th><th>Trạng thái</th></tr></thead>
+                <tbody>
+                @foreach (var h in Model)
+                {
+                    var (stText, stCss) = Ui.RegServiceStatus(h.TThai);
+                    <tr>
+                        <td class="small">@D(h.NGui)</td>
+                        <td>
+                            <span class="fw-semibold">@h.MST</span>
+                            @if (!string.IsNullOrWhiteSpace(NntName(h.MST))) { <div class="small text-muted">@NntName(h.MST)</div> }
+                        </td>
+                        <td class="small">@(string.IsNullOrWhiteSpace(h.LHDon) ? "—" : h.LHDon)</td>
+                        <td class="small">
+                            @(h.CMa ? "Có mã" : h.CMTMTTien ? "MTT có mã" : h.KCMa ? "Không mã" : "—")
+                            <div class="text-muted">@Ui.RegSendMethod(h.PTGHDon)</div>
+                        </td>
+                        <td class="small">
+                            <span class="fw-semibold">@h.MTDiep</span>
+                            <div class="text-muted">Loại: @h.MLTDiep</div>
+                        </td>
+                        <td class="small">
+                            @(string.IsNullOrWhiteSpace(h.KQua) ? "—" : h.KQua)
+                            @if (!string.IsNullOrWhiteSpace(h.TCTRefNo)) { <div class="text-muted">Mã V: @h.TCTRefNo</div> }
+                        </td>
+                        <td><span class="badge bg-@stCss">@stText</span></td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có bản ghi đăng ký dịch vụ nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-send-plus me-1"></i>Gửi tờ khai đăng ký dịch vụ</h6>
+            <form method="post" action="/HistRegisterService/Create" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12">
+                    <label class="form-label small mb-1">Người nộp thuế (MST)</label>
+                    <select name="mst" class="form-select form-select-sm" required>
+                        <option value="">— Chọn NNT —</option>
+                        @foreach (var n in nnts)
+                        {
+                            <option value="@n.Mst">@n.Mst — @n.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6"><label class="form-label small mb-1">Ngày gửi</label><input name="ngui" type="date" value="@DateTime.Today.ToString("yyyy-MM-dd")" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Hình thức đăng ký</label><input name="htdk" class="form-control form-control-sm" placeholder="Mới / Thay đổi" required /></div>
+                <div class="col-12"><label class="form-label small mb-1">Loại hóa đơn đăng ký</label><input name="lhDon" class="form-control form-control-sm" placeholder="VD: 1,2 (GTGT, bán hàng)" required /></div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">Hình thức</label>
+                    <select name="hThuc" class="form-select form-select-sm" required>
+                        <option value="C">Có mã</option>
+                        <option value="K">Không mã</option>
+                    </select>
+                </div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">Phương thức gửi</label>
+                    <select name="ptghDon" class="form-select form-select-sm">
+                        @foreach (var m in Enum.GetValues<RegSendMethod>())
+                        {
+                            <option value="@((int)m)">@Ui.RegSendMethod(m)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12">
+                    <div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="cMa" value="true" id="cMa" /><label class="form-check-label small" for="cMa">Có mã</label></div>
+                    <div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="cMTTien" value="true" id="cMTTien" /><label class="form-check-label small" for="cMTTien">MTT có mã</label></div>
+                    <div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="kCMa" value="true" id="kCMa" /><label class="form-check-label small" for="kCMa">Không mã</label></div>
+                </div>
+                <div class="col-6"><label class="form-label small mb-1">Mã loại thông điệp</label><input name="mlTDiep" class="form-control form-control-sm" placeholder="100" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Mã CQT (MTT)</label><input name="mccqt" class="form-control form-control-sm" placeholder="(tùy chọn)" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Nội dung tờ khai (base64 XML)</label><textarea name="xmlBase64" class="form-control form-control-sm" rows="2" placeholder="(tùy chọn)"></textarea></div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Gửi cơ quan thuế</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Hệ thống sinh mã thông điệp (mã K) + mã tham chiếu TCT (mã V) và lưu ở trạng thái "Đã gửi CQT".</p>
+        </div></div>
+    </div>
+</div>

@@ -574,6 +574,27 @@ public class BulkDeleteLogController(ITvanService svc) : Controller
     public async Task<IActionResult> Index() => View(await svc.BulkDeleteLogsAsync());
 }
 
+// Sửa lỗi hàng loạt hóa đơn theo mẫu (theo luồng Invoice_Invoice_Fix của TVAN gốc):
+// nhập mã mẫu hóa đơn → liệt kê các HĐ đã phát hành (ISSUED) chưa ký lại của mẫu → ký lại hàng loạt.
+public class BulkFixLogController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? tinvoiceCode)
+    {
+        ViewBag.TInvoiceCode = tinvoiceCode;
+        ViewBag.Candidates = string.IsNullOrWhiteSpace(tinvoiceCode) ? new List<Invoice>() : await svc.BulkFixCandidatesAsync(tinvoiceCode);
+        return View(await svc.BulkFixLogsAsync(null));
+    }
+
+    // Ký lại hàng loạt HĐ đã phát hành chưa ký lại của một mẫu hóa đơn (theo luồng Invoice_Invoice_Fix của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Fix(string tinvoiceCode, string? reason, string? by)
+    {
+        var (ok, msg, _) = await svc.BulkFixByTemplateAsync(tinvoiceCode, reason, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index), new { tinvoiceCode });
+    }
+}
+
 // Nhật ký phát hành hóa đơn (theo Invoice_Invoice_Issued của TVAN gốc).
 public class IssueLogController(ITvanService svc) : Controller
 {
@@ -2110,6 +2131,32 @@ public class ProductIdController(ITvanService svc) : Controller
     public async Task<IActionResult> Delete(int id)
     {
         var (ok, msg) = await svc.DeleteProductIdAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
+// Lịch sử đăng ký dịch vụ (theo Hist_RegisterServicesController của TVAN gốc):
+// danh sách các lần NNT gửi tờ khai đăng ký/thay đổi thông tin sử dụng HĐT tới cơ quan thuế.
+public class HistRegisterServiceController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? mst, string? lhDon, string? hThuc, RegServiceStatus? status, string? mlTDiep, DateTime? fromDate, DateTime? toDate)
+    {
+        ViewBag.Mst = mst;
+        ViewBag.LhDon = lhDon;
+        ViewBag.HThuc = hThuc;
+        ViewBag.Status = status;
+        ViewBag.MlTDiep = mlTDiep;
+        ViewBag.FromDate = fromDate;
+        ViewBag.ToDate = toDate;
+        ViewBag.Nnts = await svc.NntsAsync();
+        return View(await svc.HistRegisterServicesAsync(mst, lhDon, hThuc, status, mlTDiep, fromDate, toDate));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string mst, DateTime? ngui, string? htdk, string? lhDon, string? hThuc, bool cMa, bool cMTTien, bool kCMa, RegSendMethod ptghDon, string? mlTDiep, string? mccqt, string? xmlBase64, string? by)
+    {
+        var (ok, msg, _) = await svc.CreateHistRegisterServiceAsync(mst, ngui ?? DateTime.Today, htdk, lhDon, hThuc, cMa, cMTTien, kCMa, ptghDon, mlTDiep, mccqt, xmlBase64, by);
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Index));
     }
