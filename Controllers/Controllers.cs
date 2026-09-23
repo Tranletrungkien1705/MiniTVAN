@@ -198,6 +198,15 @@ public class InvoiceController(ITvanService svc) : Controller
         return RedirectToAction(nameof(Detail), new { id });
     }
 
+    // Cập nhật thời điểm gửi mail hóa đơn (theo Invoice_Invoice_UpdMailSentDTimeUTC của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateMailSent(int id, DateTime? mailSentDTimeUTC, string? by)
+    {
+        var (ok, msg) = await svc.UpdateMailSentAsync(id, mailSentDTimeUTC, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
     // In chuyển đổi hóa đơn (theo Invoice_Invoice.FlagChange của TVAN gốc).
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> ConversionPrint(int id, string? note, string? by)
@@ -1209,6 +1218,39 @@ public class SpecUnitController(ITvanService svc) : Controller
     public async Task<IActionResult> Delete(int id)
     {
         var (ok, msg) = await svc.DeleteSpecUnitAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
+// Bảng giá sản phẩm (theo Mst_SpecPrice của TVAN gốc — màn OS_PrdCenter_Mst_SpecPriceController):
+// mỗi sản phẩm theo một đơn vị tính có giá mua/giá bán/loại tiền/chiết khấu/thuế suất + hiệu lực.
+public class SpecPriceController(ITvanService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? keyword, string? specCode, string? unitCode)
+    {
+        ViewBag.Keyword = keyword;
+        ViewBag.SpecCode = specCode;
+        ViewBag.UnitCode = unitCode;
+        ViewBag.Specs = await svc.SpecsAsync(null, null, null, null);
+        ViewBag.Units = await svc.UnitsAsync(null);
+        ViewBag.Currencies = await svc.CurrencyExesAsync(null);
+        ViewBag.VatRates = await svc.VatRatesAsync(null);
+        return View(await svc.SpecPricesAsync(keyword, specCode, unitCode));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int? id, string specCode, string unitCode, decimal buyPrice, decimal sellPrice, string currencyCode, decimal discountVnd, string? vatRateCode, DateTime? effectDTimeStart, DateTime? effectDTimeEnd, string? remark, bool active, string? by)
+    {
+        var (ok, msg, _) = await svc.SaveSpecPriceAsync(id, specCode, unitCode, buyPrice, sellPrice, currencyCode, discountVnd, vatRateCode, effectDTimeStart, effectDTimeEnd, remark, active, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteSpecPriceAsync(id);
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Index));
     }

@@ -50,6 +50,7 @@ public interface ITvanService
     Task<(bool ok, string msg, NntLookupLog? log)> LookupNntByMstAsync(string mst);
     Task<List<InvoiceEmailLog>> EmailLogsAsync(int? invoiceId);
     Task<(bool ok, string msg, int id)> SendInvoiceEmailAsync(int invoiceId, string? toEmail, string? sentBy);
+    Task<(bool ok, string msg)> UpdateMailSentAsync(int invoiceId, DateTime? mailSentDTimeUTC, string? by);
     Task<(bool ok, string msg)> MarkConversionPrintedAsync(int invoiceId, string? note, string? by);
     Task<(bool ok, string msg)> ResetConversionPrintAsync(int invoiceId, string? note, string? by);
     Task<List<ConversionPrintLog>> ConversionPrintLogsAsync(int? invoiceId);
@@ -161,6 +162,10 @@ public interface ITvanService
     Task<SpecUnit?> GetSpecUnitAsync(int id);
     Task<(bool ok, string msg, int id)> SaveSpecUnitAsync(int? id, string specCode, string unitCode, string standardUnitCode, string? desc, decimal qty, decimal? length, decimal? width, decimal? height, decimal? volume, decimal? weight, string? remark, bool active, string? by);
     Task<(bool ok, string msg)> DeleteSpecUnitAsync(int id);
+    Task<List<SpecPrice>> SpecPricesAsync(string? keyword, string? specCode, string? unitCode);
+    Task<SpecPrice?> GetSpecPriceAsync(int id);
+    Task<(bool ok, string msg, int id)> SaveSpecPriceAsync(int? id, string specCode, string unitCode, decimal buyPrice, decimal sellPrice, string currencyCode, decimal discountVnd, string? vatRateCode, DateTime? effectDTimeStart, DateTime? effectDTimeEnd, string? remark, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteSpecPriceAsync(int id);
     Task<List<MstTypeCode>> TypeCodesAsync(string? keyword);
     Task<MstTypeCode?> GetTypeCodeAsync(int id);
     Task<(bool ok, string msg, int id)> SaveTypeCodeAsync(int? id, string code, string? desc, string? group, bool active, string? by);
@@ -1202,6 +1207,29 @@ public class TvanService(AppDbContext db) : ITvanService
         var q = db.InvoiceEmailLogs.Include(l => l.Invoice).AsQueryable();
         if (invoiceId.HasValue) q = q.Where(l => l.InvoiceId == invoiceId.Value);
         return q.OrderByDescending(l => l.Id).Take(50).ToListAsync();
+    }
+
+    // Cập nhật thời điểm gửi mail hóa đơn (theo Invoice_Invoice_UpdMailSentDTimeUTC của TVAN gốc):
+    // chỉ ghi được cho hóa đơn ĐÃ PHÁT HÀNH (Accepted) và CHƯA từng gửi mail (MailSentDTimeUTC rỗng);
+    // đồng thời gương thời điểm sang SendEmailDTimeUTC và ghi người gửi (SendEmailBy).
+    public async Task<(bool ok, string msg)> UpdateMailSentAsync(int invoiceId, DateTime? mailSentDTimeUTC, string? by)
+    {
+        var inv = await db.Invoices.Include(i => i.Nnt).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.");
+        if (inv.Status != InvoiceStatus.Accepted) return (false, "Chỉ cập nhật thời điểm gửi mail được cho hóa đơn đã được CQT chấp nhận.");
+        if (inv.MailSentDTimeUTC.HasValue) return (false, "Hóa đơn đã có thời điểm gửi mail, không cập nhật lại.");
+
+        var sentAt = mailSentDTimeUTC ?? DateTime.UtcNow;
+        inv.MailSentDTimeUTC = sentAt;
+        inv.SendEmailDTimeUTC = sentAt;   // nguồn: t.SendEmailDTimeUTC = f.MailSentDTimeUTC
+        inv.SendEmailBy = by;
+        db.Messages.Add(new TranMessage
+        {
+            InvoiceId = inv.Id, NntId = inv.NntId, Type = MsgType.SendInvoice, Dir = MsgDir.Out,
+            Code = inv.TctCode, Text = $"Cập nhật thời điểm gửi mail hóa đơn {inv.Symbol}-{inv.No}: {sentAt:dd/MM/yyyy HH:mm}."
+        });
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật thời điểm gửi mail hóa đơn {inv.Symbol}-{inv.No}.");
     }
 
     // In chuyển đổi hóa đơn (theo Invoice_Invoice.FlagChange của TVAN gốc):
@@ -3577,6 +3605,118 @@ public class TvanService(AppDbContext db) : ITvanService
         db.SpecUnits.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa đơn vị quy đổi {label}.");
+    }
+
+    // Bảng giá sản phẩm (theo Mst_SpecPrice của TVAN gốc — màn OS_PrdCenter_Mst_SpecPriceController):
+    // danh sách bảng giá (lọc theo từ khóa mã SP/mã ĐVT/ghi chú + sản phẩm + đơn vị nếu có).
+    public Task<List<SpecPrice>> SpecPricesAsync(string? keyword, string? specCode, string? unitCode)
+    {
+        var q = db.SpecPrices.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.SpecCode.Contains(k) || t.UnitCode.Contains(k)
+                || (t.Remark != null && t.Remark.Contains(k)));
+        }
+        if (!string.IsNullOrWhiteSpace(specCode))
+        {
+            var v = specCode.Trim();
+            q = q.Where(t => t.SpecCode == v);
+        }
+        if (!string.IsNullOrWhiteSpace(unitCode))
+        {
+            var v = unitCode.Trim();
+            q = q.Where(t => t.UnitCode == v);
+        }
+        return q.OrderBy(t => t.SpecCode).ThenBy(t => t.UnitCode).ToListAsync();
+    }
+
+    public Task<SpecPrice?> GetSpecPriceAsync(int id) =>
+        db.SpecPrices.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) bảng giá theo khóa nghiệp vụ (OrgId, SpecCode, UnitCode)
+    // (theo Mst_SpecPrice_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã sản phẩm + mã đơn vị tính + loại tiền (Mst_SpecPrice_Create_Invalid...);
+    //  - sản phẩm phải tồn tại + đang dùng (Mst_Spec_CheckDB);
+    //  - đơn vị tính phải tồn tại + đang dùng (Mst_Unit_CheckDB);
+    //  - loại tiền phải tồn tại + đang dùng (Mst_CurrencyEx_CheckDB);
+    //  - thuế suất (nếu khai báo) phải tồn tại + đang dùng (Mst_VATRate_CheckDB);
+    //  - khi tạo: cặp (sản phẩm, đơn vị) chưa tồn tại (Mst_SpecPrice_CheckDB_SpecPriceExist).
+    public async Task<(bool ok, string msg, int id)> SaveSpecPriceAsync(int? id, string specCode, string unitCode, decimal buyPrice, decimal sellPrice, string currencyCode, decimal discountVnd, string? vatRateCode, DateTime? effectDTimeStart, DateTime? effectDTimeEnd, string? remark, bool active, string? by)
+    {
+        specCode = (specCode ?? "").Trim();
+        unitCode = (unitCode ?? "").Trim();
+        currencyCode = (currencyCode ?? "").Trim();
+        vatRateCode = string.IsNullOrWhiteSpace(vatRateCode) ? null : vatRateCode.Trim();
+        if (specCode.Length == 0) return (false, "Cần mã sản phẩm.", 0);
+        if (unitCode.Length == 0) return (false, "Cần mã đơn vị tính.", 0);
+        if (currencyCode.Length == 0) return (false, "Cần loại tiền.", 0);
+
+        var spec = await db.Specs.FirstOrDefaultAsync(t => t.SpecCode == specCode);
+        if (spec == null) return (false, $"Sản phẩm {specCode} không tồn tại.", 0);
+        if (!spec.FlagActive) return (false, $"Sản phẩm {specCode} đã ngừng dùng.", 0);
+
+        var unit = await db.Units.FirstOrDefaultAsync(t => t.UnitCode == unitCode);
+        if (unit == null) return (false, $"Đơn vị tính {unitCode} không tồn tại.", 0);
+        if (!unit.FlagActive) return (false, $"Đơn vị tính {unitCode} đã ngừng dùng.", 0);
+
+        var cur = await db.CurrencyExes.FirstOrDefaultAsync(t => t.CurrencyCode == currencyCode);
+        if (cur == null) return (false, $"Loại tiền {currencyCode} không tồn tại.", 0);
+        if (!cur.FlagActive) return (false, $"Loại tiền {currencyCode} đã ngừng dùng.", 0);
+
+        if (vatRateCode != null)
+        {
+            var vat = await db.VatRates.FirstOrDefaultAsync(t => t.VATRateCode == vatRateCode);
+            if (vat == null) return (false, $"Thuế suất {vatRateCode} không tồn tại.", 0);
+            if (!vat.FlagActive) return (false, $"Thuế suất {vatRateCode} đã ngừng dùng.", 0);
+        }
+
+        SpecPrice? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.SpecPrices.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.SpecPrices.FirstOrDefaultAsync(t => t.SpecCode == specCode && t.UnitCode == unitCode);
+
+        if (e == null)
+        {
+            if (await db.SpecPrices.AnyAsync(t => t.SpecCode == specCode && t.UnitCode == unitCode))
+                return (false, $"Bảng giá {unitCode} của sản phẩm {specCode} đã tồn tại.", 0);
+            e = new SpecPrice { SpecCode = specCode, UnitCode = unitCode };
+            db.SpecPrices.Add(e);
+        }
+        else
+        {
+            // Đổi khóa (sản phẩm, đơn vị): chặn trùng với bản ghi khác.
+            if ((!string.Equals(e.SpecCode, specCode, StringComparison.OrdinalIgnoreCase)
+                 || !string.Equals(e.UnitCode, unitCode, StringComparison.OrdinalIgnoreCase))
+                && await db.SpecPrices.AnyAsync(t => t.SpecCode == specCode && t.UnitCode == unitCode && t.Id != e.Id))
+                return (false, $"Bảng giá {unitCode} của sản phẩm {specCode} đã tồn tại.", 0);
+            e.SpecCode = specCode;
+            e.UnitCode = unitCode;
+        }
+
+        e.BuyPrice = buyPrice;
+        e.SellPrice = sellPrice;
+        e.CurrencyCode = currencyCode;
+        e.DiscountVND = discountVnd;
+        e.VATRateCode = vatRateCode;
+        e.EffectDTimeStart = effectDTimeStart;
+        e.EffectDTimeEnd = effectDTimeEnd;
+        e.Remark = remark;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu bảng giá {unitCode} của sản phẩm {specCode}.", e.Id);
+    }
+
+    // Xóa bảng giá theo id (theo Mst_SpecPrice_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteSpecPriceAsync(int id)
+    {
+        var e = await db.SpecPrices.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy bảng giá.");
+        var label = $"{e.UnitCode} / {e.SpecCode}";
+        db.SpecPrices.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa bảng giá {label}.");
     }
 
     // Danh mục mã loại (theo Mst_TypeCode của TVAN gốc):

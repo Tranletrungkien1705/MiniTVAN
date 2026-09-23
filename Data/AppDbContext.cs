@@ -75,6 +75,7 @@ public class AppDbContext : DbContext
     public DbSet<SpecType2> SpecType2s => Set<SpecType2>();
     public DbSet<Spec> Specs => Set<Spec>();
     public DbSet<SpecUnit> SpecUnits => Set<SpecUnit>();
+    public DbSet<SpecPrice> SpecPrices => Set<SpecPrice>();
     public DbSet<TvanInteg> TvanIntegs => Set<TvanInteg>();
     public DbSet<MstTypeCode> TypeCodes => Set<MstTypeCode>();
     public DbSet<TctTransactionLog> TctTransactionLogs => Set<TctTransactionLog>();
@@ -465,6 +466,14 @@ public class AppDbContext : DbContext
             e.Property(x => x.Volume).HasPrecision(18, 2);
             e.Property(x => x.Weight).HasPrecision(18, 2);
             e.HasIndex(x => new { x.OrgId, x.SpecCode, x.UnitCode }).IsUnique();   // mỗi sản phẩm một đơn vị quy đổi
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SpecPrice>(e =>
+        {
+            e.Property(x => x.BuyPrice).HasPrecision(18, 2);
+            e.Property(x => x.SellPrice).HasPrecision(18, 2);
+            e.Property(x => x.DiscountVND).HasPrecision(18, 2);
+            e.HasIndex(x => new { x.OrgId, x.SpecCode, x.UnitCode }).IsUnique();   // mỗi sản phẩm một bảng giá theo đơn vị
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<TvanInteg>(e =>

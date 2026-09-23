@@ -1,0 +1,140 @@
+@model List<SpecPrice>
+@{
+    ViewData["Title"] = "Bảng giá sản phẩm";
+    var keyword = ViewBag.Keyword as string;
+    var specCode = ViewBag.SpecCode as string;
+    var unitCode = ViewBag.UnitCode as string;
+    var specs = ViewBag.Specs as List<Spec> ?? new List<Spec>();
+    var units = ViewBag.Units as List<Unit> ?? new List<Unit>();
+    var currencies = ViewBag.Currencies as List<CurrencyEx> ?? new List<CurrencyEx>();
+    var vatRates = ViewBag.VatRates as List<VatRate> ?? new List<VatRate>();
+    string Sp(string? c) => specs.FirstOrDefault(x => x.SpecCode == c)?.SpecName ?? c ?? "";
+    string Un(string? c) => units.FirstOrDefault(x => x.UnitCode == c)?.UnitName ?? c ?? "";
+    string Money(decimal v) => v.ToString("N0");
+    string D(DateTime? d) => d.HasValue ? d.Value.ToString("dd/MM/yyyy") : "—";
+}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card"><div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-cash-coin me-1"></i>Bảng giá sản phẩm</h6>
+                <form method="get" action="/SpecPrice" class="d-flex gap-2 flex-wrap">
+                    <select name="specCode" class="form-select form-select-sm" style="width:auto">
+                        <option value="">— Tất cả sản phẩm —</option>
+                        @foreach (var s in specs)
+                        {
+                            <option value="@s.SpecCode" selected="@(s.SpecCode == specCode)">@s.SpecCode — @s.SpecName</option>
+                        }
+                    </select>
+                    <select name="unitCode" class="form-select form-select-sm" style="width:auto">
+                        <option value="">— Tất cả đơn vị —</option>
+                        @foreach (var u in units)
+                        {
+                            <option value="@u.UnitCode" selected="@(u.UnitCode == unitCode)">@u.UnitCode — @u.UnitName</option>
+                        }
+                    </select>
+                    <input name="keyword" value="@keyword" class="form-control form-control-sm" placeholder="Tìm mã SP / ĐVT / ghi chú" />
+                    <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Sản phẩm</th><th>Đơn vị</th><th class="text-end">Giá mua</th><th class="text-end">Giá bán</th><th>Tiền</th><th class="text-end">Chiết khấu</th><th>Thuế suất</th><th>Hiệu lực</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var t in Model)
+                {
+                    <tr>
+                        <td>
+                            <span class="fw-semibold">@t.SpecCode</span>
+                            <div class="small text-muted">@Sp(t.SpecCode)</div>
+                        </td>
+                        <td>
+                            <span class="badge bg-primary-subtle text-primary-emphasis">@t.UnitCode</span>
+                            <div class="small text-muted">@Un(t.UnitCode)</div>
+                        </td>
+                        <td class="text-end small">@Money(t.BuyPrice)</td>
+                        <td class="text-end small fw-semibold">@Money(t.SellPrice)</td>
+                        <td class="small">@t.CurrencyCode</td>
+                        <td class="text-end small">@Money(t.DiscountVND)</td>
+                        <td class="small">@(string.IsNullOrWhiteSpace(t.VATRateCode) ? "—" : t.VATRateCode)</td>
+                        <td class="small">@D(t.EffectDTimeStart) → @D(t.EffectDTimeEnd)</td>
+                        <td>
+                            @if (t.FlagActive) { <span class="badge bg-success">Đang dùng</span> }
+                            else { <span class="badge bg-secondary">Ngừng dùng</span> }
+                        </td>
+                        <td class="text-end">
+                            <form method="post" action="/SpecPrice/Delete" class="d-inline" onsubmit="return confirm('Xóa bảng giá @t.UnitCode của @t.SpecCode?');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@t.Id" />
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="10" class="text-center text-muted py-4">Chưa có bảng giá nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1"></i>Thêm / cập nhật bảng giá</h6>
+            <form method="post" action="/SpecPrice/Save" class="row g-2">
+                @Html.AntiForgeryToken()
+                <div class="col-12">
+                    <label class="form-label small mb-1">Sản phẩm</label>
+                    <select name="specCode" class="form-select form-select-sm" required>
+                        <option value="">— Chọn sản phẩm —</option>
+                        @foreach (var s in specs.Where(x => x.FlagActive))
+                        {
+                            <option value="@s.SpecCode">@s.SpecCode — @s.SpecName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">Đơn vị tính</label>
+                    <select name="unitCode" class="form-select form-select-sm" required>
+                        <option value="">— Chọn —</option>
+                        @foreach (var u in units.Where(x => x.FlagActive))
+                        {
+                            <option value="@u.UnitCode">@u.UnitCode — @u.UnitName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">Loại tiền</label>
+                    <select name="currencyCode" class="form-select form-select-sm" required>
+                        <option value="">— Chọn —</option>
+                        @foreach (var c in currencies.Where(x => x.FlagActive))
+                        {
+                            <option value="@c.CurrencyCode">@c.CurrencyCode — @c.CurrencyName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6"><label class="form-label small mb-1">Giá mua</label><input name="buyPrice" type="number" step="0.01" min="0" value="0" class="form-control form-control-sm" required /></div>
+                <div class="col-6"><label class="form-label small mb-1">Giá bán</label><input name="sellPrice" type="number" step="0.01" min="0" value="0" class="form-control form-control-sm" required /></div>
+                <div class="col-6"><label class="form-label small mb-1">Chiết khấu (VND)</label><input name="discountVnd" type="number" step="0.01" min="0" value="0" class="form-control form-control-sm" /></div>
+                <div class="col-6">
+                    <label class="form-label small mb-1">Thuế suất</label>
+                    <select name="vatRateCode" class="form-select form-select-sm">
+                        <option value="">— Không —</option>
+                        @foreach (var v in vatRates.Where(x => x.FlagActive))
+                        {
+                            <option value="@v.VATRateCode">@v.VATRateCode — @v.VATRate</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-6"><label class="form-label small mb-1">Hiệu lực từ</label><input name="effectDTimeStart" type="date" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small mb-1">Hiệu lực đến</label><input name="effectDTimeEnd" type="date" class="form-control form-control-sm" /></div>
+                <div class="col-12"><label class="form-label small mb-1">Ghi chú</label><textarea name="remark" class="form-control form-control-sm" rows="2" maxlength="400"></textarea></div>
+                <div class="col-12 form-check ms-1">
+                    <input class="form-check-input" type="checkbox" name="active" value="true" id="spActive" checked />
+                    <label class="form-check-label small" for="spActive">Đang dùng</label>
+                </div>
+                <div class="col-12"><label class="form-label small mb-1">Người thực hiện</label><input name="by" class="form-control form-control-sm" placeholder="kế toán" /></div>
+                <div class="col-12"><button class="btn btn-sm btn-primary w-100">Lưu bảng giá</button></div>
+            </form>
+            <p class="small text-muted mt-3 mb-0">Sản phẩm / đơn vị tính / loại tiền / thuế suất (nếu chọn) phải tồn tại và đang dùng. Lưu cùng cặp (sản phẩm, đơn vị) = cập nhật bản ghi đã có.</p>
+        </div></div>
+    </div>
+</div>

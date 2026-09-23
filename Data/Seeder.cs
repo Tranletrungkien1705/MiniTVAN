@@ -677,6 +677,28 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Bảng giá sản phẩm (theo Mst_SpecPrice của TVAN gốc):
+        // các bảng giá demo gắn với sản phẩm / đơn vị tính / loại tiền / thuế suất ở trên.
+        if (!await db.SpecPrices.AnyAsync())
+        {
+            db.SpecPrices.AddRange(
+                new SpecPrice
+                {
+                    SpecCode = "SP-A54", UnitCode = "CHIEC", BuyPrice = 6_500_000, SellPrice = 8_200_000,
+                    CurrencyCode = "VND", DiscountVND = 200_000, VATRateCode = "VAT10",
+                    EffectDTimeStart = DateTime.Today.AddDays(-30), EffectDTimeEnd = DateTime.Today.AddDays(180),
+                    Remark = "Giá bán lẻ niêm yết", FlagActive = true, UpdatedBy = "kế toán"
+                },
+                new SpecPrice
+                {
+                    SpecCode = "SP-WH1000", UnitCode = "HOP", BuyPrice = 5_800_000, SellPrice = 7_500_000,
+                    CurrencyCode = "VND", DiscountVND = 0, VATRateCode = "VAT8",
+                    EffectDTimeStart = DateTime.Today.AddDays(-15),
+                    Remark = "Giá bán theo hộp", FlagActive = true, UpdatedBy = "kế toán"
+                });
+            await db.SaveChangesAsync();
+        }
+
         // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):
         // các loại khách hàng demo dùng khi khai báo danh mục khách hàng.
         if (!await db.CustomerNntTypes.AnyAsync())

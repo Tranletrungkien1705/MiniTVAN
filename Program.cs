@@ -270,6 +270,14 @@ app.MapGet("/api/email-logs", async (int? invoiceId, ITvanService svc) =>
     return Results.Ok(ls.Select(l => new { l.Id, l.InvoiceId, invoice = l.Invoice != null ? $"{l.Invoice.Symbol}-{l.Invoice.No}" : null, l.ToEmail, l.Subject, result = l.Result.ToString(), l.Message, l.SentBy, l.CreatedAt }));
 });
 
+// Cập nhật thời điểm gửi mail hóa đơn (theo Invoice_Invoice_UpdMailSentDTimeUTC của TVAN gốc):
+// chỉ ghi được cho HĐ đã phát hành chưa từng gửi mail; gương sang SendEmailDTimeUTC + SendEmailBy.
+app.MapPost("/api/invoices/{id:int}/mail-sent", async (int id, MailSentDto dto, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.UpdateMailSentAsync(id, dto.MailSentDTimeUTC, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 // In chuyển đổi hóa đơn (theo Invoice_Invoice.FlagChange của TVAN gốc): đánh dấu HĐ đã in ở dạng chuyển đổi.
 app.MapPost("/api/invoices/{id:int}/conversion-print", async (int id, ConversionPrintDto dto, ITvanService svc) =>
 {
@@ -950,6 +958,27 @@ app.MapDelete("/api/spec-units/{id:int}", async (int id, ITvanService svc) =>
     return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Bảng giá sản phẩm (theo Mst_SpecPrice của TVAN gốc): danh sách (lọc theo từ khóa + sản phẩm + đơn vị nếu có).
+app.MapGet("/api/spec-prices", async (string? keyword, string? specCode, string? unitCode, ITvanService svc) =>
+{
+    var ls = await svc.SpecPricesAsync(keyword, specCode, unitCode);
+    return Results.Ok(ls.Select(t => new { t.Id, t.SpecCode, t.UnitCode, t.BuyPrice, t.SellPrice, t.CurrencyCode, t.DiscountVND, t.VATRateCode, t.EffectDTimeStart, t.EffectDTimeEnd, t.Remark, t.FlagActive, t.UpdatedAt, t.UpdatedBy }));
+});
+
+// Lưu (tạo mới/cập nhật) bảng giá theo cặp (sản phẩm, đơn vị) (theo Mst_SpecPrice_Create/Update của TVAN gốc).
+app.MapPost("/api/spec-prices", async (SpecPriceDto dto, ITvanService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveSpecPriceAsync(dto.Id, dto.SpecCode ?? "", dto.UnitCode ?? "", dto.BuyPrice, dto.SellPrice, dto.CurrencyCode ?? "", dto.DiscountVnd, dto.VatRateCode, dto.EffectDTimeStart, dto.EffectDTimeEnd, dto.Remark, dto.Active, dto.By);
+    return ok ? Results.Ok(new { id, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
+// Xóa bảng giá theo id (theo Mst_SpecPrice_Delete của TVAN gốc).
+app.MapDelete("/api/spec-prices/{id:int}", async (int id, ITvanService svc) =>
+{
+    var (ok, msg) = await svc.DeleteSpecPriceAsync(id);
+    return ok ? Results.Ok(new { msg }) : Results.BadRequest(new { error = msg });
+});
+
 // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc): danh sách (lọc theo từ khóa nếu có).
 app.MapGet("/api/customer-nnt-types", async (string? keyword, ITvanService svc) =>
 {
@@ -1474,6 +1503,7 @@ record DeleteInvoiceDto(string? Remark, string? By);
 record LicenseIncreaseDto(int NntId, int Qty, string? Note);
 record GuiTongHopDto(int NntId, PeriodType LKDLieu, string? KDLieu, int BSLThu, string? Note);
 record SendEmailDto(string? ToEmail, string? SentBy);
+record MailSentDto(DateTime? MailSentDTimeUTC, string? By);
 record ConversionPrintDto(string? Note, string? By);
 record ReSignDto(string? FileSpec, string? Note, string? By);
 record ApproveDto(string? FilePath, string? PdfFilePath, string? Note, string? By);
@@ -1516,6 +1546,7 @@ record SpecType1Dto(int? Id, string? Code, string? Name, string? Remark, bool Ac
 record SpecType2Dto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
 record SpecDto(int? Id, string? Code, string? Name, string? Desc, string? ModelCode, string? SpecType1, string? SpecType2, string? Color, bool HasSerial, bool HasLot, string? DefaultUnitCode, string? StandardUnitCode, string? Remark, bool Active, string? By);
 record SpecUnitDto(int? Id, string? SpecCode, string? UnitCode, string? StandardUnitCode, string? Desc, decimal Qty, decimal? Length, decimal? Width, decimal? Height, decimal? Volume, decimal? Weight, string? Remark, bool Active, string? By);
+record SpecPriceDto(int? Id, string? SpecCode, string? UnitCode, decimal BuyPrice, decimal SellPrice, string? CurrencyCode, decimal DiscountVnd, string? VatRateCode, DateTime? EffectDTimeStart, DateTime? EffectDTimeEnd, string? Remark, bool Active, string? By);
 record CustomerNntTypeDto(int? Id, string? Code, string? Name, string? Remark, bool Active, string? By);
 record ProvinceDto(int? Id, string? Code, string? Name, bool Active, string? By);
 record DistrictDto(int? Id, string? ProvinceCode, string? Code, string? Name, bool Active, string? By);

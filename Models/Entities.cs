@@ -413,6 +413,10 @@ public class Invoice : IOrgOwned
     public DateTime? SendEmailDTimeUTC { get; set; } // Thời điểm gửi email gần nhất
     public string? SendEmailBy { get; set; }         // Người gửi email
 
+    // Thời điểm gửi mail hóa đơn (theo Invoice_Invoice.MailSentDTimeUTC của TVAN gốc):
+    // chỉ ghi MỘT LẦN cho hóa đơn đã phát hành chưa từng gửi mail (theo Invoice_Invoice_UpdMailSentDTimeUTC).
+    public DateTime? MailSentDTimeUTC { get; set; }
+
     // Cờ in chuyển đổi (theo Invoice_Invoice.FlagChange của TVAN gốc):
     // NotPrinted = chưa in chuyển đổi (mặc định), Printed = đã in chuyển đổi.
     public ConversionPrintFlag FlagChange { get; set; } = ConversionPrintFlag.NotPrinted;
@@ -1589,6 +1593,31 @@ public class SpecUnit : IOrgOwned
     public decimal? Weight { get; set; }                  // Khối lượng
     public string? Remark { get; set; }                   // Ghi chú
     public bool FlagActive { get; set; } = true;          // Đơn vị quy đổi đang dùng
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+}
+
+// Bảng giá sản phẩm (theo bảng Mst_SpecPrice của TVAN gốc — màn
+// OS_PrdCenter_Mst_SpecPriceController): mỗi sản phẩm (SpecCode) theo một đơn vị tính (UnitCode)
+// có giá mua (BuyPrice), giá bán (SellPrice), loại tiền (CurrencyCode), chiết khấu (DiscountVND),
+// thuế suất (VATRateCode) và khoảng hiệu lực (EffectDTimeStart..EffectDTimeEnd).
+// Khóa nghiệp vụ: (OrgId, SpecCode, UnitCode). FlagActive = bảng giá đang dùng hay không.
+public class SpecPrice : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string SpecCode { get; set; } = "";          // Mã sản phẩm (Mst_Spec)
+    public string UnitCode { get; set; } = "";          // Mã đơn vị tính (Mst_Unit)
+    public decimal BuyPrice { get; set; }                 // Giá mua
+    public decimal SellPrice { get; set; }                // Giá bán
+    public string CurrencyCode { get; set; } = "";      // Loại tiền (Mst_CurrencyEx)
+    public decimal DiscountVND { get; set; }              // Chiết khấu (VND)
+    public string? VATRateCode { get; set; }              // Mã thuế suất (Mst_VATRate)
+    public DateTime? EffectDTimeStart { get; set; }       // Ngày bắt đầu hiệu lực
+    public DateTime? EffectDTimeEnd { get; set; }         // Ngày kết thúc hiệu lực
+    public string? Remark { get; set; }                   // Ghi chú
+    public bool FlagActive { get; set; } = true;          // Bảng giá đang dùng
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }

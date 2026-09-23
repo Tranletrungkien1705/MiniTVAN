@@ -4977,4 +4977,118 @@ public class DocTienTests
             Assert.Null(await svc.GetSpecUnitAsync(id));
         }
     }
+
+    [Fact]
+    public async Task SpecPrice_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveUnitAsync(null, "CHIEC", "Chiếc", null, true, "kế toán");
+            await svc.SaveCurrencyExAsync(null, "VND", "đồng", "VND", 1, 1, null, true, "kế toán");
+            await svc.SaveVatRateAsync(null, "VAT10", "10%", null, true, "kế toán");
+            await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            var (ok, _, id) = await svc.SaveSpecPriceAsync(null, "SP-A54", "CHIEC", 6_500_000, 8_200_000, "VND", 200_000, "VAT10", DateTime.Today, DateTime.Today.AddDays(180), "Giá lẻ", true, "kế toán");
+            Assert.True(ok);
+            var e = await svc.GetSpecPriceAsync(id);
+            Assert.Equal("SP-A54", e!.SpecCode);
+            Assert.Equal(8_200_000, e.SellPrice);
+            Assert.Equal("VAT10", e.VATRateCode);
+        }
+    }
+
+    [Fact]
+    public async Task SpecPrice_Save_SameKey_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveUnitAsync(null, "CHIEC", "Chiếc", null, true, "kế toán");
+            await svc.SaveCurrencyExAsync(null, "VND", "đồng", "VND", 1, 1, null, true, "kế toán");
+            await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            var (_, _, id) = await svc.SaveSpecPriceAsync(null, "SP-A54", "CHIEC", 6_500_000, 8_200_000, "VND", 0, null, null, null, null, true, "kế toán");
+            // Lưu lại cùng cặp (sản phẩm, đơn vị) = cập nhật (không tạo bản ghi mới).
+            var (ok, _, id2) = await svc.SaveSpecPriceAsync(null, "SP-A54", "CHIEC", 6_500_000, 9_000_000, "VND", 0, null, null, null, null, true, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            Assert.Single(await svc.SpecPricesAsync(null, null, null));
+            Assert.Equal(9_000_000, (await svc.GetSpecPriceAsync(id))!.SellPrice);
+        }
+    }
+
+    [Fact]
+    public async Task SpecPrice_Save_MissingKey_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok1, msg1, _) = await svc.SaveSpecPriceAsync(null, "  ", "CHIEC", 1, 1, "VND", 0, null, null, null, null, true, "kế toán");
+            Assert.False(ok1);
+            Assert.Contains("mã sản phẩm", msg1);
+            var (ok2, msg2, _) = await svc.SaveSpecPriceAsync(null, "SP-A54", "  ", 1, 1, "VND", 0, null, null, null, null, true, "kế toán");
+            Assert.False(ok2);
+            Assert.Contains("mã đơn vị tính", msg2);
+            var (ok3, msg3, _) = await svc.SaveSpecPriceAsync(null, "SP-A54", "CHIEC", 1, 1, "  ", 0, null, null, null, null, true, "kế toán");
+            Assert.False(ok3);
+            Assert.Contains("loại tiền", msg3);
+        }
+    }
+
+    [Fact]
+    public async Task SpecPrice_Save_InvalidReferences_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            // Sản phẩm chưa tồn tại → chặn.
+            var (ok1, msg1, _) = await svc.SaveSpecPriceAsync(null, "SP-A54", "CHIEC", 1, 1, "VND", 0, null, null, null, null, true, "kế toán");
+            Assert.False(ok1);
+            Assert.Contains("không tồn tại", msg1);
+            await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            // Đơn vị tính chưa tồn tại → chặn.
+            var (ok2, msg2, _) = await svc.SaveSpecPriceAsync(null, "SP-A54", "CHIEC", 1, 1, "VND", 0, null, null, null, null, true, "kế toán");
+            Assert.False(ok2);
+            Assert.Contains("Đơn vị tính", msg2);
+            await svc.SaveUnitAsync(null, "CHIEC", "Chiếc", null, true, "kế toán");
+            // Loại tiền chưa tồn tại → chặn.
+            var (ok3, msg3, _) = await svc.SaveSpecPriceAsync(null, "SP-A54", "CHIEC", 1, 1, "VND", 0, null, null, null, null, true, "kế toán");
+            Assert.False(ok3);
+            Assert.Contains("Loại tiền", msg3);
+            await svc.SaveCurrencyExAsync(null, "VND", "đồng", "VND", 1, 1, null, true, "kế toán");
+            // Thuế suất khai báo nhưng chưa tồn tại → chặn.
+            var (ok4, msg4, _) = await svc.SaveSpecPriceAsync(null, "SP-A54", "CHIEC", 1, 1, "VND", 0, "VAT10", null, null, null, true, "kế toán");
+            Assert.False(ok4);
+            Assert.Contains("Thuế suất", msg4);
+        }
+    }
+
+    [Fact]
+    public async Task SpecPrice_List_FilteredBySpecAndUnit()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveUnitAsync(null, "CHIEC", "Chiếc", null, true, "kế toán");
+            await svc.SaveUnitAsync(null, "HOP", "Hộp", null, true, "kế toán");
+            await svc.SaveCurrencyExAsync(null, "VND", "đồng", "VND", 1, 1, null, true, "kế toán");
+            await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            await svc.SaveSpecAsync(null, "SP-IP15", "iPhone 15", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            await svc.SaveSpecPriceAsync(null, "SP-A54", "CHIEC", 1, 1, "VND", 0, null, null, null, null, true, "kế toán");
+            await svc.SaveSpecPriceAsync(null, "SP-A54", "HOP", 1, 1, "VND", 0, null, null, null, null, true, "kế toán");
+            await svc.SaveSpecPriceAsync(null, "SP-IP15", "CHIEC", 1, 1, "VND", 0, null, null, null, null, true, "kế toán");
+            Assert.Equal(3, (await svc.SpecPricesAsync(null, null, null)).Count);
+            Assert.Equal(2, (await svc.SpecPricesAsync(null, "SP-A54", null)).Count);
+            Assert.Equal(2, (await svc.SpecPricesAsync(null, null, "CHIEC")).Count);
+        }
+    }
+
+    [Fact]
+    public async Task SpecPrice_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveUnitAsync(null, "CHIEC", "Chiếc", null, true, "kế toán");
+            await svc.SaveCurrencyExAsync(null, "VND", "đồng", "VND", 1, 1, null, true, "kế toán");
+            await svc.SaveSpecAsync(null, "SP-A54", "Galaxy A54", null, null, null, null, null, false, false, null, null, null, true, "kế toán");
+            var (_, _, id) = await svc.SaveSpecPriceAsync(null, "SP-A54", "CHIEC", 1, 1, "VND", 0, null, null, null, null, true, "kế toán");
+            var (ok, _) = await svc.DeleteSpecPriceAsync(id);
+            Assert.True(ok);
+            Assert.Null(await svc.GetSpecPriceAsync(id));
+        }
+    }
 }
