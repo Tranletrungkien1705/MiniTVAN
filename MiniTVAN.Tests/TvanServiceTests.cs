@@ -4239,6 +4239,76 @@ public class DocTienTests
     }
 
     [Fact]
+    public async Task SpecType1_Save_Creates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, id) = await svc.SaveSpecType1Async(null, "DIENTU", "Điện tử", "Hàng điện tử", true, "kế toán");
+            Assert.True(ok);
+            var e = await svc.GetSpecType1Async(id);
+            Assert.Equal("DIENTU", e!.SpecType1Code);
+            Assert.Equal("Điện tử", e.SpecType1Name);
+            Assert.True(e.FlagActive);
+        }
+    }
+
+    [Fact]
+    public async Task SpecType1_Save_SameCode_Updates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveSpecType1Async(null, "DIENTU", "Điện tử", null, true, "kế toán");
+            // Lưu lại cùng mã = cập nhật (không tạo bản ghi mới, không báo trùng).
+            var (ok, _, id2) = await svc.SaveSpecType1Async(null, "DIENTU", "Điện tử gia dụng", "cập nhật", true, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(id, id2);
+            Assert.Single(await svc.SpecType1sAsync(null));
+            Assert.Equal("Điện tử gia dụng", (await svc.GetSpecType1Async(id))!.SpecType1Name);
+        }
+    }
+
+    [Fact]
+    public async Task SpecType1_Save_MissingCodeOrName_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok1, msg1, _) = await svc.SaveSpecType1Async(null, "  ", "Điện tử", null, true, "kế toán");
+            Assert.False(ok1);
+            Assert.Contains("mã loại sản phẩm", msg1);
+            var (ok2, msg2, _) = await svc.SaveSpecType1Async(null, "DIENTU", "  ", null, true, "kế toán");
+            Assert.False(ok2);
+            Assert.Contains("tên loại sản phẩm", msg2);
+        }
+    }
+
+    [Fact]
+    public async Task SpecType1_List_FilteredByKeyword()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.SaveSpecType1Async(null, "DIENTU", "Điện tử", null, true, "kế toán");
+            await svc.SaveSpecType1Async(null, "THUCPHAM", "Thực phẩm", null, true, "kế toán");
+            var all = await svc.SpecType1sAsync(null);
+            Assert.Equal(2, all.Count);
+            var filtered = await svc.SpecType1sAsync("THUCPHAM");
+            Assert.Single(filtered);
+            Assert.Equal("THUCPHAM", filtered[0].SpecType1Code);
+        }
+    }
+
+    [Fact]
+    public async Task SpecType1_Delete_Removes()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.SaveSpecType1Async(null, "GIAYDEP", "Giày dép", null, true, "kế toán");
+            var (ok, _) = await svc.DeleteSpecType1Async(id);
+            Assert.True(ok);
+            Assert.Null(await svc.GetSpecType1Async(id));
+        }
+    }
+
+    [Fact]
     public async Task InvoiceDtlType_Save_Creates()
     {
         var (db, svc, conn) = NewSvc(); using (conn)

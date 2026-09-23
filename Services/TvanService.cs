@@ -145,6 +145,10 @@ public interface ITvanService
     Task<ProductModel?> GetProductModelAsync(int id);
     Task<(bool ok, string msg, int id)> SaveProductModelAsync(int? id, string code, string name, string? orgModelCode, string brandCode, string? remark, bool active, string? by);
     Task<(bool ok, string msg)> DeleteProductModelAsync(int id);
+    Task<List<SpecType1>> SpecType1sAsync(string? keyword);
+    Task<SpecType1?> GetSpecType1Async(int id);
+    Task<(bool ok, string msg, int id)> SaveSpecType1Async(int? id, string code, string name, string? remark, bool active, string? by);
+    Task<(bool ok, string msg)> DeleteSpecType1Async(int id);
     Task<List<Province>> ProvincesAsync(string? keyword);
     Task<Province?> GetProvinceAsync(int id);
     Task<(bool ok, string msg, int id)> SaveProvinceAsync(int? id, string code, string name, bool active, string? by);
@@ -3164,6 +3168,73 @@ public class TvanService(AppDbContext db) : ITvanService
         db.ProductModels.Remove(e);
         await db.SaveChangesAsync();
         return (true, $"Đã xóa model {code}.");
+    }
+
+    // Danh mục Loại sản phẩm (theo Mst_SpecType1 của TVAN gốc):
+    // danh sách loại sản phẩm (lọc theo từ khóa mã/tên/ghi chú nếu có).
+    public Task<List<SpecType1>> SpecType1sAsync(string? keyword)
+    {
+        var q = db.SpecType1s.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var k = keyword.Trim();
+            q = q.Where(t => t.SpecType1Code.Contains(k) || t.SpecType1Name.Contains(k) || (t.Remark != null && t.Remark.Contains(k)));
+        }
+        return q.OrderBy(t => t.SpecType1Code).ToListAsync();
+    }
+
+    public Task<SpecType1?> GetSpecType1Async(int id) =>
+        db.SpecType1s.FirstOrDefaultAsync(t => t.Id == id);
+
+    // Lưu (tạo mới/cập nhật) loại sản phẩm theo khóa nghiệp vụ (OrgId, SpecType1)
+    // (theo Mst_SpecType1_Create/Update của TVAN gốc). Ràng buộc:
+    //  - cần mã loại sản phẩm + tên loại sản phẩm;
+    //  - khi tạo: mã loại sản phẩm chưa tồn tại trong tổ chức (Mst_SpecType1_CheckDB_SpecType1Exist).
+    public async Task<(bool ok, string msg, int id)> SaveSpecType1Async(int? id, string code, string name, string? remark, bool active, string? by)
+    {
+        code = (code ?? "").Trim();
+        name = (name ?? "").Trim();
+        if (code.Length == 0) return (false, "Cần mã loại sản phẩm.", 0);
+        if (name.Length == 0) return (false, "Cần tên loại sản phẩm.", 0);
+
+        SpecType1? e = null;
+        if (id.HasValue && id.Value > 0) e = await db.SpecType1s.FirstOrDefaultAsync(t => t.Id == id.Value);
+        else e = await db.SpecType1s.FirstOrDefaultAsync(t => t.SpecType1Code == code);
+
+        if (e == null)
+        {
+            if (await db.SpecType1s.AnyAsync(t => t.SpecType1Code == code))
+                return (false, "Mã loại sản phẩm đã tồn tại.", 0);
+            e = new SpecType1 { SpecType1Code = code };
+            db.SpecType1s.Add(e);
+        }
+        else
+        {
+            // Đổi mã loại sản phẩm: chặn trùng với loại sản phẩm khác.
+            if (!string.Equals(e.SpecType1Code, code, StringComparison.OrdinalIgnoreCase)
+                && await db.SpecType1s.AnyAsync(t => t.SpecType1Code == code && t.Id != e.Id))
+                return (false, "Mã loại sản phẩm đã tồn tại.", 0);
+            e.SpecType1Code = code;
+        }
+
+        e.SpecType1Name = name;
+        e.Remark = remark;
+        e.FlagActive = active;
+        e.UpdatedAt = DateTime.UtcNow;
+        e.UpdatedBy = by;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu loại sản phẩm {code} — {name}.", e.Id);
+    }
+
+    // Xóa loại sản phẩm theo id (theo Mst_SpecType1_Delete của TVAN gốc): chặn khi không tồn tại.
+    public async Task<(bool ok, string msg)> DeleteSpecType1Async(int id)
+    {
+        var e = await db.SpecType1s.FirstOrDefaultAsync(t => t.Id == id);
+        if (e == null) return (false, "Không tìm thấy loại sản phẩm.");
+        var code = e.SpecType1Code;
+        db.SpecType1s.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa loại sản phẩm {code}.");
     }
 
     // Danh mục loại khách hàng / người mua (theo Mst_CustomerNNTType của TVAN gốc):
