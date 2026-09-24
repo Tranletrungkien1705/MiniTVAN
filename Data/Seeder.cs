@@ -1269,6 +1269,34 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Dòng hàng hóa/dịch vụ của hóa đơn (theo Invoice_InvoiceDtl của TVAN gốc):
+        // minh họa hóa đơn nháp 00002 có 2 dòng hàng hóa (thép tấm + bu lông).
+        if (!await db.InvoiceDtls.AnyAsync())
+        {
+            var draft = await db.Invoices.FirstOrDefaultAsync(i => i.No == "00002" && i.Status == InvoiceStatus.Draft);
+            if (draft != null)
+            {
+                db.InvoiceDtls.Add(new InvoiceDtl
+                {
+                    InvoiceId = draft.Id, Idx = "1", InvoiceDtlType = "GOODS", STT = 1,
+                    SpecCode = "SP-THEP5", SpecName = "Thép tấm 5mm", ProductName = "Thép tấm 5mm",
+                    VATRateCode = "VAT10", VATRate = 10, VATDesc = "Thuế suất GTGT 10%",
+                    UnitCode = "KG", UnitName = "Kilôgam", UnitPrice = 200_000, Qty = 100,
+                    ValInvoice = 20_000_000, ValTax = 2_000_000, CreatedBy = "kế toán"
+                });
+                db.InvoiceDtls.Add(new InvoiceDtl
+                {
+                    InvoiceId = draft.Id, Idx = "2", InvoiceDtlType = "GOODS", STT = 2,
+                    SpecCode = "SP-BULONG", SpecName = "Bu lông M12", ProductName = "Bu lông M12",
+                    VATRateCode = "VAT10", VATRate = 10, VATDesc = "Thuế suất GTGT 10%",
+                    UnitCode = "CAI", UnitName = "Cái", UnitPrice = 10_000, Qty = 500,
+                    ValInvoice = 5_000_000, ValTax = 500_000, CreatedBy = "kế toán"
+                });
+                draft.Amount = 25_000_000; draft.VatRate = 10;
+                await db.SaveChangesAsync();
+            }
+        }
+
         // Đơn hàng license + hoa hồng đại lý (theo Inos_LicOrder / RptSv_InosLicOrder_Commission của TVAN gốc — màn Mst_Order):
         // minh họa 2 đơn hàng (1 đã duyệt kèm hoa hồng đã duyệt, 1 chờ duyệt kèm hoa hồng chờ duyệt).
         if (!await db.LicOrders.AnyAsync())

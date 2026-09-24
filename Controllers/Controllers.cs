@@ -128,10 +128,38 @@ public class InvoiceController(ITvanService svc) : Controller
         return RedirectToAction(nameof(Detail), new { id });
     }
 
+    // Lưu danh sách dòng hàng hóa/dịch vụ của hóa đơn (theo Invoice_Invoice_SaveX của TVAN gốc).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveLines(int id, string[]? idx, string[]? invoiceDtlType, string[]? specCode, string[]? specName,
+        string[]? productId, string[]? productName, string[]? vatRateCode, decimal[]? vatRate, string[]? vatDesc,
+        string[]? unitCode, string[]? unitName, decimal[]? unitPrice, decimal[]? qty, decimal[]? discountRate, string[]? lineRemark, string? by)
+    {
+        var lines = new List<InvoiceDtlLine>();
+        if (invoiceDtlType != null)
+        {
+            for (int i = 0; i < invoiceDtlType.Length; i++)
+            {
+                string? At(string[]? a) => a != null && i < a.Length ? a[i] : null;
+                decimal Num(decimal[]? a) => a != null && i < a.Length ? a[i] : 0;
+                var name = At(productName) ?? At(specName);
+                if (string.IsNullOrWhiteSpace(name) && Num(qty) == 0 && Num(unitPrice) == 0) continue;   // bỏ dòng trống
+                lines.Add(new InvoiceDtlLine(At(idx), At(invoiceDtlType), At(specCode), At(specName), At(productId), At(productName),
+                    At(vatRateCode), Num(vatRate), At(vatDesc), At(unitCode), At(unitName), Num(unitPrice), Num(qty), Num(discountRate),
+                    At(lineRemark), null, null, null, null, null));
+            }
+        }
+        var (ok, msg, _) = await svc.SaveInvoiceWithLinesAsync(id, lines, by);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
     public async Task<IActionResult> Detail(int id)
     {
         var inv = await svc.GetInvoiceAsync(id);
         if (inv == null) return NotFound();
+        ViewBag.Lines = await svc.InvoiceDtlsAsync(id);
+        ViewBag.DtlTypes = await svc.InvoiceDtlTypesAsync(null);
+        ViewBag.VatRates = await svc.VatRatesAsync(null);
         ViewBag.Messages = await svc.MessagesAsync(id);
         ViewBag.EmailLogs = await svc.EmailLogsAsync(id);
         ViewBag.ConvLogs = await svc.ConversionPrintLogsAsync(id);

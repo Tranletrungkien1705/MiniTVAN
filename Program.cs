@@ -158,6 +158,24 @@ app.MapPost("/api/import/invoices", async (List<ImportInvDto> rows, AppDbContext
     return Results.Ok(new { added, skipped, total = added + skipped });
 });
 
+// Danh sách dòng hàng hóa/dịch vụ của hóa đơn (theo Invoice_InvoiceDtl của TVAN gốc).
+app.MapGet("/api/invoices/{id:int}/lines", async (int id, ITvanService svc) =>
+{
+    var ls = await svc.InvoiceDtlsAsync(id);
+    return Results.Ok(ls.Select(d => new { d.Id, d.Idx, d.InvoiceDtlType, d.STT, d.SpecCode, d.SpecName, d.ProductID, d.ProductName, d.VATRateCode, d.VATRate, d.VATDesc, d.UnitCode, d.UnitName, d.UnitPrice, d.Qty, d.ValInvoice, d.ValTax, d.DiscountRate, d.ValDiscount, d.Remark }));
+});
+
+// Lưu danh sách dòng hàng hóa/dịch vụ của hóa đơn nháp (theo Invoice_Invoice_SaveX của TVAN gốc):
+// thay thế toàn bộ dòng, kiểm tra loại dòng + mã thuế suất, tính lại tổng tiền hàng/thuế của hóa đơn.
+app.MapPost("/api/invoices/{id:int}/lines", async (int id, List<InvoiceDtlLineDto> rows, ITvanService svc) =>
+{
+    var lines = (rows ?? new()).Select(r => new InvoiceDtlLine(r.Idx, r.InvoiceDtlType, r.SpecCode, r.SpecName, r.ProductID, r.ProductName,
+        r.VATRateCode, r.VATRate, r.VATDesc, r.UnitCode, r.UnitName, r.UnitPrice, r.Qty, r.DiscountRate, r.Remark,
+        r.InvoiceDCF1, r.InvoiceDCF2, r.InvoiceDCF3, r.InvoiceDCF4, r.InvoiceDCF5)).ToList();
+    var (ok, msg, count) = await svc.SaveInvoiceWithLinesAsync(id, lines, null);
+    return ok ? Results.Ok(new { id, count, msg }) : Results.BadRequest(new { id, error = msg });
+});
+
 // Xử lý hóa đơn sai sót: điều chỉnh (tăng/giảm) hóa đơn đã phát hành.
 app.MapPost("/api/invoices/{id:int}/adjust", async (int id, AdjustDto dto, ITvanService svc) =>
 {
@@ -1939,6 +1957,10 @@ record ImportNntDto(string? Mst, string? Name, string? Address, string? Email);
 record CreateNntDeptDto(string? Mst, string? Name, string? Address, string? Email, string? DepartmentCode, string? DepartmentName, string? By);
 record GenNntXmlDto(string? By);
 record ImportInvDto(string? SellerMst, string? Symbol, string? No, string? BuyerName, string? BuyerMst, string? BuyerAddress, decimal Amount, decimal VatRate, DateTime? IssuedDate, string? TctCode);
+// Dòng hàng hóa/dịch vụ của hóa đơn (theo Invoice_InvoiceDtl của TVAN gốc).
+record InvoiceDtlLineDto(string? Idx, string? InvoiceDtlType, string? SpecCode, string? SpecName, string? ProductID, string? ProductName,
+    string? VATRateCode, decimal VATRate, string? VATDesc, string? UnitCode, string? UnitName, decimal UnitPrice, decimal Qty,
+    decimal DiscountRate, string? Remark, string? InvoiceDCF1, string? InvoiceDCF2, string? InvoiceDCF3, string? InvoiceDCF4, string? InvoiceDCF5);
 record AdjustDto(InvoiceAdjType AdjType, decimal Amount, decimal VatRate, string? Reason);
 record ReplaceDto(decimal Amount, decimal VatRate, string? Reason);
 record ToPendingDto(string? Reason);

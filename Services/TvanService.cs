@@ -23,6 +23,8 @@ public interface ITvanService
     Task<List<Invoice>> InvoicesAsync(InvoiceStatus? status, int? nntId);
     Task<Invoice?> GetInvoiceAsync(int id);
     Task<(bool ok, string msg, int id)> CreateInvoiceAsync(Invoice inv);
+    Task<List<InvoiceDtl>> InvoiceDtlsAsync(int invoiceId);
+    Task<(bool ok, string msg, int count)> SaveInvoiceWithLinesAsync(int invoiceId, List<InvoiceDtlLine> lines, string? by);
     Task<(bool ok, string msg, string? tctCode, string status, int id)> ExternalIssueAsync(string sellerMst, string? sellerName, string buyerName, string? buyerMst, string? buyerAddress, decimal amount, decimal vatRate, string? docRef);
     Task<(bool ok, string msg)> TransmitAsync(int invoiceId);
     Task<(bool ok, string msg)> CancelAsync(int invoiceId);
@@ -390,6 +392,15 @@ public record InvoiceInputHeader(
 public record InvoiceInputLine(
     string? ProductName, string? UnitCode, decimal Quantity, decimal UnitPrice, decimal VatRate, string? Remark);
 
+// Dòng chi tiết hóa đơn đầu ra dùng khi lưu (theo Invoice_InvoiceDtl của TVAN gốc).
+// VATRateCode phải tồn tại + đang dùng trong danh mục thuế suất (Mst_VATRate);
+// InvoiceDtlType phải tồn tại trong danh mục loại dòng (Mst_InvoiceDtlType).
+public record InvoiceDtlLine(
+    string? Idx, string? InvoiceDtlType, string? SpecCode, string? SpecName, string? ProductID, string? ProductName,
+    string? VATRateCode, decimal VATRate, string? VATDesc, string? UnitCode, string? UnitName,
+    decimal UnitPrice, decimal Qty, decimal DiscountRate, string? Remark,
+    string? InvoiceDCF1, string? InvoiceDCF2, string? InvoiceDCF3, string? InvoiceDCF4, string? InvoiceDCF5);
+
 // Dòng chi tiết đơn hàng license dùng khi lưu (theo Inos_LicOrderDetail của TVAN gốc).
 public record LicOrderLine(string PackageId, string? PackageName, LicOrderType OrderType, decimal Price, int Qty);
 
@@ -702,6 +713,70 @@ public class TvanService(AppDbContext db) : ITvanService
         inv.Status = InvoiceStatus.Draft;
         db.Invoices.Add(inv); await db.SaveChangesAsync();
         return (true, "Đã tạo hóa đơn nháp.", inv.Id);
+    }
+
+    // Danh sách dòng hàng hóa/dịch vụ của hóa đơn (theo Invoice_InvoiceDtl của TVAN gốc).
+    public Task<List<InvoiceDtl>> InvoiceDtlsAsync(int invoiceId) =>
+        db.InvoiceDtls.Where(d => d.InvoiceId == invoiceId).OrderBy(d => d.STT).ToListAsync();
+
+    // Lưu danh sách dòng hàng hóa/dịch vụ của hóa đơn (theo Invoice_Invoice_SaveX của TVAN gốc):
+    // thay thế toàn bộ dòng cũ, kiểm tra từng dòng (loại dòng phải tồn tại trong Mst_InvoiceDtlType,
+    // mã thuế suất phải tồn tại + đang dùng trong Mst_VATRate), tính lại thành tiền/tiền thuế từng dòng
+    // rồi cộng dồn vào tổng tiền hàng/thuế/thanh toán của hóa đơn. Chỉ cho sửa hóa đơn đang ở trạng thái
+    // nháp (Draft) — hóa đơn đã phát hành không sửa được dòng.
+    public async Task<(bool ok, string msg, int count)> SaveInvoiceWithLinesAsync(int invoiceId, List<InvoiceDtlLine> lines, string? by)
+    {
+        var inv = await db.Invoices.Include(i => i.Details).FirstOrDefaultAsync(i => i.Id == invoiceId);
+        if (inv == null) return (false, "Không tìm thấy hóa đơn.", 0);
+        if (inv.Status != InvoiceStatus.Draft)
+            return (false, "Chỉ sửa được dòng hàng hóa của hóa đơn đang ở trạng thái nháp.", 0);
+        lines ??= new();
+
+        // Kiểm tra từng dòng trước khi ghi (all-or-nothing).
+        var dtlTypes = await db.InvoiceDtlTypes.Where(t => t.FlagActive).Select(t => t.InvoiceDtlTypeCode).ToListAsync();
+        var vatRates = await db.VatRates.Where(v => v.FlagActive).ToListAsync();
+        foreach (var l in lines)
+        {
+            var type = (l.InvoiceDtlType ?? "").Trim();
+            if (type.Length == 0) return (false, "Mỗi dòng hàng hóa cần có loại dòng (InvoiceDtlType).", 0);
+            if (!dtlTypes.Contains(type, StringComparer.OrdinalIgnoreCase))
+                return (false, $"Loại dòng '{type}' không tồn tại hoặc đã ngừng dùng trong danh mục loại dòng.", 0);
+            var vatCode = (l.VATRateCode ?? "").Trim();
+            if (vatCode.Length == 0) return (false, "Mỗi dòng hàng hóa cần có mã thuế suất (VATRateCode).", 0);
+            var vr = vatRates.FirstOrDefault(v => string.Equals(v.VATRateCode, vatCode, StringComparison.OrdinalIgnoreCase));
+            if (vr == null) return (false, $"Mã thuế suất '{vatCode}' không tồn tại hoặc đã ngừng dùng.", 0);
+        }
+
+        // Thay thế toàn bộ dòng chi tiết và tính lại tổng tiền (theo Invoice_Invoice_SaveX của TVAN gốc).
+        db.InvoiceDtls.RemoveRange(inv.Details);
+        inv.Details.Clear();
+        int stt = 1;
+        decimal totalInvoice = 0, totalVat = 0;
+        foreach (var l in lines)
+        {
+            var amount = Math.Round(l.Qty * l.UnitPrice, 2);
+            var discount = Math.Round(amount * l.DiscountRate / 100m, 2);
+            var net = amount - discount;
+            var vat = Math.Round(net * l.VATRate / 100m, 2);
+            inv.Details.Add(new InvoiceDtl
+            {
+                Idx = string.IsNullOrWhiteSpace(l.Idx) ? stt.ToString() : l.Idx!.Trim(),
+                InvoiceDtlType = (l.InvoiceDtlType ?? "").Trim(),
+                STT = stt++,
+                SpecCode = l.SpecCode, SpecName = l.SpecName, ProductID = l.ProductID, ProductName = l.ProductName,
+                VATRateCode = (l.VATRateCode ?? "").Trim(), VATRate = l.VATRate, VATDesc = l.VATDesc,
+                UnitCode = l.UnitCode, UnitName = l.UnitName, UnitPrice = l.UnitPrice, Qty = l.Qty,
+                ValInvoice = net, ValTax = vat, DiscountRate = l.DiscountRate, ValDiscount = discount,
+                Remark = l.Remark, InvoiceDCF1 = l.InvoiceDCF1, InvoiceDCF2 = l.InvoiceDCF2, InvoiceDCF3 = l.InvoiceDCF3,
+                InvoiceDCF4 = l.InvoiceDCF4, InvoiceDCF5 = l.InvoiceDCF5, CreatedBy = by
+            });
+            totalInvoice += net; totalVat += vat;
+        }
+        // Cập nhật tổng tiền hàng/thuế của hóa đơn từ các dòng (thuế suất hóa đơn = tổng thuế / tiền hàng).
+        inv.Amount = totalInvoice;
+        inv.VatRate = totalInvoice > 0 ? Math.Round(totalVat / totalInvoice * 100m, 2) : 0;
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu {inv.Details.Count} dòng hàng hóa cho hóa đơn {inv.Symbol}-{inv.No}.", inv.Details.Count);
     }
 
     // API cho hệ ngoài (MiniService, DMS...) đẩy hóa đơn: tự tạo/đăng ký NNT bên bán → tạo HĐ → truyền TCT.

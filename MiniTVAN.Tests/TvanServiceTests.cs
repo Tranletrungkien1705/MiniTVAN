@@ -4440,6 +4440,90 @@ public class TvanServiceTests
             Assert.Equal("V-CUSTOM-301", logs[0].TCTRefNo);
         }
     }
+
+    // Dòng hàng hóa/dịch vụ của hóa đơn (theo Invoice_InvoiceDtl của TVAN gốc).
+    private static async Task SeedDtlCatalog(AppDbContext db)
+    {
+        db.VatRates.Add(new VatRate { VATRateCode = "VAT10", VATRate = "10%", FlagActive = true });
+        db.InvoiceDtlTypes.Add(new InvoiceDtlType { InvoiceDtlTypeCode = "GOODS", Desc = "Hàng hóa", FlagActive = true });
+        await db.SaveChangesAsync();
+    }
+
+    private static InvoiceDtlLine Line(string name, decimal qty, decimal price, decimal vat = 10, string type = "GOODS", string vatCode = "VAT10") =>
+        new(null, type, null, name, null, name, vatCode, vat, null, "CAI", "Cái", price, qty, 0, null, null, null, null, null, null);
+
+    [Fact]
+    public async Task InvoiceLines_Save_ComputesTotalsFromLines()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedDtlCatalog(db);
+            var (_, invId) = await Setup(svc);
+            var lines = new List<InvoiceDtlLine> { Line("Thép tấm", 100, 200_000), Line("Bu lông", 500, 10_000) };
+            var (ok, _, count) = await svc.SaveInvoiceWithLinesAsync(invId, lines, "kế toán");
+            Assert.True(ok);
+            Assert.Equal(2, count);
+            var inv = await svc.GetInvoiceAsync(invId);
+            Assert.Equal(25_000_000, inv!.Amount);
+            Assert.Equal(2_500_000, inv.VatAmount);
+            Assert.Equal(2, (await svc.InvoiceDtlsAsync(invId)).Count);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceLines_Save_ReplacesExistingLines()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedDtlCatalog(db);
+            var (_, invId) = await Setup(svc);
+            await svc.SaveInvoiceWithLinesAsync(invId, new List<InvoiceDtlLine> { Line("A", 1, 1_000_000) }, "kế toán");
+            await svc.SaveInvoiceWithLinesAsync(invId, new List<InvoiceDtlLine> { Line("B", 2, 1_000_000), Line("C", 3, 1_000_000) }, "kế toán");
+            var ls = await svc.InvoiceDtlsAsync(invId);
+            Assert.Equal(2, ls.Count);
+            Assert.Equal(5_000_000, (await svc.GetInvoiceAsync(invId))!.Amount);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceLines_UnknownDtlType_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedDtlCatalog(db);
+            var (_, invId) = await Setup(svc);
+            var (ok, msg, _) = await svc.SaveInvoiceWithLinesAsync(invId, new List<InvoiceDtlLine> { Line("A", 1, 1_000_000, type: "UNKNOWN") }, "kế toán");
+            Assert.False(ok);
+            Assert.Contains("Loại dòng", msg);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceLines_UnknownVatRate_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedDtlCatalog(db);
+            var (_, invId) = await Setup(svc);
+            var (ok, msg, _) = await svc.SaveInvoiceWithLinesAsync(invId, new List<InvoiceDtlLine> { Line("A", 1, 1_000_000, vatCode: "VAT99") }, "kế toán");
+            Assert.False(ok);
+            Assert.Contains("thuế suất", msg);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceLines_NonDraft_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedDtlCatalog(db);
+            var (_, invId) = await Setup(svc);
+            await svc.TransmitAsync(invId);   // HĐ chuyển sang Accepted
+            var (ok, msg, _) = await svc.SaveInvoiceWithLinesAsync(invId, new List<InvoiceDtlLine> { Line("A", 1, 1_000_000) }, "kế toán");
+            Assert.False(ok);
+            Assert.Contains("nháp", msg);
+        }
+    }
 }
 
 // Đọc tiền bằng chữ (theo luồng DocTien của TVAN gốc) + danh mục tiền tệ (Mst_CurrencyEx).

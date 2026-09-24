@@ -20,6 +20,7 @@ public class AppDbContext : DbContext
     public DbSet<Dealer> Dealers => Set<Dealer>();
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<InvoiceDtl> InvoiceDtls => Set<InvoiceDtl>();
     public DbSet<TranMessage> Messages => Set<TranMessage>();
     public DbSet<InvoiceLicense> Licenses => Set<InvoiceLicense>();
     public DbSet<LicenseHist> LicenseHists => Set<LicenseHist>();
@@ -169,6 +170,19 @@ public class AppDbContext : DbContext
             e.HasIndex(x => new { x.OrgId, x.NntId });
             e.HasOne(x => x.Nnt).WithMany().HasForeignKey(x => x.NntId);
             e.HasOne(x => x.RefInvoice).WithMany().HasForeignKey(x => x.RefInvoiceId).OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InvoiceDtl>(e =>
+        {
+            e.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            e.Property(x => x.Qty).HasPrecision(18, 2);
+            e.Property(x => x.ValInvoice).HasPrecision(18, 2);
+            e.Property(x => x.ValTax).HasPrecision(18, 2);
+            e.Property(x => x.DiscountRate).HasPrecision(9, 2);
+            e.Property(x => x.ValDiscount).HasPrecision(18, 2);
+            e.Property(x => x.VATRate).HasPrecision(9, 2);
+            e.HasIndex(x => new { x.OrgId, x.InvoiceId });
+            e.HasOne(x => x.Invoice).WithMany(i => i.Details).HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<TranMessage>(e =>

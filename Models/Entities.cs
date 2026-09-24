@@ -510,6 +510,9 @@ public class Invoice : IOrgOwned
 
     public decimal VatAmount => Math.Round(Amount * VatRate / 100m, 0);
     public decimal Total => Amount + VatAmount;
+
+    // Danh sách dòng hàng hóa/dịch vụ của hóa đơn (theo bảng Invoice_InvoiceDtl của TVAN gốc).
+    public List<InvoiceDtl> Details { get; set; } = new();
 }
 
 // Hạn mức hóa đơn (theo bảng Invoice_license của TVAN gốc): số lượng HĐ tối đa NNT được phát hành.
@@ -2359,4 +2362,45 @@ public class NntXmlLog : IOrgOwned
     public string XmlBase64 { get; set; } = "";          // Nội dung XML (base64)
     public string? By { get; set; }                      // Người thực hiện
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Dòng chi tiết hóa đơn đầu ra (theo bảng Invoice_InvoiceDtl của TVAN gốc):
+// mỗi dòng là một hàng hóa/dịch vụ trên hóa đơn bán ra. Khi lưu hóa đơn, mỗi dòng phải có
+// InvoiceDtlType tồn tại trong danh mục (Mst_InvoiceDtlType) và VATRateCode tồn tại + đang dùng
+// trong danh mục thuế suất (Mst_VATRate) — theo Invoice_InvoiceDtl_SaveX_Input_InvoiceDtlType /
+// _Input_VATRateInvalid của TVAN gốc. Tổng tiền hàng/thuế/thanh toán của hóa đơn được tính lại
+// từ danh sách dòng chi tiết (theo Invoice_Invoice_SaveX của TVAN gốc).
+// Khóa nghiệp vụ: (OrgId, InvoiceId, Idx) — Idx là mã dòng hàng hóa.
+public class InvoiceDtl : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InvoiceId { get; set; }
+    public Invoice? Invoice { get; set; }
+    public string Idx { get; set; } = "";                  // Mã dòng hàng hóa (Idx)
+    public string InvoiceDtlType { get; set; } = "";       // Loại dòng (theo Mst_InvoiceDtlType)
+    public int STT { get; set; }                           // Số thứ tự
+    public string? SpecCode { get; set; }                  // Mã hàng hóa (Mst_Spec)
+    public string? SpecName { get; set; }                  // Tên hàng hóa
+    public string? ProductID { get; set; }                 // Mã sản phẩm / serial (Prd_ProductID)
+    public string? ProductName { get; set; }               // Tên sản phẩm
+    public string? VATRateCode { get; set; }               // Mã thuế suất (Mst_VATRate)
+    public decimal VATRate { get; set; }                   // Tỷ lệ thuế suất (%)
+    public string? VATDesc { get; set; }                   // Mô tả thuế suất
+    public string? UnitCode { get; set; }                  // Mã đơn vị tính
+    public string? UnitName { get; set; }                  // Tên đơn vị tính
+    public decimal UnitPrice { get; set; }                 // Đơn giá
+    public decimal Qty { get; set; }                       // Số lượng
+    public decimal ValInvoice { get; set; }                // Thành tiền (chưa thuế)
+    public decimal ValTax { get; set; }                    // Tiền thuế
+    public decimal DiscountRate { get; set; }              // Tỷ lệ chiết khấu (%)
+    public decimal ValDiscount { get; set; }               // Tiền chiết khấu
+    public string? Remark { get; set; }                    // Ghi chú
+    public string? InvoiceDCF1 { get; set; }               // Trường tùy chỉnh dòng 1 (theo Invoice_DtlCustomField)
+    public string? InvoiceDCF2 { get; set; }               // Trường tùy chỉnh dòng 2
+    public string? InvoiceDCF3 { get; set; }               // Trường tùy chỉnh dòng 3
+    public string? InvoiceDCF4 { get; set; }               // Trường tùy chỉnh dòng 4
+    public string? InvoiceDCF5 { get; set; }               // Trường tùy chỉnh dòng 5
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public string? CreatedBy { get; set; }
 }
